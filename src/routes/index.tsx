@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Loader2, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
   planScript,
-  generateSceneImage,
+  generateSceneBackground,
+  generateSceneElement,
   searchStockClip,
   generateNarration,
   type ScenePlan,
