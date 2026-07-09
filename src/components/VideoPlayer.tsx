@@ -326,8 +326,8 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
 
       <style>{`
         @keyframes sceneIn {
-          from { opacity: 0; transform: scale(1.02); }
-          to   { opacity: 1; transform: scale(1); }
+          from { opacity: 0.001; transform: scale(1.04); filter: blur(6px); }
+          to   { opacity: 1; transform: scale(1); filter: blur(0); }
         }
       `}</style>
     </div>
