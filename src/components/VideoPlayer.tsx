@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
@@ -17,6 +17,7 @@ export interface Scene {
   /** image: composited background + elements */
   backgroundUrl?: string;
   elements?: ResolvedElement[];
+  /** Per-scene TTS clip (used when there is no master track / for fallback). */
   audioUrl: string;
   durationMs: number;
   animation: "kenburns-in" | "kenburns-out" | "fade" | "slide-left";
@@ -24,9 +25,16 @@ export interface Scene {
   codeTo?: string;
   codeLanguage?: string;
   codeVariant?: CodeVariant;
+  /**
+   * When set, the whole video shares ONE continuous audio track and
+   * this scene occupies [startMs, endMs] of it. All scenes in a set
+   * must carry the same masterAudioUrl.
+   */
+  masterAudioUrl?: string;
+  startMs?: number;
+  endMs?: number;
 }
 
-/** Renders a single image scene: background + elements revealed one-by-one. */
 function ImageScene({
   scene,
   progress,
@@ -57,13 +65,12 @@ function ImageScene({
       {scene.elements?.map((el) => {
         const single = (scene.elements?.length ?? 0) === 1;
         const shown = t >= el.appearAt;
-        // Local progress since element appeared, 0..1 across ~450ms window (approx via scene duration)
         const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
         const p = shown ? Math.min(1, (t - el.appearAt) / revealWindow) : 0;
-        const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+        const eased = 1 - Math.pow(1 - p, 3);
 
         let transform = "";
-        let opacity = eased;
+        const opacity = eased;
         switch (el.anim) {
           case "pop":
             transform = `scale(${0.6 + 0.4 * eased})`;
@@ -82,8 +89,6 @@ function ImageScene({
             break;
         }
 
-        // Single-element scenes look empty at the planner's default width.
-        // Boost the element to fill the canvas centre.
         const width = single ? Math.max(0.6, el.w * 2.2) : el.w;
         const leftPct = single ? 50 : el.x * 100;
         const topPct = single ? 50 : el.y * 100;
@@ -147,15 +152,14 @@ function SceneStage({
   );
 }
 
-// Timing knobs for scene syncing:
-// - INTER_SCENE_GAP_MS: silent breath between scenes so voice feels natural.
-// - CROSSFADE_MS: how long the outgoing scene overlaps the incoming one.
-// - PLAYBACK_RATE: <1 slows narration slightly for a calmer pace.
-const INTER_SCENE_GAP_MS = 900;
-const CROSSFADE_MS = 900;
-const PLAYBACK_RATE = 0.95;
+// Visual crossfade between scenes. Audio is continuous underneath, so the
+// crossfade just softens the visual cut — no silence, no clipped words.
+const CROSSFADE_MS = 700;
 
 export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
+  const masterAudioUrl = scenes[0]?.masterAudioUrl;
+  const masterMode = !!masterAudioUrl;
+
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -164,10 +168,20 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const prevIndexRef = useRef(0);
-  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [exportQuality, setExportQuality] = useState<RenderQuality | null>(null);
   const [exportProgress, setExportProgress] = useState(0);
+
+  const scene = scenes[index];
+
+  // Precompute scene time windows for master mode.
+  const windows = useMemo(() => {
+    if (!masterMode) return [] as { startMs: number; endMs: number }[];
+    return scenes.map((s, i) => ({
+      startMs: s.startMs ?? 0,
+      endMs: s.endMs ?? (s.startMs ?? 0) + (s.durationMs || 4000),
+    }));
+  }, [scenes, masterMode]);
 
   async function handleExport(quality: RenderQuality) {
     if (exportQuality) return;
@@ -186,9 +200,7 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     }
   }
 
-  const scene = scenes[index];
-
-  // Scene change: snapshot previous scene and crossfade it out while new fades in.
+  // Visual crossfade on scene change (works in both modes).
   useEffect(() => {
     if (prevIndexRef.current !== index) {
       const p = scenes[prevIndexRef.current];
@@ -196,7 +208,6 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
       if (p) {
         setPrevScene(p);
         setTransitionPhase("idle");
-        // Next frame → flip to "in" so CSS transition animates.
         requestAnimationFrame(() => {
           requestAnimationFrame(() => setTransitionPhase("in"));
         });
@@ -209,24 +220,14 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     }
   }, [index, scenes]);
 
-  useEffect(() => {
-    setProgress(0);
-    if (!scene) return;
-    const a = audioRef.current;
-    if (!a) return;
-    a.currentTime = 0;
-    a.playbackRate = PLAYBACK_RATE;
-    if (playing) a.play().catch(() => {});
-    if (videoRef.current) {
-      videoRef.current.currentTime = 0;
-      if (playing) videoRef.current.play().catch(() => {});
-    }
-  }, [index, scene?.id]);
+  useEffect(() => () => {
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+  }, []);
 
+  // Play/pause
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    a.playbackRate = PLAYBACK_RATE;
     if (playing) {
       a.play().catch(() => {});
       videoRef.current?.play().catch(() => {});
@@ -236,95 +237,119 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     }
   }, [playing]);
 
-  useEffect(() => () => {
-    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
-    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-  }, []);
+  // Reset stock video on scene change
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      if (playing) videoRef.current.play().catch(() => {});
+    }
+  }, [index]);
+
+  // ============ MASTER MODE: one continuous audio, timestamp-driven ============
+  useEffect(() => {
+    if (!masterMode) return;
+    const a = audioRef.current;
+    if (!a) return;
+
+    const onTime = () => {
+      const cur = a.currentTime * 1000;
+      // Find the scene whose window contains `cur`.
+      let target = index;
+      for (let i = 0; i < windows.length; i++) {
+        if (cur >= windows[i].startMs && cur < windows[i].endMs) {
+          target = i;
+          break;
+        }
+        if (i === windows.length - 1 && cur >= windows[i].endMs) target = i;
+      }
+      if (target !== index) setIndex(target);
+      const w = windows[target];
+      const dur = Math.max(1, w.endMs - w.startMs);
+      setProgress(Math.max(0, Math.min(1, (cur - w.startMs) / dur)));
+    };
+    const onEnd = () => {
+      setPlaying(false);
+      setProgress(1);
+    };
+    a.addEventListener("timeupdate", onTime);
+    a.addEventListener("ended", onEnd);
+    return () => {
+      a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("ended", onEnd);
+    };
+  }, [masterMode, windows, index]);
+
+  // ============ PER-SCENE MODE (no master): reload audio per scene ============
+  useEffect(() => {
+    if (masterMode) return;
+    setProgress(0);
+    const a = audioRef.current;
+    if (!a) return;
+    a.currentTime = 0;
+    if (playing) a.play().catch(() => {});
+  }, [index, masterMode, playing]);
 
   useEffect(() => {
+    if (masterMode) return;
     const a = audioRef.current;
     if (!a) return;
     let advanced = false;
-    let stallTimer: ReturnType<typeof setTimeout> | null = null;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let sawPlaying = false;
 
     const advance = () => {
       if (advanced) return;
       advanced = true;
-      if (stallTimer) clearTimeout(stallTimer);
       if (watchdog) clearTimeout(watchdog);
-      if (index < scenes.length - 1) {
-        if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
-        advanceTimerRef.current = setTimeout(() => setIndex(index + 1), INTER_SCENE_GAP_MS);
-      } else {
-        setPlaying(false);
-      }
+      if (index < scenes.length - 1) setIndex(index + 1);
+      else setPlaying(false);
     };
-
     const onTime = () => {
       if (a.duration && isFinite(a.duration)) {
         setProgress(Math.min(1, a.currentTime / a.duration));
       }
     };
-    const onPlaying = () => {
-      sawPlaying = true;
-      if (stallTimer) {
-        clearTimeout(stallTimer);
-        stallTimer = null;
-      }
-    };
+    const onPlaying = () => { sawPlaying = true; };
     const onEnd = () => advance();
-    const onError = () => {
-      // Real audio failure — no point waiting.
-      setProgress(1);
-      advance();
-    };
-
+    const onError = () => { setProgress(1); advance(); };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("playing", onPlaying);
     a.addEventListener("ended", onEnd);
     a.addEventListener("error", onError);
-
-    // Watchdog: only fires if audio NEVER starts playing within a generous
-    // window (broken/missing file, autoplay block). If playback starts, we
-    // rely on the real `ended` event so no sentence is ever cut short.
     watchdog = setTimeout(() => {
-      if (!sawPlaying) {
-        setProgress(1);
-        advance();
-      }
+      if (!sawPlaying) { setProgress(1); advance(); }
     }, 8000);
-
-    // Fallback ONLY for scenes that have no meaningful audio (e.g. code scene
-    // with a broken clip): if the audio element still hasn't produced any
-    // playback progress after `durationMs + generous buffer`, force advance.
-    const hardCapMs =
-      Math.max(3000, (scene?.durationMs ?? 4000) / PLAYBACK_RATE) + 6000;
-    stallTimer = setTimeout(() => {
-      // If audio actually played through, `ended` already advanced us.
-      if (!advanced) {
-        setProgress(1);
-        advance();
-      }
-    }, hardCapMs);
-
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("playing", onPlaying);
       a.removeEventListener("ended", onEnd);
       a.removeEventListener("error", onError);
-      if (stallTimer) clearTimeout(stallTimer);
       if (watchdog) clearTimeout(watchdog);
     };
-  }, [index, scenes.length, scene?.id, scene?.durationMs]);
+  }, [masterMode, index, scenes.length]);
+
+  function seekToScene(i: number) {
+    setIndex(i);
+    setPlaying(true);
+    if (masterMode && audioRef.current) {
+      audioRef.current.currentTime = (windows[i]?.startMs ?? 0) / 1000;
+    }
+  }
+
+  function restart() {
+    setIndex(0);
+    setProgress(0);
+    if (masterMode && audioRef.current) audioRef.current.currentTime = 0;
+    setPlaying(true);
+  }
 
   if (!scene) return null;
+
+  const audioSrc = masterMode ? masterAudioUrl! : scene.audioUrl;
 
   return (
     <div className="w-full">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border bg-white shadow-sm">
-        {/* Previous scene sits on top and fades out over CROSSFADE_MS */}
         {prevScene && (
           <div
             key={`prev-${prevScene.id}`}
@@ -339,18 +364,15 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
             <SceneStage scene={prevScene} progress={1} />
           </div>
         )}
-        {/* Current scene underneath, gently scaling in */}
         <div
           key={`cur-${scene.id}`}
           className="absolute inset-0"
-          style={{
-            animation: `sceneIn ${CROSSFADE_MS}ms ease-out both`,
-          }}
+          style={{ animation: `sceneIn ${CROSSFADE_MS}ms ease-out both` }}
         >
           <SceneStage scene={scene} progress={progress} videoRef={videoRef} />
         </div>
 
-        <audio ref={audioRef} src={scene.audioUrl} preload="auto" />
+        <audio ref={audioRef} src={audioSrc} preload="auto" />
       </div>
 
       <div className="mt-4 flex items-center gap-3">
@@ -362,11 +384,7 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           {playing ? <Pause size={18} /> : <Play size={18} />}
         </button>
         <button
-          onClick={() => {
-            setIndex(0);
-            setProgress(0);
-            setPlaying(true);
-          }}
+          onClick={restart}
           className="inline-flex h-10 w-10 items-center justify-center rounded-full border hover:bg-accent"
           aria-label="Restart"
         >
@@ -377,10 +395,7 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
             {scenes.map((s, i) => (
               <button
                 key={s.id}
-                onClick={() => {
-                  setIndex(i);
-                  setPlaying(true);
-                }}
+                onClick={() => seekToScene(i)}
                 className={`h-1.5 flex-1 rounded-full transition-colors ${
                   i < index ? "bg-primary" : i === index ? "bg-primary/60" : "bg-muted"
                 }`}
@@ -397,6 +412,7 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             Scene {index + 1} / {scenes.length}
+            {masterMode && <span className="ml-2 opacity-70">· continuous audio</span>}
           </div>
         </div>
       </div>
