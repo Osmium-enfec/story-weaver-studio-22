@@ -440,7 +440,7 @@ function Index() {
 
       const { id } = await saveProject({
         data: {
-          id: projectIdRef.current && projectIdRef.current !== pid ? projectIdRef.current : projectIdRef.current === pid ? pid : undefined,
+          id: projectIdRef.current ?? undefined,
           title,
           script: mode === "script" ? script : undefined,
           audio_mode: mode === "script" ? "tts" : "upload",
