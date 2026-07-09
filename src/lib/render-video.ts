@@ -240,16 +240,27 @@ export async function renderVideo(
     }
   }
 
-  // Audio pipeline
+  // Audio pipeline. If scenes share a masterAudioUrl, play that ONE track
+  // continuously; scenes are just visual windows on it (no inter-scene silent
+  // gaps, and audio can never get cut off mid-word).
+  const masterAudioUrl = scenes[0]?.masterAudioUrl;
+  const masterMode = !!masterAudioUrl && scenes.every((s) => s.masterAudioUrl === masterAudioUrl);
   const audioCtx = new AudioContext();
   const dest = audioCtx.createMediaStreamDestination();
   const audioBuffers = new Map<string, AudioBuffer>();
-  for (const s of scenes) {
-    if (audioBuffers.has(s.audioUrl)) continue;
+  if (masterMode) {
     try {
-      const arr = await fetch(s.audioUrl).then((r) => r.arrayBuffer());
-      audioBuffers.set(s.audioUrl, await audioCtx.decodeAudioData(arr));
+      const arr = await fetch(masterAudioUrl!).then((r) => r.arrayBuffer());
+      audioBuffers.set(masterAudioUrl!, await audioCtx.decodeAudioData(arr));
     } catch {}
+  } else {
+    for (const s of scenes) {
+      if (audioBuffers.has(s.audioUrl)) continue;
+      try {
+        const arr = await fetch(s.audioUrl).then((r) => r.arrayBuffer());
+        audioBuffers.set(s.audioUrl, await audioCtx.decodeAudioData(arr));
+      } catch {}
+    }
   }
 
   // Recorder — request frames manually so background-tab throttling can't stall us.
@@ -271,11 +282,21 @@ export async function renderVideo(
   });
   recorder.start(1000);
 
-  const totalDuration = scenes.reduce(
-    (a, s, i) =>
-      a + s.durationMs / PLAYBACK_RATE + (i < scenes.length - 1 ? INTER_SCENE_GAP_MS : 0),
-    0,
-  );
+  // Per-scene visual durations
+  const sceneDurations = scenes.map((s, i) => {
+    if (masterMode) {
+      const start = s.startMs ?? 0;
+      const end = s.endMs ?? start + (s.durationMs || 4000);
+      return Math.max(300, end - start);
+    }
+    return s.durationMs / PLAYBACK_RATE;
+  });
+  const totalDuration = masterMode
+    ? sceneDurations.reduce((a, b) => a + b, 0)
+    : sceneDurations.reduce(
+        (a, d, i) => a + d + (i < scenes.length - 1 ? INTER_SCENE_GAP_MS : 0),
+        0,
+      );
   const recordStart = performance.now();
   let elapsed = 0;
   const frameInterval = 1000 / fps;
@@ -302,16 +323,29 @@ export async function renderVideo(
     }
   };
 
-  for (let i = 0; i < scenes.length; i++) {
-    const scene = scenes[i];
-    const durMs = scene.durationMs / PLAYBACK_RATE;
-    const buf = audioBuffers.get(scene.audioUrl);
+  // Start master audio ONCE at t=0.
+  if (masterMode) {
+    const buf = audioBuffers.get(masterAudioUrl!);
     if (buf) {
       const src = audioCtx.createBufferSource();
       src.buffer = buf;
-      src.playbackRate.value = PLAYBACK_RATE;
       src.connect(dest);
       src.start(audioCtx.currentTime);
+    }
+  }
+
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    const durMs = sceneDurations[i];
+    if (!masterMode) {
+      const buf = audioBuffers.get(scene.audioUrl);
+      if (buf) {
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf;
+        src.playbackRate.value = PLAYBACK_RATE;
+        src.connect(dest);
+        src.start(audioCtx.currentTime);
+      }
     }
 
     const video = scene.kind === "stock" ? vidCache.get(scene.mediaUrl!) : null;
@@ -346,11 +380,9 @@ export async function renderVideo(
     if (video) video.pause();
     elapsed += durMs;
 
-    if (i < scenes.length - 1) {
-      // Keep pushing frames during the silent gap so the video track never stalls.
-      await runPhase(INTER_SCENE_GAP_MS, () => {
-        // Redraw last frame content is already on canvas; just push frames.
-      });
+    if (!masterMode && i < scenes.length - 1) {
+      // Silent gap ONLY in per-scene mode. Master mode has continuous audio.
+      await runPhase(INTER_SCENE_GAP_MS, () => {});
       elapsed += INTER_SCENE_GAP_MS;
       onProgress?.(Math.min(1, elapsed / totalDuration));
     }

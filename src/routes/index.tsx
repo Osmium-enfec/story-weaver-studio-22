@@ -20,9 +20,10 @@ import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import {
   alignSentences,
-  sliceAudioIntoScenes,
+  computeSnappedRangesMs,
   type SttResult,
 } from "@/lib/audio-slice";
+import { concatAudioClips } from "@/lib/audio-concat";
 import { NavBar } from "@/components/NavBar";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -106,7 +107,7 @@ function Index() {
   const navigate = useNavigate();
 
   const plansRef = useRef<ScenePlan[]>([]);
-  const precomputedAudioRef = useRef<{ urls: string[]; durations: number[] } | null>(null);
+  
   const projectIdRef = useRef<string | null>(null);
   const storageFolderRef = useRef<string | null>(null);
   const resultsRef = useRef<(Scene | null)[]>([]);
@@ -251,7 +252,7 @@ function Index() {
     setProjectTitle("");
     setProgress([]);
     plansRef.current = [];
-    precomputedAudioRef.current = null;
+    
     statsRef.current = { imagesNew: 0, imagesCached: 0, tts: 0, plan: 0, stt: 0, sttSkipped: false, planSkipped: false };
     setStats(statsRef.current);
 
@@ -303,12 +304,15 @@ function Index() {
       }
       plansRef.current = plans;
 
-      let preAudio: { urls: string[]; durations: number[] } | null = null;
+      // AUDIO MODE: compute snapped scene time windows on the ORIGINAL uploaded
+      // audio. We do NOT slice — the whole file plays as a single master track,
+      // and visuals switch at these timestamps.
+      let audioWindows: { startMs: number; endMs: number }[] | null = null;
+      let masterAudioUrl: string | null = null;
       if (mode === "audio" && sttWords && audioFile) {
         const ranges = alignSentences(plans.map((p) => p.sentence), sttWords);
-        const { audioUrls, durationsMs } = await sliceAudioIntoScenes(audioFile, ranges);
-        preAudio = { urls: audioUrls, durations: durationsMs };
-        precomputedAudioRef.current = preAudio;
+        audioWindows = await computeSnappedRangesMs(audioFile, ranges);
+        masterAudioUrl = URL.createObjectURL(audioFile);
       }
 
       const initial: SceneProgress[] = plans.map((p) => ({ ...p, status: "planning" }));
@@ -325,9 +329,15 @@ function Index() {
           if (i >= plans.length) return;
           const p = plans[i];
           try {
-            const precomputed = preAudio
-              ? { audioUrl: preAudio.urls[i], durationMs: preAudio.durations[i] }
-              : undefined;
+            // In audio mode, skip TTS: reuse the master audio URL as a
+            // placeholder and use the snapped window as the duration.
+            const precomputed =
+              audioWindows && masterAudioUrl
+                ? {
+                    audioUrl: masterAudioUrl,
+                    durationMs: audioWindows[i].endMs - audioWindows[i].startMs,
+                  }
+                : undefined;
             const s = await buildScene(p, precomputed);
             const { _cached, ...scene } = s as any;
             resultsArr[i] = scene;
@@ -352,6 +362,39 @@ function Index() {
 
       const ok = resultsArr.filter((r): r is Scene => r !== null).length;
       if (ok === 0) throw new Error("Every scene failed to generate.");
+
+      // ---------- Build the MASTER audio ----------
+      // Script mode: concatenate the per-sentence TTS clips into ONE track,
+      //              then attach shared masterAudioUrl + windows to each scene.
+      // Audio mode: masterAudioUrl already set to the uploaded file.
+      let finalMaster = masterAudioUrl;
+      let finalWindows = audioWindows;
+      if (!finalMaster && mode === "script") {
+        const readyOrdered = resultsArr.filter((r): r is Scene => r !== null);
+        try {
+          const concat = await concatAudioClips(readyOrdered.map((s) => s.audioUrl), 300);
+          finalMaster = concat.url;
+          // Map back to plan order (all plans succeeded → same order)
+          finalWindows = concat.ranges;
+        } catch (err) {
+          console.warn("Concat failed, falling back to per-scene audio:", err);
+        }
+      }
+      if (finalMaster && finalWindows) {
+        const merged: (Scene | null)[] = resultsArr.map((s, i) => {
+          if (!s) return null;
+          const w = finalWindows![i];
+          return {
+            ...s,
+            masterAudioUrl: finalMaster!,
+            startMs: w?.startMs ?? 0,
+            endMs: w?.endMs ?? (w?.startMs ?? 0) + s.durationMs,
+          };
+        });
+        resultsRef.current = merged;
+        setResults(merged);
+      }
+
       // Final autosave with all scenes settled.
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       persist(undefined, true);
@@ -362,6 +405,7 @@ function Index() {
     }
   }
 
+
   async function handleRetry(i: number) {
     const plan = plansRef.current[i];
     if (!plan) return;
@@ -371,9 +415,10 @@ function Index() {
       return next;
     });
     try {
-      const preAudio = precomputedAudioRef.current;
-      const precomputed = preAudio
-        ? { audioUrl: preAudio.urls[i], durationMs: preAudio.durations[i] }
+      // Retry after generation — reuse existing master audio window if any.
+      const existing = resultsRef.current[i];
+      const precomputed = existing?.masterAudioUrl
+        ? { audioUrl: existing.masterAudioUrl, durationMs: (existing.endMs ?? 0) - (existing.startMs ?? 0) }
         : undefined;
       const s = await buildScene(plan, precomputed);
       const { _cached, ...scene } = s as any;
@@ -412,9 +457,22 @@ function Index() {
           ? script.trim().split(/\s+/).slice(0, 8).join(" ") || "Untitled explainer"
           : audioFile?.name.replace(/\.[^.]+$/, "") || "Untitled explainer");
 
+      // Upload master audio once, reuse URL on every scene.
+      const rawMaster = readyScenes[0]?.masterAudioUrl;
+      const portableMaster = rawMaster
+        ? await toPortableUrl(rawMaster, userId, pid, extFromUrl(rawMaster, "wav"))
+        : undefined;
+
       const portable = await Promise.all(
         readyScenes.map(async (s) => {
-          const audioUrl = await toPortableUrl(s.audioUrl, userId, pid, extFromUrl(s.audioUrl, "mp3"));
+          // In master mode we still upload the per-scene audioUrl only when
+          // it isn't identical to the master (script mode: per-scene TTS
+          // clips are kept as a fallback).
+          const audioUrl =
+            s.audioUrl === rawMaster && portableMaster
+              ? portableMaster
+              : await toPortableUrl(s.audioUrl, userId, pid, extFromUrl(s.audioUrl, "mp3"));
+          const masterAudioUrl = portableMaster ?? s.masterAudioUrl;
           if (s.kind === "image") {
             const backgroundUrl = s.backgroundUrl
               ? await toPortableUrl(s.backgroundUrl, userId, pid, extFromUrl(s.backgroundUrl, "png"))
@@ -425,16 +483,16 @@ function Index() {
                 mediaUrl: await toPortableUrl(el.mediaUrl, userId, pid, extFromUrl(el.mediaUrl, "png")),
               })),
             );
-            return { ...s, audioUrl, backgroundUrl, elements };
+            return { ...s, audioUrl, masterAudioUrl, backgroundUrl, elements };
           }
-          return { ...s, audioUrl };
+          return { ...s, audioUrl, masterAudioUrl };
         }),
       );
 
 
+
       const firstImg = portable.find(
-        (s): s is Scene & { backgroundUrl?: string } =>
-          s.kind === "image" && !!(s as any).backgroundUrl,
+        (s) => s.kind === "image" && !!(s as any).backgroundUrl,
       );
       const thumbnail_url = firstImg ? (firstImg as any).backgroundUrl : undefined;
 

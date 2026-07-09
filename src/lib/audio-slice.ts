@@ -61,7 +61,7 @@ export function alignSentences(sentences: string[], words: SttWord[]): SentenceR
   });
 }
 
-function encodeWav(buffer: AudioBuffer): ArrayBuffer {
+export function encodeWav(buffer: AudioBuffer): ArrayBuffer {
   const numCh = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const length = buffer.length * numCh * 2 + 44;
@@ -107,7 +107,7 @@ function encodeWav(buffer: AudioBuffer): ArrayBuffer {
  * silence to count. Adjusts each range's `end` (and next range's `start`)
  * to the middle of the nearest silence window found within +/- maxDriftMs.
  */
-function snapRangesToSilence(
+export function snapRangesToSilence(
   buffer: AudioBuffer,
   ranges: SentenceRange[],
   opts: { silenceThresh?: number; minSilenceMs?: number; maxDriftMs?: number } = {},
@@ -168,6 +168,34 @@ function snapRangesToSilence(
     snapped[i + 1].start = snap;
   }
   return snapped;
+}
+
+/**
+ * Decode `file`, snap sentence ranges to nearby silence, and return
+ * per-scene boundaries in milliseconds. Does NOT slice — the app keeps
+ * the ORIGINAL audio playing continuously and switches visuals at
+ * these timestamps.
+ */
+export async function computeSnappedRangesMs(
+  file: File,
+  ranges: SentenceRange[],
+): Promise<{ startMs: number; endMs: number }[]> {
+  const ab = await file.arrayBuffer();
+  const AC = window.AudioContext || (window as any).webkitAudioContext;
+  const ctx: AudioContext = new AC();
+  const buf = await ctx.decodeAudioData(ab.slice(0));
+  const snapped = snapRangesToSilence(buf, ranges);
+  await ctx.close().catch(() => {});
+  // Ensure scenes are contiguous: each scene's start == previous end.
+  const out: { startMs: number; endMs: number }[] = [];
+  for (let i = 0; i < snapped.length; i++) {
+    const start = i === 0 ? 0 : out[i - 1].endMs;
+    const end = i === snapped.length - 1
+      ? Math.max(start + 200, (buf.length / buf.sampleRate) * 1000)
+      : Math.max(start + 200, snapped[i].end * 1000);
+    out.push({ startMs: start, endMs: end });
+  }
+  return out;
 }
 
 /**
