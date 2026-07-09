@@ -308,22 +308,23 @@ function Index() {
     }
   }
 
-  async function handleSave() {
-    setSaving(true);
-    setSaveMsg(null);
+  async function persist(overrideTitle?: string, silent = false): Promise<string | null> {
+    const readyScenes = resultsRef.current.filter((s): s is Scene => s !== null);
+    if (readyScenes.length === 0) return null;
+    if (!silent) setSaving(true);
     try {
-      const title = prompt("Name this project:", "Untitled explainer");
-      if (!title) { setSaving(false); return; }
+      const title =
+        overrideTitle ??
+        projectTitle ??
+        (mode === "script"
+          ? script.trim().split(/\s+/).slice(0, 8).join(" ") || "Untitled explainer"
+          : audioFile?.name.replace(/\.[^.]+$/, "") || "Untitled explainer");
 
-      // Inline any blob: URLs to data URLs so the project is portable.
-      const readyScenes = results.filter((s): s is Scene => s !== null);
       const portable = await Promise.all(
         readyScenes.map(async (s) => {
           const audioUrl = await urlToDataUrl(s.audioUrl);
           if (s.kind === "image") {
-            const backgroundUrl = s.backgroundUrl
-              ? await urlToDataUrl(s.backgroundUrl)
-              : undefined;
+            const backgroundUrl = s.backgroundUrl ? await urlToDataUrl(s.backgroundUrl) : undefined;
             const elements = await Promise.all(
               (s.elements ?? []).map(async (el) => ({
                 ...el,
@@ -344,6 +345,7 @@ function Index() {
 
       const { id } = await saveProject({
         data: {
+          id: projectIdRef.current ?? undefined,
           title,
           script: mode === "script" ? script : undefined,
           audio_mode: mode === "script" ? "tts" : "upload",
@@ -351,13 +353,29 @@ function Index() {
           thumbnail_url,
         },
       });
-      setSaveMsg("Saved!");
-      setTimeout(() => navigate({ to: "/project/$id", params: { id } }), 500);
+      projectIdRef.current = id;
+      setProjectTitle(title);
+      setSaveMsg(silent ? `Auto-saved · ${new Date().toLocaleTimeString()}` : "Saved!");
+      return id;
     } catch (e: any) {
       setSaveMsg(`Save failed: ${e?.message || e}`);
+      return null;
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
     }
+  }
+
+  function scheduleAutoSave() {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      persist(undefined, true);
+    }, 1500);
+  }
+
+  async function handleRename() {
+    const t = prompt("Rename project:", projectTitle || "Untitled explainer");
+    if (!t) return;
+    await persist(t, false);
   }
 
   function handleDrop(e: React.DragEvent) {
