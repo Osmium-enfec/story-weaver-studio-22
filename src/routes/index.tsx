@@ -193,6 +193,9 @@ function Index() {
     setTopError(null);
     setSaveMsg(null);
     setResults([]);
+    resultsRef.current = [];
+    projectIdRef.current = null;
+    setProjectTitle("");
     setProgress([]);
     plansRef.current = [];
     precomputedAudioRef.current = null;
