@@ -343,6 +343,43 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     setPlaying(true);
   }
 
+  // Master-mode continuous timeline math.
+  const totalMs = masterMode
+    ? windows[windows.length - 1]?.endMs ?? 1
+    : scenes.reduce((a, s) => a + (s.durationMs || 0), 0) || 1;
+  const currentMs = masterMode
+    ? (windows[index]?.startMs ?? 0) + progress * ((windows[index]?.endMs ?? 0) - (windows[index]?.startMs ?? 0))
+    : scenes.slice(0, index).reduce((a, s) => a + (s.durationMs || 0), 0) +
+      progress * (scenes[index]?.durationMs || 0);
+  const overallPct = Math.max(0, Math.min(100, (currentMs / totalMs) * 100));
+
+  function seekToMs(ms: number) {
+    if (masterMode && audioRef.current) {
+      audioRef.current.currentTime = Math.max(0, Math.min(totalMs - 10, ms)) / 1000;
+      setPlaying(true);
+      return;
+    }
+    // Per-scene fallback: find scene at ms.
+    let acc = 0;
+    for (let i = 0; i < scenes.length; i++) {
+      const d = scenes[i].durationMs || 0;
+      if (ms < acc + d) return seekToScene(i);
+      acc += d;
+    }
+    seekToScene(scenes.length - 1);
+  }
+
+  function onTimelineClick(e: React.MouseEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = (e.clientX - rect.left) / rect.width;
+    seekToMs(frac * totalMs);
+  }
+
+  const fmt = (ms: number) => {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
+
   if (!scene) return null;
 
   const audioSrc = masterMode ? masterAudioUrl! : scene.audioUrl;
