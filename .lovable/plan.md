@@ -1,82 +1,115 @@
-# Plan: Persistence + Image Library + Drag-Drop
+# Hybrid Export: Canvas Rasterizer + ffmpeg.wasm Stitcher
 
-## 1. Enable Lovable Cloud
-Turn on Cloud for auth, database (with pgvector), and storage.
+Keep our current canvas animation code as the "renderer" (it already knows how to draw image comps, code scenes, stock video, Ken Burns, element reveals). Add ffmpeg.wasm as the "encoder + muxer + stitcher" so the final output is a real MP4 with continuous audio.
 
-## 2. Auth
-- Email/password + Google sign-in (Google via `lovable.auth.signInWithOAuth`).
-- `/auth` public route, `/projects` and `/project/$id` under `_authenticated/`.
-- Home `/` stays public (script → generate demo), but "Save" requires sign-in.
+## Pipeline
 
-## 3. Database schema (migration)
+```text
+per scene:
+  canvas draw loop  ─►  PNG frame sequence (in ffmpeg wasm FS)
+                          │
+                          ▼
+                  ffmpeg encode → segN.mp4 (H.264, silent, exact duration)
+
+all scenes done:
+  segments + master audio ─► ffmpeg concat + mux ─► final.mp4 (H.264 + AAC)
 ```
-extension vector;
 
-table projects (
-  id uuid pk,
-  user_id uuid → auth.users,
-  title text,
-  script text,
-  audio_mode text,           -- 'tts' | 'upload'
-  scenes jsonb,              -- full Scene[] with mediaUrl/audioUrl (data URLs)
-  created_at, updated_at
-);
-RLS: owner-only CRUD.
+Result: real MP4, seekable, correct duration, real AAC audio, no MediaRecorder / no `fix-webm-duration` hack.
 
-table image_assets (            -- GLOBAL library (no user_id filter on read)
-  id uuid pk,
-  prompt text,
-  kind text,                    -- 'background' | 'element'
-  storage_path text,            -- in 'image-library' bucket
-  embedding vector(1536),       -- openai text-embedding-3-small
-  created_by uuid,
-  usage_count int default 1,
-  created_at
-);
-RLS:
-  - authenticated can SELECT all (global reuse)
-  - authenticated can INSERT (created_by = auth.uid())
-  - only created_by can UPDATE/DELETE
-Index: HNSW cosine on embedding.
+## Steps
 
-RPC match_image_asset(query_embedding, kind, threshold, k)
-returns best match above cosine similarity threshold (default 0.88).
+### 1. Add ffmpeg.wasm
+- `bun add @ffmpeg/ffmpeg @ffmpeg/util @ffmpeg/core`
+- Singleton loader `getFFmpeg()` (load once per session, ~25MB), progress + log handlers, same pattern as Frame Animator Magic.
+
+### 2. New file `src/lib/rasterize-scene.ts`
+Extract the pure "draw one frame of scene X at time T" logic out of `render-video.ts`:
+- `drawImageSceneFrame(ctx, scene, progress, W, H, bgImg, elementImgs)`
+- `drawCodeSceneFrame(ctx, scene, progress, W, H)`
+- `drawStockFrame(ctx, videoEl, W, H)`
+- Asset preloader (image cache, video element cache) — reused by both live player export and rasterizer.
+
+This makes the drawing code testable and decouples it from `MediaRecorder`.
+
+### 3. New file `src/lib/ffmpeg-stitcher.ts`
+Core exporter, replaces the MediaRecorder path in `render-video.ts`:
+
+```ts
+export async function exportToMp4(
+  scenes: Scene[],
+  masterAudioUrl: string | undefined,
+  quality: "preview" | "hd",
+  onProgress: (stage: string, ratio: number) => void,
+): Promise<Blob>
 ```
-Storage bucket `image-library` (public read).
 
-## 4. Image library integration
-New server fns in `src/lib/image-library.functions.ts`:
-- `findOrGenerateBackground({ prompt })`:
-  1. Embed prompt via `/v1/embeddings` (`text-embedding-3-small`).
-  2. Call `match_image_asset` RPC (kind='background', threshold 0.88).
-  3. If hit → bump `usage_count`, return public URL.
-  4. Else → generate via existing gemini flow, upload PNG to `image-library` bucket, insert row with embedding, return URL.
-- `findOrGenerateElement({ prompt })`: same flow, kind='element', threshold 0.9 (elements are more specific).
+Flow:
+1. Preload all scene assets (images, stock videos, master audio bytes).
+2. For each scene:
+   - Compute duration frames = `round(durationMs / 1000 * fps)`.
+   - For stock scenes, seek the `<video>` per frame via `video.currentTime = t; await 'seeked'` and draw. (Reliable in headless drawing, no realtime dependency.)
+   - Draw frame to offscreen canvas → `canvas.toBlob('image/png')` → `ffmpeg.writeFile('scene{i}/f_%05d.png', bytes)`.
+   - Progress: report `(scene i of N, frame k of M)` back to caller.
+3. Encode segment:
+   ```
+   ffmpeg -y -framerate {fps} -i scene{i}/f_%05d.png
+     -c:v libx264 -preset {preset} -crf {crf}
+     -pix_fmt yuv420p -movflags +faststart segN.mp4
+   ```
+   Delete the PNG frames after encode to free wasm heap.
+4. After all segments:
+   - Concat: `ffmpeg -f concat -safe 0 -i list.txt -c copy video.mp4`
+   - Mux master audio:
+     ```
+     ffmpeg -y -i video.mp4 -i master.wav
+       -c:v copy -c:a aac -b:a 192k -shortest final.mp4
+     ```
+   - Read `final.mp4` → `Blob({ type: 'video/mp4' })` → return.
 
-Update `src/routes/index.tsx` `buildScene` to call these instead of `generateSceneBackground` / `generateSceneElement` directly. Keep the old server fns as the generation primitive (called internally).
+Quality presets (match Frame Animator style):
+- `preview`: 1280×720, 30fps, `-preset ultrafast -crf 26`
+- `hd`: 1920×1080, 60fps, `-preset veryfast -crf 20`
 
-## 5. Drag-and-drop audio
-In `src/routes/index.tsx` upload-audio panel:
-- Wrap upload area in a div with `onDragOver`/`onDrop` handlers.
-- Show dashed border, "Drop audio here or click to browse" state.
-- Highlight on drag-over.
-- Accept `audio/*`, reject others with toast.
+### 4. Wire up `VideoPlayer`
+- Replace the `renderVideo` call in `handleExport` with `exportToMp4`.
+- Change download extension `.webm` → `.mp4`.
+- Progress UI: show `stage` label ("scene 3/6 · frame 42/120", "encoding", "stitching", "muxing audio") next to the % bar — much more informative than the current single number.
+- Keep both "Current quality" and "HD" buttons.
 
-## 6. Save / Load projects
-- "Save Project" button after generation → prompts for title, calls `saveProject` server fn (`requireSupabaseAuth`) which inserts/updates row with full scene manifest.
-- New route `/_authenticated/projects` — lists user's projects (title, date, thumbnail = first scene bg).
-- New route `/_authenticated/project/$id` — loads scenes, renders `<VideoPlayer>` immediately (no regeneration).
-- Nav bar: "My Projects" + user email + sign out.
+### 5. Keep the current MediaRecorder path as fallback
+Leave `render-video.ts` intact for one release cycle behind a flag (`USE_FFMPEG = true`) in case ffmpeg.wasm fails on some browser. Delete once verified.
 
-## 7. UX pacing
-No new work — user asked "take your time, make things good". Keep existing sequential pacing (concurrency=3), don't rush the renderer, keep the 750ms crossfade / 550ms gap.
+## Handling scene types under ffmpeg
 
-## Technical notes
-- Scenes reference data URLs today. To keep projects loadable across devices, on save: for each scene, if `mediaUrl`/`audioUrl` is a `data:` URL, upload it to a per-project storage bucket `project-assets/{projectId}/...` and rewrite to public URLs. Stock (Pexels) URLs stored as-is.
-- Embeddings are cheap; run one embed per element/background prompt before the image call.
-- The library grows across all users → over time image-gen calls drop dramatically for common concepts.
+- **Image comp scenes**: purely canvas — trivially rasterized per frame.
+- **Code scenes**: currently rendered by React (`CodeScene.tsx` uses DOM/SVG). We already have `drawCodeScene` in `render-video.ts` doing a canvas version — reuse it (typing progress based on `progress`).
+- **Stock video scenes**: seek the `HTMLVideoElement` per frame and draw. Slower but deterministic.
+- **Crossfades between scenes**: today they're a DOM CSS transition. For MP4 output we bake them in — during the last 700ms of scene N and first 700ms of scene N+1, we render an overlap by drawing scene N+1 with rising alpha on top of scene N. Two implementation choices:
+  - (a) Extend each segment by 700ms of overlap frames, then use ffmpeg `xfade` filter at concat time. Cleanest.
+  - (b) Render the overlap frames into a dedicated `transitionN.mp4` and interleave via concat. Simpler.
+  Plan: go with (a) — `xfade=transition=fade:duration=0.7:offset={segDur-0.7}` — one filtergraph, no extra passes.
+
+## Master audio for the mux
+
+- Script mode: we already produce a concatenated WAV blob (`audio-concat.ts`) — pass its blob URL straight in.
+- Audio-upload mode: the uploaded file (mp3/wav/m4a) → pass directly, ffmpeg re-encodes to AAC.
+
+Silent gaps between scenes are already baked into the master audio timing, so the video segments' durations match the audio automatically.
+
+## Progress model
+
+Total work units = (sum of frame counts across scenes) + (segments count for encode) + 2 (concat + mux). Report a single 0–1 fraction plus the current stage string.
 
 ## Out of scope
-- Public sharing of projects (owner-only for now).
-- Trimming/editing scenes post-generation.
-- MP4 export changes (already there).
+
+- Server-side rendering (would need a Worker with ffmpeg native, not available on Cloudflare).
+- SharedArrayBuffer / multi-threaded ffmpeg core — the single-threaded core is enough at these bitrates and avoids the COOP/COEP header requirements which can conflict with the Lovable preview iframe.
+- Changing the live in-browser `<VideoPlayer>` playback path. This plan only touches export.
+
+## Files touched
+
+- New: `src/lib/rasterize-scene.ts`, `src/lib/ffmpeg-stitcher.ts`
+- Modified: `src/components/VideoPlayer.tsx` (call new exporter, update progress UI, `.mp4` filename)
+- Modified: `package.json` (three new deps)
+- Untouched: `src/lib/render-video.ts` kept as fallback for one cycle

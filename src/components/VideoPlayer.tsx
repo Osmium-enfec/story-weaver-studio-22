@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
-import { renderVideo, downloadBlob, type RenderQuality } from "@/lib/render-video";
+import { exportToMp4, downloadBlob, type ExportQuality } from "@/lib/ffmpeg-stitcher";
+
 
 export interface ResolvedElement extends CompositionElement {
   mediaUrl: string;
@@ -169,8 +170,9 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const prevIndexRef = useRef(0);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [exportQuality, setExportQuality] = useState<RenderQuality | null>(null);
+  const [exportQuality, setExportQuality] = useState<ExportQuality | null>(null);
   const [exportProgress, setExportProgress] = useState(0);
+  const [exportStage, setExportStage] = useState("");
 
   const scene = scenes[index];
 
@@ -183,20 +185,25 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     }));
   }, [scenes, masterMode]);
 
-  async function handleExport(quality: RenderQuality) {
+  async function handleExport(quality: ExportQuality) {
     if (exportQuality) return;
     setExportQuality(quality);
     setExportProgress(0);
+    setExportStage("starting…");
     try {
-      const blob = await renderVideo(scenes, quality, (p) => setExportProgress(p));
-      const label = quality === "hd" ? "1080p60" : "preview";
-      downloadBlob(blob, `explainer-${label}-${Date.now()}.webm`);
+      const blob = await exportToMp4(scenes, masterAudioUrl, quality, (stage, ratio) => {
+        setExportStage(stage);
+        setExportProgress(ratio);
+      });
+      const label = quality === "hd" ? "1080p60" : "720p30";
+      downloadBlob(blob, `explainer-${label}-${Date.now()}.mp4`);
     } catch (e) {
       console.error("Export failed", e);
       alert("Export failed: " + (e as Error).message);
     } finally {
       setExportQuality(null);
       setExportProgress(0);
+      setExportStage("");
     }
   }
 
@@ -497,14 +504,17 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           HD (1080p 60fps)
         </button>
         {exportQuality && (
-          <div className="ml-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted">
+          <div className="ml-2 flex min-w-[240px] flex-1 items-center gap-2 text-xs text-muted-foreground">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-primary transition-[width]"
                 style={{ width: `${Math.round(exportProgress * 100)}%` }}
               />
             </div>
-            {Math.round(exportProgress * 100)}% — recording in real time
+            <span className="whitespace-nowrap tabular-nums">
+              {Math.round(exportProgress * 100)}%
+            </span>
+            <span className="truncate opacity-80">{exportStage}</span>
           </div>
         )}
       </div>
