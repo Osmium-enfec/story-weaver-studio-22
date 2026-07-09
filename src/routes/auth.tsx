@@ -17,7 +17,6 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,17 +33,8 @@ function AuthPage() {
     setBusy(true);
     setErr(null);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       navigate({ to: "/projects" });
     } catch (e: any) {
       setErr(e?.message || "Failed");
@@ -52,6 +42,7 @@ function AuthPage() {
       setBusy(false);
     }
   }
+
 
   async function handleGoogle() {
     setBusy(true);
