@@ -428,28 +428,44 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           <RotateCcw size={16} />
         </button>
         <div className="flex-1">
-          <div className="flex gap-1">
-            {scenes.map((s, i) => (
-              <button
-                key={s.id}
-                onClick={() => seekToScene(i)}
-                className={`h-1.5 flex-1 rounded-full transition-colors ${
-                  i < index ? "bg-primary" : i === index ? "bg-primary/60" : "bg-muted"
-                }`}
-                aria-label={`Scene ${i + 1}`}
-              >
-                {i === index && (
-                  <div
-                    className="h-full rounded-full bg-primary"
-                    style={{ width: `${progress * 100}%` }}
-                  />
-                )}
-              </button>
-            ))}
+          <div
+            className="group relative h-2 w-full cursor-pointer rounded-full bg-muted"
+            onClick={onTimelineClick}
+            role="slider"
+            aria-label="Timeline"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(overallPct)}
+          >
+            <div
+              className="absolute inset-y-0 left-0 rounded-full bg-primary"
+              style={{ width: `${overallPct}%` }}
+            />
+            {/* Scene tick marks */}
+            {scenes.slice(1).map((_, i) => {
+              const boundaryMs = masterMode
+                ? windows[i]?.endMs ?? 0
+                : scenes.slice(0, i + 1).reduce((a, s) => a + (s.durationMs || 0), 0);
+              const left = (boundaryMs / totalMs) * 100;
+              return (
+                <div
+                  key={i}
+                  className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-background/80"
+                  style={{ left: `${left}%` }}
+                />
+              );
+            })}
+            <div
+              className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-background opacity-0 shadow group-hover:opacity-100"
+              style={{ left: `${overallPct}%` }}
+            />
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Scene {index + 1} / {scenes.length}
-            {masterMode && <span className="ml-2 opacity-70">· continuous audio</span>}
+          <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Scene {index + 1} / {scenes.length}
+              {masterMode && <span className="ml-2 opacity-70">· continuous audio</span>}
+            </span>
+            <span className="tabular-nums">{fmt(currentMs)} / {fmt(totalMs)}</span>
           </div>
         </div>
       </div>
