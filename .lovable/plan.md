@@ -1,59 +1,82 @@
+# Plan: Persistence + Image Library + Drag-Drop
 
-# Script → Explainer Video (In-Browser)
+## 1. Enable Lovable Cloud
+Turn on Cloud for auth, database (with pgvector), and storage.
 
-Paste a script, get a synced explainer video: each sentence becomes a scene with a voiceover, an animated AI image or a Pexels clip, and a subtitle — played on a white-canvas timeline in the browser.
+## 2. Auth
+- Email/password + Google sign-in (Google via `lovable.auth.signInWithOAuth`).
+- `/auth` public route, `/projects` and `/project/$id` under `_authenticated/`.
+- Home `/` stays public (script → generate demo), but "Save" requires sign-in.
 
-## User flow
-
-1. Paste script → click **Generate**.
-2. Backend chunks into sentences, plans each scene, and streams progress.
-3. Per sentence, in parallel:
-   - LLM decides `image` vs `stock` + writes an image prompt / Pexels query + subtitle.
-   - If `image`: generate via Gemini/GPT-image (white background, illustrative).
-   - If `stock`: search Pexels, pick top clip.
-   - Generate ElevenLabs narration; measure duration → scene length.
-4. When all scenes ready, custom `<VideoPlayer>` plays them on a white canvas: Ken Burns / fade / slide for images, muted playback for stock clips, synced audio + subtitle overlay, play/pause/scrub.
-
-## Setup
-
-- Enable **Lovable Cloud** (for secret storage + server functions).
-- Store secrets via `add_secret`: `OPENAI_API_KEY`, `GEMINI_API_KEY` (optional if using OpenAI only), `ELEVENLABS_API_KEY`, `PEXELS_API_KEY`.
-- One fixed narrator voice (ElevenLabs "Sarah" — `EXAVITQu4vr4xnSDxMaL`, `eleven_turbo_v2_5`, mp3).
-
-## Architecture
-
-Server functions (`src/lib/*.functions.ts`):
-- `planScript` — split into sentences (regex + cleanup), then LLM call classifies each and returns `{ sentence, kind: 'image'|'stock', imagePrompt?, pexelsQuery?, subtitle }[]`.
-- `generateImage` — OpenAI `gpt-image-1` (or Gemini), style: "flat illustration on pure white background". Returns base64/URL.
-- `searchPexels` — hits `api.pexels.com/videos/search`, returns best portrait/landscape clip URL.
-- `generateNarration` — ElevenLabs TTS, returns mp3 bytes + duration (probed with a tiny decode on client, or estimated at ~15 chars/sec server-side then corrected client-side via `<audio>.duration`).
-- `generateVideo(script)` — orchestrates the above with `Promise.all`, returns full scene manifest.
-
-Client (`src/routes/index.tsx`):
-- Textarea + Generate button + progress list.
-- `<VideoPlayer scenes={...}>`: single `<audio>` per scene played in sequence; a full-viewport white `<div>` shows the current image (with CSS `transform` Ken Burns keyframed by `requestAnimationFrame` against audio `currentTime`) or a muted `<video>` for stock. Subtitle bar at the bottom. Timeline scrubber and play/pause.
-
-## Scene manifest shape
-
-```ts
-type Scene = {
-  id: string;
-  sentence: string;
-  subtitle: string;
-  kind: 'image' | 'stock';
-  mediaUrl: string;      // image data URL or Pexels mp4
-  audioUrl: string;      // mp3 data URL or blob URL
-  durationMs: number;    // from audio
-  animation: 'kenburns-in' | 'kenburns-out' | 'fade' | 'slide-left';
-};
+## 3. Database schema (migration)
 ```
+extension vector;
 
-## Notes / limits
+table projects (
+  id uuid pk,
+  user_id uuid → auth.users,
+  title text,
+  script text,
+  audio_mode text,           -- 'tts' | 'upload'
+  scenes jsonb,              -- full Scene[] with mediaUrl/audioUrl (data URLs)
+  created_at, updated_at
+);
+RLS: owner-only CRUD.
 
-- No MP4 export in v1 — preview-only, as chosen.
-- Long scripts: chunk TTS per sentence (already the design), cap script at ~40 sentences to keep API cost sane.
-- Errors surfaced per scene (retry button on that scene) so one failed image doesn't kill the run.
+table image_assets (            -- GLOBAL library (no user_id filter on read)
+  id uuid pk,
+  prompt text,
+  kind text,                    -- 'background' | 'element'
+  storage_path text,            -- in 'image-library' bucket
+  embedding vector(1536),       -- openai text-embedding-3-small
+  created_by uuid,
+  usage_count int default 1,
+  created_at
+);
+RLS:
+  - authenticated can SELECT all (global reuse)
+  - authenticated can INSERT (created_by = auth.uid())
+  - only created_by can UPDATE/DELETE
+Index: HNSW cosine on embedding.
 
-## Open question
+RPC match_image_asset(query_embedding, kind, threshold, k)
+returns best match above cosine similarity threshold (default 0.88).
+```
+Storage bucket `image-library` (public read).
 
-Do you want me to use **OpenAI (gpt-image-1) for images** or **Gemini (`gemini-2.5-flash-image`)**? Both work; Gemini is faster/cheaper, OpenAI tends toward crisper illustration. I'll default to Gemini unless you say otherwise.
+## 4. Image library integration
+New server fns in `src/lib/image-library.functions.ts`:
+- `findOrGenerateBackground({ prompt })`:
+  1. Embed prompt via `/v1/embeddings` (`text-embedding-3-small`).
+  2. Call `match_image_asset` RPC (kind='background', threshold 0.88).
+  3. If hit → bump `usage_count`, return public URL.
+  4. Else → generate via existing gemini flow, upload PNG to `image-library` bucket, insert row with embedding, return URL.
+- `findOrGenerateElement({ prompt })`: same flow, kind='element', threshold 0.9 (elements are more specific).
+
+Update `src/routes/index.tsx` `buildScene` to call these instead of `generateSceneBackground` / `generateSceneElement` directly. Keep the old server fns as the generation primitive (called internally).
+
+## 5. Drag-and-drop audio
+In `src/routes/index.tsx` upload-audio panel:
+- Wrap upload area in a div with `onDragOver`/`onDrop` handlers.
+- Show dashed border, "Drop audio here or click to browse" state.
+- Highlight on drag-over.
+- Accept `audio/*`, reject others with toast.
+
+## 6. Save / Load projects
+- "Save Project" button after generation → prompts for title, calls `saveProject` server fn (`requireSupabaseAuth`) which inserts/updates row with full scene manifest.
+- New route `/_authenticated/projects` — lists user's projects (title, date, thumbnail = first scene bg).
+- New route `/_authenticated/project/$id` — loads scenes, renders `<VideoPlayer>` immediately (no regeneration).
+- Nav bar: "My Projects" + user email + sign out.
+
+## 7. UX pacing
+No new work — user asked "take your time, make things good". Keep existing sequential pacing (concurrency=3), don't rush the renderer, keep the 750ms crossfade / 550ms gap.
+
+## Technical notes
+- Scenes reference data URLs today. To keep projects loadable across devices, on save: for each scene, if `mediaUrl`/`audioUrl` is a `data:` URL, upload it to a per-project storage bucket `project-assets/{projectId}/...` and rewrite to public URLs. Stock (Pexels) URLs stored as-is.
+- Embeddings are cheap; run one embed per element/background prompt before the image call.
+- The library grows across all users → over time image-gen calls drop dramatically for common concepts.
+
+## Out of scope
+- Public sharing of projects (owner-only for now).
+- Trimming/editing scenes post-generation.
+- MP4 export changes (already there).
