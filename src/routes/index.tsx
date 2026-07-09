@@ -25,6 +25,14 @@ import {
 } from "@/lib/audio-slice";
 import { NavBar } from "@/components/NavBar";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  hashText,
+  hashFile,
+  getCachedPlan,
+  setCachedPlan,
+  getCachedStt,
+  setCachedStt,
+} from "@/lib/gen-cache";
 
 export const Route = createFileRoute("/")({
   head: () => ({
