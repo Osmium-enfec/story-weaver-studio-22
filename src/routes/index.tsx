@@ -42,25 +42,28 @@ function Index() {
   const [topError, setTopError] = useState<string | null>(null);
 
   async function buildScene(plan: ScenePlan): Promise<Scene> {
+    const mediaPromise: Promise<{ url?: string; fellBack?: boolean } | null> =
+      plan.kind === "code"
+        ? Promise.resolve(null)
+        : plan.kind === "image"
+          ? generateSceneImage({ data: { prompt: plan.imagePrompt || plan.sentence } }).then(
+              (r) => ({ url: r.dataUrl }),
+            )
+          : searchStockClip({ data: { query: plan.pexelsQuery || plan.sentence } }).then(
+              async (r) => {
+                if (r.videoUrl) return { url: r.videoUrl };
+                const img = await generateSceneImage({
+                  data: { prompt: plan.sentence },
+                });
+                return { url: img.dataUrl, fellBack: true };
+              },
+            );
+
     const [media, audio] = await Promise.all([
-      plan.kind === "image"
-        ? generateSceneImage({ data: { prompt: plan.imagePrompt || plan.sentence } }).then(
-            (r) => ({ url: r.dataUrl }),
-          )
-        : searchStockClip({ data: { query: plan.pexelsQuery || plan.sentence } }).then(
-            async (r) => {
-              if (r.videoUrl) return { url: r.videoUrl };
-              // fallback to AI image if no stock found
-              const img = await generateSceneImage({
-                data: { prompt: plan.sentence },
-              });
-              return { url: img.dataUrl, fellBack: true };
-            },
-          ),
+      mediaPromise,
       generateNarration({ data: { text: plan.narrationText || plan.sentence } }),
     ]);
 
-    // measure audio duration client-side
     const dur = await new Promise<number>((resolve) => {
       const a = new Audio(audio.audioUrl);
       a.addEventListener("loadedmetadata", () =>
@@ -73,11 +76,15 @@ function Index() {
       id: plan.id,
       subtitle: plan.subtitle,
       kind:
-        plan.kind === "stock" && "fellBack" in media && media.fellBack ? "image" : plan.kind,
-      mediaUrl: media.url as string,
+        plan.kind === "stock" && media?.fellBack ? "image" : plan.kind,
+      mediaUrl: media?.url,
       audioUrl: audio.audioUrl,
       durationMs: dur,
       animation: plan.animation,
+      code: plan.code,
+      codeTo: plan.codeTo,
+      codeLanguage: plan.codeLanguage,
+      codeVariant: plan.codeVariant,
     };
   }
 
@@ -201,7 +208,11 @@ function Index() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate">{p.sentence}</div>
                     <div className="text-xs text-muted-foreground">
-                      {p.kind === "image" ? "🎨 AI image" : "🎬 Pexels footage"}
+                      {p.kind === "image"
+                        ? "🎨 AI image"
+                        : p.kind === "stock"
+                          ? "🎬 Pexels footage"
+                          : `⌨️ Code (${p.codeVariant ?? "typing"})`}
                       {p.error ? ` · ${p.error}` : ""}
                     </div>
                   </div>

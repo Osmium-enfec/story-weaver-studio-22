@@ -1,20 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Pause, RotateCcw } from "lucide-react";
+import { CodeScene, type CodeVariant } from "./CodeScene";
 
 export interface Scene {
   id: string;
   subtitle: string;
-  kind: "image" | "stock";
-  mediaUrl: string;
+  kind: "image" | "stock" | "code";
+  mediaUrl?: string;
   audioUrl: string;
   durationMs: number;
   animation: "kenburns-in" | "kenburns-out" | "fade" | "slide-left";
+  code?: string;
+  codeTo?: string;
+  codeLanguage?: string;
+  codeVariant?: CodeVariant;
 }
 
 export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0); // 0..1 within current scene
+  const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -65,15 +70,14 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
 
   if (!scene) return null;
 
-  // Ken Burns transforms
   const t = progress;
   const kenIn = { transform: `scale(${1 + 0.15 * t})`, opacity: 1 };
   const kenOut = { transform: `scale(${1.15 - 0.15 * t})`, opacity: 1 };
-  const fade = { opacity: t < 0.1 ? t / 0.1 : t > 0.9 ? (1 - t) / 0.1 : 1, transform: "scale(1)" };
-  const slide = {
-    transform: `translateX(${(0.5 - t) * 40}px) scale(1.05)`,
-    opacity: 1,
+  const fade = {
+    opacity: t < 0.1 ? t / 0.1 : t > 0.9 ? (1 - t) / 0.1 : 1,
+    transform: "scale(1)",
   };
+  const slide = { transform: `translateX(${(0.5 - t) * 40}px) scale(1.05)`, opacity: 1 };
   const style =
     scene.animation === "kenburns-in"
       ? kenIn
@@ -87,7 +91,15 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     <div className="w-full">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border bg-white shadow-sm">
         <div className="absolute inset-0 flex items-center justify-center">
-          {scene.kind === "image" ? (
+          {scene.kind === "code" ? (
+            <CodeScene
+              code={scene.code ?? ""}
+              codeTo={scene.codeTo}
+              language={scene.codeLanguage}
+              variant={scene.codeVariant ?? "typing"}
+              progress={progress}
+            />
+          ) : scene.kind === "image" ? (
             <img
               src={scene.mediaUrl}
               alt=""
@@ -104,7 +116,6 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
             />
           )}
         </div>
-        {/* subtitle */}
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-6">
           <p className="text-center text-lg font-medium text-white drop-shadow">
             {scene.subtitle}
@@ -113,7 +124,6 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
         <audio ref={audioRef} src={scene.audioUrl} preload="auto" />
       </div>
 
-      {/* controls */}
       <div className="mt-4 flex items-center gap-3">
         <button
           onClick={() => setPlaying((p) => !p)}
