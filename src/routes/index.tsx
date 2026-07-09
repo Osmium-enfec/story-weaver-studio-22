@@ -583,16 +583,18 @@ function Index() {
         {scenes.length > 0 && !running && (
           <section className="mt-10">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-medium text-muted-foreground">Your video</h2>
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Your video {projectTitle && <span className="ml-2 text-foreground">· {projectTitle}</span>}
+              </h2>
               <div className="flex items-center gap-2">
                 {saveMsg && <span className="text-xs text-muted-foreground">{saveMsg}</span>}
                 <button
-                  onClick={handleSave}
+                  onClick={handleRename}
                   disabled={saving}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-accent disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  Save project
+                  Rename & save
                 </button>
               </div>
             </div>
