@@ -208,7 +208,11 @@ function Index() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate">{p.sentence}</div>
                     <div className="text-xs text-muted-foreground">
-                      {p.kind === "image" ? "🎨 AI image" : "🎬 Pexels footage"}
+                      {p.kind === "image"
+                        ? "🎨 AI image"
+                        : p.kind === "stock"
+                          ? "🎬 Pexels footage"
+                          : `⌨️ Code (${p.codeVariant ?? "typing"})`}
                       {p.error ? ` · ${p.error}` : ""}
                     </div>
                   </div>
