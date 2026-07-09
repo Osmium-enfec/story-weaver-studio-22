@@ -108,6 +108,7 @@ function Index() {
   const plansRef = useRef<ScenePlan[]>([]);
   const precomputedAudioRef = useRef<{ urls: string[]; durations: number[] } | null>(null);
   const projectIdRef = useRef<string | null>(null);
+  const storageFolderRef = useRef<string | null>(null);
   const resultsRef = useRef<(Scene | null)[]>([]);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [progress, setProgress] = useState<SceneProgress[]>([]);
