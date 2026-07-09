@@ -229,10 +229,14 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           kind === "stock"
             ? String(meta?.pexelsQuery ?? sentence.split(" ").slice(0, 3).join(" "))
             : undefined,
-        code: kind === "code" ? String(meta?.code ?? "// code") : undefined,
+        code:
+          kind === "code"
+            ? normalizeCode(meta?.code) ||
+              `// ${sentence}\nconsole.log("example");`
+            : undefined,
         codeTo:
           kind === "code" && codeVariant === "morph"
-            ? String(meta?.codeTo ?? meta?.code ?? "")
+            ? normalizeCode(meta?.codeTo) || normalizeCode(meta?.code) || ""
             : undefined,
         codeLanguage: kind === "code" ? String(meta?.codeLanguage ?? "ts") : undefined,
         codeVariant: kind === "code" ? codeVariant : undefined,
