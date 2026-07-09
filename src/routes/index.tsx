@@ -20,9 +20,10 @@ import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import {
   alignSentences,
-  sliceAudioIntoScenes,
+  computeSnappedRangesMs,
   type SttResult,
 } from "@/lib/audio-slice";
+import { concatAudioClips } from "@/lib/audio-concat";
 import { NavBar } from "@/components/NavBar";
 import { supabase } from "@/integrations/supabase/client";
 import {
