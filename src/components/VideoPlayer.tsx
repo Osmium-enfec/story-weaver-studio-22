@@ -166,6 +166,25 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const prevIndexRef = useRef(0);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [exportQuality, setExportQuality] = useState<RenderQuality | null>(null);
+  const [exportProgress, setExportProgress] = useState(0);
+
+  async function handleExport(quality: RenderQuality) {
+    if (exportQuality) return;
+    setExportQuality(quality);
+    setExportProgress(0);
+    try {
+      const blob = await renderVideo(scenes, quality, (p) => setExportProgress(p));
+      const label = quality === "hd" ? "1080p60" : "preview";
+      downloadBlob(blob, `explainer-${label}-${Date.now()}.webm`);
+    } catch (e) {
+      console.error("Export failed", e);
+      alert("Export failed: " + (e as Error).message);
+    } finally {
+      setExportQuality(null);
+      setExportProgress(0);
+    }
+  }
 
   const scene = scenes[index];
 
