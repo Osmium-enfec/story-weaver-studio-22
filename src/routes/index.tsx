@@ -1,6 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Loader2, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useState, useRef } from "react";
+import {
+  Loader2,
+  Sparkles,
+  AlertCircle,
+  CheckCircle2,
+  Upload,
+  RotateCcw,
+} from "lucide-react";
 import {
   planScript,
   generateSceneBackground,
@@ -10,6 +17,11 @@ import {
   type ScenePlan,
 } from "@/lib/explainer.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
+import {
+  alignSentences,
+  sliceAudioIntoScenes,
+  type SttResult,
+} from "@/lib/audio-slice";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -18,7 +30,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Paste a script and generate a narrated explainer video with AI images and stock footage.",
+          "Paste a script or upload audio to generate a narrated explainer video with AI images and stock footage.",
       },
     ],
   }),
@@ -35,20 +47,44 @@ interface SceneProgress extends ScenePlan {
 
 const SAMPLE = `Every day, billions of people search the web for answers. But search hasn't changed much in decades. Now, AI can understand what you actually mean. It reads across millions of pages in seconds. And gives you a clear, direct answer instead of a list of links. The future of search is finally here.`;
 
+type InputMode = "script" | "audio";
+
 function Index() {
+  const [mode, setMode] = useState<InputMode>("script");
   const [script, setScript] = useState(SAMPLE);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [running, setRunning] = useState(false);
+
+  // For retry: we store plans + results separately.
+  // results[i] is the Scene for plan[i], or null if not yet/failed.
+  const plansRef = useRef<ScenePlan[]>([]);
+  const precomputedAudioRef = useRef<{ urls: string[]; durations: number[] } | null>(null);
   const [progress, setProgress] = useState<SceneProgress[]>([]);
-  const [scenes, setScenes] = useState<Scene[] | null>(null);
+  const [results, setResults] = useState<(Scene | null)[]>([]);
   const [topError, setTopError] = useState<string | null>(null);
 
-  async function buildScene(plan: ScenePlan): Promise<Scene> {
+  // ---------- Build one scene ----------
+  async function buildScene(
+    plan: ScenePlan,
+    precomputedAudio?: { audioUrl: string; durationMs: number },
+  ): Promise<Scene> {
     type ImageComp = {
       kind: "image";
       backgroundUrl: string;
-      elements: { id: string; prompt: string; x: number; y: number; w: number; appearAt: number; anim: any; mediaUrl: string }[];
+      elements: {
+        id: string;
+        prompt: string;
+        x: number;
+        y: number;
+        w: number;
+        appearAt: number;
+        anim: any;
+        mediaUrl: string;
+      }[];
     };
-    type StockOrFallback = { kind: "stock"; videoUrl: string } | { kind: "image-fallback"; imageUrl: string };
+    type StockOrFallback =
+      | { kind: "stock"; videoUrl: string }
+      | { kind: "image-fallback"; imageUrl: string };
 
     const visualPromise: Promise<ImageComp | StockOrFallback | null> =
       plan.kind === "code"
@@ -70,30 +106,36 @@ function Index() {
           : searchStockClip({ data: { query: plan.pexelsQuery || plan.sentence } }).then(
               async (r): Promise<StockOrFallback> => {
                 if (r.videoUrl) return { kind: "stock", videoUrl: r.videoUrl };
-                const bg = await generateSceneBackground({
-                  data: { prompt: plan.sentence },
-                });
+                const bg = await generateSceneBackground({ data: { prompt: plan.sentence } });
                 return { kind: "image-fallback", imageUrl: bg.dataUrl };
               },
             );
 
-    const [visual, audio] = await Promise.all([
-      visualPromise,
-      generateNarration({ data: { text: plan.narrationText || plan.sentence } }),
-    ]);
-
-    const dur = await new Promise<number>((resolve) => {
-      const a = new Audio(audio.audioUrl);
-      a.addEventListener("loadedmetadata", () =>
-        resolve(isFinite(a.duration) ? a.duration * 1000 : 4000),
+    let audioPromise: Promise<{ audioUrl: string; durationMs: number }>;
+    if (precomputedAudio) {
+      audioPromise = Promise.resolve(precomputedAudio);
+    } else {
+      audioPromise = generateNarration({ data: { text: plan.narrationText || plan.sentence } }).then(
+        async (r) => {
+          const dur = await new Promise<number>((resolve) => {
+            const a = new Audio(r.audioUrl);
+            a.addEventListener("loadedmetadata", () =>
+              resolve(isFinite(a.duration) ? a.duration * 1000 : 4000),
+            );
+            a.addEventListener("error", () => resolve(4000));
+          });
+          return { audioUrl: r.audioUrl, durationMs: dur };
+        },
       );
-      a.addEventListener("error", () => resolve(4000));
-    });
+    }
+
+    const [visual, audio] = await Promise.all([visualPromise, audioPromise]);
+    const { audioUrl, durationMs: dur } = audio;
 
     const base = {
       id: plan.id,
       subtitle: plan.subtitle,
-      audioUrl: audio.audioUrl,
+      audioUrl,
       durationMs: dur,
       animation: plan.animation,
       code: plan.code,
@@ -104,40 +146,68 @@ function Index() {
 
     if (plan.kind === "code") return { ...base, kind: "code" };
     if (visual && "backgroundUrl" in visual) {
-      return {
-        ...base,
-        kind: "image",
-        backgroundUrl: visual.backgroundUrl,
-        elements: visual.elements,
-      };
+      return { ...base, kind: "image", backgroundUrl: visual.backgroundUrl, elements: visual.elements };
     }
     if (visual && visual.kind === "stock") {
       return { ...base, kind: "stock", mediaUrl: visual.videoUrl };
     }
     if (visual && visual.kind === "image-fallback") {
-      return {
-        ...base,
-        kind: "image",
-        backgroundUrl: visual.imageUrl,
-        elements: [],
-      };
+      return { ...base, kind: "image", backgroundUrl: visual.imageUrl, elements: [] };
     }
     return { ...base, kind: "image", backgroundUrl: undefined, elements: [] };
   }
 
+  // ---------- Build all ----------
   async function handleGenerate() {
     setRunning(true);
     setTopError(null);
-    setScenes(null);
+    setResults([]);
     setProgress([]);
+    plansRef.current = [];
+    precomputedAudioRef.current = null;
+
     try {
-      const { scenes: plans } = await planScript({ data: { script } });
+      let transcript = script.trim();
+      let sttWords: SttResult["words"] | null = null;
+
+      // ---- Audio mode: transcribe first ----
+      if (mode === "audio") {
+        if (!audioFile) throw new Error("Please select an audio file.");
+        const form = new FormData();
+        form.append("file", audioFile);
+        const res = await fetch("/api/transcribe", { method: "POST", body: form });
+        if (!res.ok) throw new Error(`Transcription failed: ${res.status} ${await res.text()}`);
+        const stt: SttResult = await res.json();
+        transcript = stt.text;
+        sttWords = stt.words ?? [];
+      }
+
+      // ---- Plan scenes ----
+      const { scenes: plans } = await planScript({
+        data: { script: transcript, preserveWords: mode === "audio" },
+      });
+      plansRef.current = plans;
+
+      // ---- In audio mode: align & slice ----
+      let preAudio: { urls: string[]; durations: number[] } | null = null;
+      if (mode === "audio" && sttWords && audioFile) {
+        const ranges = alignSentences(
+          plans.map((p) => p.sentence),
+          sttWords,
+        );
+        const { audioUrls, durationsMs } = await sliceAudioIntoScenes(audioFile, ranges);
+        preAudio = { urls: audioUrls, durations: durationsMs };
+        precomputedAudioRef.current = preAudio;
+      }
+
+      // ---- Initialise progress & results ----
       const initial: SceneProgress[] = plans.map((p) => ({ ...p, status: "planning" }));
       setProgress(initial);
+      const resultsArr: (Scene | null)[] = new Array(plans.length).fill(null);
+      setResults([...resultsArr]);
 
-      // Limit concurrency to stay under ElevenLabs' 5 concurrent-request cap.
+      // ---- Concurrency limiter for ElevenLabs ----
       const CONCURRENCY = 3;
-      const results: (Scene | null)[] = new Array(plans.length).fill(null);
       let cursor = 0;
       async function worker() {
         while (true) {
@@ -145,8 +215,12 @@ function Index() {
           if (i >= plans.length) return;
           const p = plans[i];
           try {
-            const s = await buildScene(p);
-            results[i] = s;
+            const precomputed = preAudio
+              ? { audioUrl: preAudio.urls[i], durationMs: preAudio.durations[i] }
+              : undefined;
+            const s = await buildScene(p, precomputed);
+            resultsArr[i] = s;
+            setResults([...resultsArr]);
             setProgress((prev) => {
               const next = [...prev];
               next[i] = { ...next[i], status: "ready", mediaUrl: s.mediaUrl, audioUrl: s.audioUrl };
@@ -163,15 +237,51 @@ function Index() {
       }
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, plans.length) }, worker));
 
-      const ok = results.filter((r): r is Scene => r !== null);
-      if (ok.length === 0) throw new Error("Every scene failed to generate.");
-      setScenes(ok);
+      const ok = resultsArr.filter((r): r is Scene => r !== null).length;
+      if (ok === 0) throw new Error("Every scene failed to generate.");
     } catch (e: any) {
       setTopError(e?.message || "Something went wrong.");
     } finally {
       setRunning(false);
     }
   }
+
+  // ---------- Retry single scene ----------
+  async function handleRetry(i: number) {
+    const plan = plansRef.current[i];
+    if (!plan) return;
+    setProgress((prev) => {
+      const next = [...prev];
+      next[i] = { ...plan, status: "planning", error: undefined };
+      return next;
+    });
+    try {
+      const preAudio = precomputedAudioRef.current;
+      const precomputed = preAudio
+        ? { audioUrl: preAudio.urls[i], durationMs: preAudio.durations[i] }
+        : undefined;
+      const s = await buildScene(plan, precomputed);
+      setResults((prev) => {
+        const next = [...prev];
+        next[i] = s;
+        return next;
+      });
+      setProgress((prev) => {
+        const next = [...prev];
+        next[i] = { ...next[i], status: "ready", mediaUrl: s.mediaUrl, audioUrl: s.audioUrl };
+        return next;
+      });
+    } catch (e: any) {
+      setProgress((prev) => {
+        const next = [...prev];
+        next[i] = { ...next[i], status: "error", error: e?.message || "failed" };
+        return next;
+      });
+    }
+  }
+
+  // For player: only ready scenes in order.
+  const scenes: Scene[] = results.filter((r): r is Scene => r !== null);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -182,28 +292,89 @@ function Index() {
           </div>
           <h1 className="text-4xl font-bold tracking-tight">Script → Explainer video</h1>
           <p className="mt-2 text-muted-foreground">
-            Paste a script. We split it into sentences, generate an AI image or fetch stock
-            footage for each, narrate it, and play it back synced.
+            Paste a script or upload an audio voiceover. We create AI images or fetch stock
+            footage for each sentence, add narration, and play it back synced.
           </p>
         </header>
 
-        <div className="space-y-4">
-          <textarea
-            value={script}
-            onChange={(e) => setScript(e.target.value)}
-            rows={8}
-            className="w-full rounded-lg border bg-card p-4 text-sm outline-none focus:ring-2 focus:ring-ring"
-            placeholder="Paste your explainer script here…"
+        {/* Mode toggle */}
+        <div className="mb-4 flex gap-2">
+          <button
+            onClick={() => setMode("script")}
             disabled={running}
-          />
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
+              mode === "script"
+                ? "bg-primary text-primary-foreground"
+                : "border bg-card text-foreground hover:bg-accent"
+            }`}
+          >
+            Text Script
+          </button>
+          <button
+            onClick={() => setMode("audio")}
+            disabled={running}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition ${
+              mode === "audio"
+                ? "bg-primary text-primary-foreground"
+                : "border bg-card text-foreground hover:bg-accent"
+            }`}
+          >
+            <Upload size={14} className="mr-1 inline-block" /> Upload Audio
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {mode === "script" && (
+            <textarea
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              rows={8}
+              className="w-full rounded-lg border bg-card p-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Paste your explainer script here…"
+              disabled={running}
+            />
+          )}
+
+          {mode === "audio" && (
+            <div className="rounded-lg border bg-card p-6 text-center">
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={(e) => setAudioFile(e.target.files?.[0] ?? null)}
+                disabled={running}
+                className="hidden"
+                id="audioInput"
+              />
+              <label
+                htmlFor="audioInput"
+                className="cursor-pointer rounded-md border border-dashed border-muted-foreground/40 p-8 block hover:border-muted-foreground/70 transition"
+              >
+                <Upload size={24} className="mx-auto mb-2 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">
+                  {audioFile ? audioFile.name : "Click to select audio file"}
+                </span>
+              </label>
+              <p className="mt-2 text-xs text-muted-foreground">
+                We'll transcribe using ElevenLabs and generate scenes from your voice.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center justify-between">
             <div className="text-xs text-muted-foreground">
-              {script.trim().split(/\s+/).filter(Boolean).length} words · up to 40 sentences
+              {mode === "script"
+                ? `${script.trim().split(/\s+/).filter(Boolean).length} words`
+                : audioFile
+                  ? audioFile.name
+                  : "No audio selected"}
             </div>
             <button
               onClick={handleGenerate}
-              disabled={running || script.trim().length < 10}
+              disabled={
+                running ||
+                (mode === "script" && script.trim().length < 10) ||
+                (mode === "audio" && !audioFile)
+              }
               className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {running ? (
@@ -237,9 +408,7 @@ function Index() {
                   key={p.id}
                   className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm"
                 >
-                  <span className="mt-0.5 w-6 shrink-0 text-xs text-muted-foreground">
-                    {i + 1}
-                  </span>
+                  <span className="mt-0.5 w-6 shrink-0 text-xs text-muted-foreground">{i + 1}</span>
                   <span className="mt-0.5 shrink-0">
                     {p.status === "ready" ? (
                       <CheckCircle2 size={16} className="text-green-600" />
@@ -260,13 +429,21 @@ function Index() {
                       {p.error ? ` · ${p.error}` : ""}
                     </div>
                   </div>
+                  {p.status === "error" && !running && (
+                    <button
+                      onClick={() => handleRetry(i)}
+                      className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                    >
+                      <RotateCcw size={12} /> Retry
+                    </button>
+                  )}
                 </li>
               ))}
             </ol>
           </section>
         )}
 
-        {scenes && scenes.length > 0 && (
+        {scenes.length > 0 && (
           <section className="mt-10">
             <h2 className="mb-4 text-sm font-medium text-muted-foreground">Your video</h2>
             <VideoPlayer scenes={scenes} />

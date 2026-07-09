@@ -45,7 +45,10 @@ export interface ScenePlan {
 }
 
 // ---------- Plan + enhance a script ----------
-const PlanInput = z.object({ script: z.string().min(1).max(8000) });
+const PlanInput = z.object({
+  script: z.string().min(1).max(8000),
+  preserveWords: z.boolean().optional(),
+});
 
 export const planScript = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => PlanInput.parse(d))
@@ -53,21 +56,38 @@ export const planScript = createServerFn({ method: "POST" })
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("LOVABLE_API_KEY missing");
 
-    const sys = `You are a video director + narration script editor for an explainer video.
+    const preserveWords = !!data.preserveWords;
+
+    const intro = preserveWords
+      ? `You are a video director editing a TRANSCRIBED voiceover into scenes.
+The user gives you a raw transcript. Your job:
+
+STEP 1 — Split the transcript into 4–40 short scene-sized sentences.
+CRITICAL: Do NOT rewrite, paraphrase, add, drop, reorder, or translate any word.
+The concatenation of sentence fields (in order) must equal the transcript
+verbatim except for punctuation, casing, and whitespace. You may only ADD
+punctuation and fix capitalization.`
+      : `You are a video director + narration script editor for an explainer video.
 
 STEP 1 — Enhance the script:
 - Rewrite the user script for clarity, natural spoken cadence, and engagement.
 - Keep the meaning and length roughly similar.
-- Split into 4–14 short, punchy sentences (each 6–20 words).
+- Split into 4–14 short, punchy sentences (each 6–20 words).`;
 
-STEP 2 — For each enhanced sentence, produce a scene object:
-- sentence: clean sentence (no audio tags, used for on-screen subtitle).
-- narrationText: same sentence enhanced for ElevenLabs v3 expressive TTS.
+    const narrationRule = preserveWords
+      ? `- narrationText: set equal to sentence (unused — audio is provided).`
+      : `- narrationText: same sentence enhanced for ElevenLabs v3 expressive TTS.
   Add inline audio tags in square brackets to shape delivery.
   Valid tags: [excited], [curious], [whispers], [laughs], [sighs],
   [thoughtful], [confident], [warm], [pauses], [emphasizes], [softly].
   Use 1–3 tags per sentence, placed BEFORE the words they modify.
-  Use ellipses (…) and commas for pacing. Do NOT invent new tags.
+  Use ellipses (…) and commas for pacing. Do NOT invent new tags.`;
+
+    const sys = `${intro}
+
+STEP 2 — For each sentence, produce a scene object:
+- sentence: clean sentence (no audio tags, used for on-screen subtitle).
+${narrationRule}
 - kind: one of
     "code"  — sentence is about code, syntax, an API, a function, a file.
     "image" — abstract concepts, ideas, metaphors, workflows.
