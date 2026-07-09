@@ -17,7 +17,6 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,17 +33,8 @@ function AuthPage() {
     setBusy(true);
     setErr(null);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
       navigate({ to: "/projects" });
     } catch (e: any) {
       setErr(e?.message || "Failed");
@@ -52,6 +42,7 @@ function AuthPage() {
       setBusy(false);
     }
   }
+
 
   async function handleGoogle() {
     setBusy(true);
@@ -74,9 +65,8 @@ function AuthPage() {
       <div className="mx-auto max-w-md px-6 py-16">
         <div className="mb-6 text-center">
           <Sparkles className="mx-auto text-primary" size={28} />
-          <h1 className="mt-2 text-2xl font-bold">
-            {mode === "signin" ? "Welcome back" : "Create your account"}
-          </h1>
+          <h1 className="mt-2 text-2xl font-bold">Welcome back</h1>
+
           <p className="text-sm text-muted-foreground mt-1">
             Save projects and reuse AI-generated assets.
           </p>
@@ -128,21 +118,10 @@ function AuthPage() {
             className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 inline-flex items-center justify-center gap-2"
           >
             {busy && <Loader2 size={14} className="animate-spin" />}
-            {mode === "signin" ? "Sign in" : "Create account"}
+            Sign in
           </button>
         </form>
 
-        <div className="mt-4 text-center text-sm text-muted-foreground">
-          {mode === "signin" ? (
-            <>Don't have an account?{" "}
-              <button className="text-primary underline" onClick={() => setMode("signup")}>Sign up</button>
-            </>
-          ) : (
-            <>Already have an account?{" "}
-              <button className="text-primary underline" onClick={() => setMode("signin")}>Sign in</button>
-            </>
-          )}
-        </div>
 
         <div className="mt-6 text-center text-xs">
           <Link to="/" className="text-muted-foreground hover:text-foreground">← Back to home</Link>
