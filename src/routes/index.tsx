@@ -25,6 +25,14 @@ import {
 } from "@/lib/audio-slice";
 import { NavBar } from "@/components/NavBar";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  hashText,
+  hashFile,
+  getCachedPlan,
+  setCachedPlan,
+  getCachedStt,
+  setCachedStt,
+} from "@/lib/gen-cache";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -86,6 +94,22 @@ function Index() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [projectTitle, setProjectTitle] = useState<string>("");
+
+  // Approx credit-usage counters (client-side estimate, not a bill)
+  const [stats, setStats] = useState({
+    imagesNew: 0,
+    imagesCached: 0,
+    tts: 0,
+    plan: 0,
+    stt: 0,
+    sttSkipped: false,
+    planSkipped: false,
+  });
+  const statsRef = useRef(stats);
+  function bumpStats(patch: Partial<typeof stats>) {
+    statsRef.current = { ...statsRef.current, ...patch };
+    setStats(statsRef.current);
+  }
 
   // ---------- Build one scene ----------
   async function buildScene(
@@ -162,6 +186,11 @@ function Index() {
     const [visual, audio] = await Promise.all([visualPromise, audioPromise]);
     const { audioUrl, durationMs: dur } = audio;
     const allCached = totalImgs > 0 && cachedHits === totalImgs;
+    bumpStats({
+      imagesNew: statsRef.current.imagesNew + (totalImgs - cachedHits),
+      imagesCached: statsRef.current.imagesCached + cachedHits,
+      tts: statsRef.current.tts + (precomputedAudio ? 0 : 1),
+    });
 
     const base = {
       id: plan.id,
@@ -199,6 +228,8 @@ function Index() {
     setProgress([]);
     plansRef.current = [];
     precomputedAudioRef.current = null;
+    statsRef.current = { imagesNew: 0, imagesCached: 0, tts: 0, plan: 0, stt: 0, sttSkipped: false, planSkipped: false };
+    setStats(statsRef.current);
 
     try {
       // Require sign-in (image library server fn is auth-only)
@@ -214,18 +245,38 @@ function Index() {
 
       if (mode === "audio") {
         if (!audioFile) throw new Error("Please select an audio file.");
-        const form = new FormData();
-        form.append("file", audioFile);
-        const res = await fetch("/api/transcribe", { method: "POST", body: form });
-        if (!res.ok) throw new Error(`Transcription failed: ${res.status} ${await res.text()}`);
-        const stt: SttResult = await res.json();
-        transcript = stt.text;
-        sttWords = stt.words ?? [];
+        const audioKey = await hashFile(audioFile);
+        const cachedStt = getCachedStt<SttResult>(audioKey);
+        if (cachedStt) {
+          transcript = cachedStt.text;
+          sttWords = cachedStt.words ?? [];
+          bumpStats({ sttSkipped: true });
+        } else {
+          const form = new FormData();
+          form.append("file", audioFile);
+          const res = await fetch("/api/transcribe", { method: "POST", body: form });
+          if (!res.ok) throw new Error(`Transcription failed: ${res.status} ${await res.text()}`);
+          const stt: SttResult = await res.json();
+          transcript = stt.text;
+          sttWords = stt.words ?? [];
+          setCachedStt(audioKey, stt);
+          bumpStats({ stt: 1 });
+        }
       }
 
-      const { scenes: plans } = await planScript({
-        data: { script: transcript, preserveWords: mode === "audio" },
-      });
+      const preserveWords = mode === "audio";
+      const planKey = await hashText(`${preserveWords ? "PW:" : "SC:"}${transcript}`);
+      const cachedPlan = getCachedPlan<{ scenes: ScenePlan[] }>(planKey);
+      let plans: ScenePlan[];
+      if (cachedPlan) {
+        plans = cachedPlan.scenes;
+        bumpStats({ planSkipped: true });
+      } else {
+        const res = await planScript({ data: { script: transcript, preserveWords } });
+        plans = res.scenes;
+        setCachedPlan(planKey, res);
+        bumpStats({ plan: 1 });
+      }
       plansRef.current = plans;
 
       let preAudio: { urls: string[]; durations: number[] } | null = null;
@@ -533,6 +584,24 @@ function Index() {
 
         {progress.length > 0 && (
           <section className="mt-10">
+            <div className="mb-3 rounded-md border bg-muted/40 p-3 text-xs">
+              <div className="mb-1 font-medium text-foreground">
+                Approx. credit usage this run
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                <span>🖼 New images: <b className="text-foreground">{stats.imagesNew}</b> (~2 cr each)</span>
+                <span>♻ Cached images: <b className="text-foreground">{stats.imagesCached}</b> (free)</span>
+                <span>🎙 TTS clips: <b className="text-foreground">{stats.tts}</b></span>
+                <span>🧠 Plan: <b className="text-foreground">{stats.planSkipped ? "cached" : stats.plan}</b></span>
+                {mode === "audio" && (
+                  <span>📝 STT: <b className="text-foreground">{stats.sttSkipped ? "cached" : stats.stt}</b></span>
+                )}
+              </div>
+              <div className="mt-1.5 text-[11px] text-muted-foreground">
+                Estimated total: <b className="text-foreground">~{stats.imagesNew * 2 + stats.tts + stats.plan + stats.stt}</b> credits.
+                Re-running the same audio or script skips STT & planning; identical prompts reuse the image library — so a re-run is nearly free.
+              </div>
+            </div>
             <h2 className="mb-3 flex items-center justify-between text-sm font-medium text-muted-foreground">
               <span>Scenes ({progress.filter((p) => p.status === "ready").length}/{progress.length})</span>
               {totalCached > 0 && (

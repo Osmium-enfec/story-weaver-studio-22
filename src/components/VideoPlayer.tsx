@@ -319,11 +319,6 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           <SceneStage scene={scene} progress={progress} videoRef={videoRef} />
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-6">
-          <p className="text-center text-lg font-medium text-white drop-shadow">
-            {scene.subtitle}
-          </p>
-        </div>
         <audio ref={audioRef} src={scene.audioUrl} preload="auto" />
       </div>
 
