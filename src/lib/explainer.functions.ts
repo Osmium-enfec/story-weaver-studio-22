@@ -6,7 +6,8 @@ const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
 const ELEVEN_MODEL = "eleven_v3";
 
 // ---------- Types shared with client ----------
-export type SceneKind = "image" | "stock";
+export type SceneKind = "image" | "stock" | "code";
+export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
 export interface ScenePlan {
   id: string;
   sentence: string; // clean, for subtitles
@@ -15,6 +16,10 @@ export interface ScenePlan {
   kind: SceneKind;
   imagePrompt?: string;
   pexelsQuery?: string;
+  code?: string;
+  codeTo?: string;
+  codeLanguage?: string;
+  codeVariant?: CodeVariant;
   animation: "kenburns-in" | "kenburns-out" | "fade" | "slide-left";
 }
 
