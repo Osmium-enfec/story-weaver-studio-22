@@ -324,8 +324,8 @@ function Index() {
     if (!silent) setSaving(true);
     try {
       const title =
-        overrideTitle ??
-        projectTitle ??
+        (overrideTitle && overrideTitle.trim()) ||
+        (projectTitle && projectTitle.trim()) ||
         (mode === "script"
           ? script.trim().split(/\s+/).slice(0, 8).join(" ") || "Untitled explainer"
           : audioFile?.name.replace(/\.[^.]+$/, "") || "Untitled explainer");
