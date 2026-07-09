@@ -40,11 +40,31 @@ STEP 1 — Enhance the script:
 - Split into 4–14 short, punchy sentences (each 6–20 words).
 
 STEP 2 — For each enhanced sentence, produce:
-- sentence: the clean sentence (no audio tags, used for on-screen subtitle).
-- narrationText: the SAME sentence but enhanced for ElevenLabs v3 expressive TTS.
-  Add inline audio tags in square brackets to make delivery natural and emotive.
-  Valid tags include: [excited], [curious], [whispers], [laughs], [sighs],
+- sentence: clean sentence (no audio tags, used for on-screen subtitle).
+- narrationText: same sentence enhanced for ElevenLabs v3 expressive TTS.
+  Add inline audio tags in square brackets to shape delivery.
+  Valid tags: [excited], [curious], [whispers], [laughs], [sighs],
   [thoughtful], [confident], [warm], [pauses], [emphasizes], [softly].
+  Use 1–3 tags per sentence, placed BEFORE the words they modify.
+  Use ellipses (…) and commas for pacing. Do NOT invent new tags.
+- kind: one of
+    "code"  — sentence is about code, syntax, an API, a function, a file.
+    "image" — abstract concepts, ideas, metaphors, workflows.
+    "stock" — concrete real-world things (people, nature, cities, tech products).
+- If kind = "image": imagePrompt (short subject-only description, no style words).
+- If kind = "stock": pexelsQuery (2–4 keywords).
+- If kind = "code":
+    code: a short realistic snippet (5–15 lines, no backticks, real syntax).
+    codeLanguage: "ts" | "js" | "tsx" | "py" | "sh" | "json" | "html".
+    codeVariant: one of
+      "typing" (types out char by char — best for introducing new code),
+      "morph"  (line-by-line diff to codeTo — best when comparing before/after),
+      "scroll" (scrolls a long file — best for showing a whole module),
+      "flight" (lines fly in from sides — best for punchy list-style code).
+    codeTo: REQUIRED only for "morph" — the target snippet to morph into.
+- subtitle: <= 8 words drawn from the sentence.
+
+Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
   Use 1–3 tags per sentence, placed BEFORE the words they modify.
   Also use ellipses (…) and commas to shape pacing. Do NOT invent new tags.
 - kind: "image" for abstract concepts, ideas, metaphors; "stock" for concrete
