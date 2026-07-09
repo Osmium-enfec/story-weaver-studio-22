@@ -302,7 +302,8 @@ function Index() {
         : undefined;
       const s = await buildScene(plan, precomputed);
       const { _cached, ...scene } = s as any;
-      setResults((prev) => { const n = [...prev]; n[i] = scene; return n; });
+      setResults((prev) => { const n = [...prev]; n[i] = scene; resultsRef.current = n; return n; });
+      scheduleAutoSave();
       setProgress((prev) => {
         const next = [...prev];
         next[i] = { ...next[i], status: "ready", mediaUrl: scene.mediaUrl, audioUrl: scene.audioUrl, cached: _cached };
