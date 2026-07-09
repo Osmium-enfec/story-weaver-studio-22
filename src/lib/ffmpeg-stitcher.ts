@@ -75,11 +75,18 @@ export async function exportToMp4(
   canvas.height = H;
   const ctx = canvas.getContext("2d", { willReadFrequently: false })!;
 
-  // Compute work units: total frames + one encode per scene + concat + mux.
-  const frameCounts = scenes.map((s) =>
-    Math.max(1, Math.round((sceneDurationMs(s) / 1000) * fps)),
+  // Crossfade duration between scenes. Extend every scene (except last) by
+  // FADE_DUR of held final frame so xfade overlap collapses back to the
+  // original total duration and stays in sync with the master audio.
+  const FADE_DUR = 0.5;
+  const fadeFrames = Math.round(FADE_DUR * fps);
+
+  const origDurSec = scenes.map((s) => sceneDurationMs(s) / 1000);
+  const origFrames = origDurSec.map((d) => Math.max(1, Math.round(d * fps)));
+  const extFrames = origFrames.map((n, i) =>
+    i < scenes.length - 1 ? n + fadeFrames : n,
   );
-  const totalFrames = frameCounts.reduce((a, b) => a + b, 0);
+  const totalFrames = extFrames.reduce((a, b) => a + b, 0);
   const totalUnits = totalFrames + scenes.length + 2;
   let unitsDone = 0;
   const tick = (n = 1) => {
@@ -88,19 +95,23 @@ export async function exportToMp4(
   };
 
   const segments: string[] = [];
+  const segDurSec: number[] = [];
 
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
-    const frames = frameCounts[i];
-    const durSec = sceneDurationMs(scene) / 1000;
+    const realFrames = origFrames[i];
+    const frames = extFrames[i];
+    const durSec = origDurSec[i];
 
-    // If stock scene, seek the video per frame for deterministic capture.
     const video = scene.kind === "stock" && scene.mediaUrl
       ? assets.vid.get(scene.mediaUrl) ?? null
       : null;
 
     for (let f = 0; f < frames; f++) {
-      const progress = frames <= 1 ? 0 : f / (frames - 1);
+      // Trailing hold frames (f >= realFrames) freeze at progress=1 so the
+      // xfade overlap looks like a still-frame crossfade into the next scene.
+      const activeF = Math.min(f, realFrames - 1);
+      const progress = realFrames <= 1 ? 0 : activeF / (realFrames - 1);
       const tSec = progress * durSec;
 
       if (video) {
@@ -120,8 +131,6 @@ export async function exportToMp4(
         );
       }
     }
-    // Ensure counter matches even if we skipped a report.
-    // (unitsDone is only used for progress display.)
 
     onProgress(`encoding scene ${i + 1}/${scenes.length}`, unitsDone / totalUnits);
 
@@ -139,25 +148,49 @@ export async function exportToMp4(
       segName,
     ]);
     segments.push(segName);
+    segDurSec.push(frames / fps);
     tick(1);
     onProgress(`encoded scene ${i + 1}/${scenes.length}`, unitsDone / totalUnits);
 
-    // Clean up frame PNGs to keep wasm heap small.
     for (let f = 0; f < frames; f++) {
       try { await ffmpeg.deleteFile(`s${i}_f${String(f).padStart(5, "0")}.png`); } catch {}
     }
   }
 
-  onProgress("stitching segments…", unitsDone / totalUnits);
-  const concatList = segments.map((s) => `file '${s}'`).join("\n");
-  await ffmpeg.writeFile("list.txt", new TextEncoder().encode(concatList));
-  await ffmpeg.exec([
-    "-y",
-    "-f", "concat", "-safe", "0",
-    "-i", "list.txt",
-    "-c", "copy",
-    "video.mp4",
-  ]);
+  onProgress("stitching segments with fade…", unitsDone / totalUnits);
+
+  if (segments.length === 1) {
+    await ffmpeg.exec(["-y", "-i", segments[0], "-c", "copy", "video.mp4"]);
+  } else {
+    // Build xfade filter chain: v0+v1 -> vx1, vx1+v2 -> vx2, ...
+    const inputs: string[] = [];
+    for (const s of segments) { inputs.push("-i", s); }
+    const parts: string[] = [];
+    let prev = "[0:v]";
+    let acc = segDurSec[0];
+    for (let i = 1; i < segments.length; i++) {
+      const offset = acc - FADE_DUR;
+      const out = i === segments.length - 1 ? "[vout]" : `[vx${i}]`;
+      parts.push(
+        `${prev}[${i}:v]xfade=transition=fade:duration=${FADE_DUR}:offset=${offset.toFixed(3)}${out}`,
+      );
+      acc = acc + segDurSec[i] - FADE_DUR;
+      prev = out;
+    }
+    await ffmpeg.exec([
+      "-y",
+      ...inputs,
+      "-filter_complex", parts.join(";"),
+      "-map", "[vout]",
+      "-c:v", "libx264",
+      "-preset", preset,
+      "-crf", String(crf),
+      "-pix_fmt", "yuv420p",
+      "-r", String(fps),
+      "-movflags", "+faststart",
+      "video.mp4",
+    ]);
+  }
   tick(1);
   onProgress("muxing audio…", unitsDone / totalUnits);
 
