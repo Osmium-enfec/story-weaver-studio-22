@@ -76,12 +76,16 @@ function Index() {
 
   const plansRef = useRef<ScenePlan[]>([]);
   const precomputedAudioRef = useRef<{ urls: string[]; durations: number[] } | null>(null);
+  const projectIdRef = useRef<string | null>(null);
+  const resultsRef = useRef<(Scene | null)[]>([]);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [progress, setProgress] = useState<SceneProgress[]>([]);
   const [results, setResults] = useState<(Scene | null)[]>([]);
   const [topError, setTopError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [projectTitle, setProjectTitle] = useState<string>("");
 
   // ---------- Build one scene ----------
   async function buildScene(
