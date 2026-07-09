@@ -139,33 +139,46 @@ function SceneStage({
   );
 }
 
+// Timing knobs for scene syncing:
+// - INTER_SCENE_GAP_MS: silent breath between scenes so voice feels natural.
+// - CROSSFADE_MS: how long the outgoing scene overlaps the incoming one.
+// - PLAYBACK_RATE: <1 slows narration slightly for a calmer pace.
+const INTER_SCENE_GAP_MS = 550;
+const CROSSFADE_MS = 750;
+const PLAYBACK_RATE = 0.95;
+
 export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [prevScene, setPrevScene] = useState<Scene | null>(null);
-  const [transitioning, setTransitioning] = useState(false);
+  const [transitionPhase, setTransitionPhase] = useState<"idle" | "in">("idle");
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const prevIndexRef = useRef(0);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scene = scenes[index];
 
-  // Scene change: snapshot the previous scene for a 400ms crossfade.
+  // Scene change: snapshot previous scene and crossfade it out while new fades in.
   useEffect(() => {
     if (prevIndexRef.current !== index) {
       const p = scenes[prevIndexRef.current];
+      prevIndexRef.current = index;
       if (p) {
         setPrevScene(p);
-        setTransitioning(true);
-        const t = setTimeout(() => {
-          setTransitioning(false);
+        setTransitionPhase("idle");
+        // Next frame → flip to "in" so CSS transition animates.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => setTransitionPhase("in"));
+        });
+        if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+        fadeTimerRef.current = setTimeout(() => {
           setPrevScene(null);
-        }, 400);
-        prevIndexRef.current = index;
-        return () => clearTimeout(t);
+          setTransitionPhase("idle");
+        }, CROSSFADE_MS);
       }
-      prevIndexRef.current = index;
     }
   }, [index, scenes]);
 
@@ -175,6 +188,7 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     const a = audioRef.current;
     if (!a) return;
     a.currentTime = 0;
+    a.playbackRate = PLAYBACK_RATE;
     if (playing) a.play().catch(() => {});
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
@@ -185,6 +199,7 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
+    a.playbackRate = PLAYBACK_RATE;
     if (playing) {
       a.play().catch(() => {});
       videoRef.current?.play().catch(() => {});
@@ -194,6 +209,11 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     }
   }, [playing]);
 
+  useEffect(() => () => {
+    if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+    if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+  }, []);
+
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -201,8 +221,13 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
       if (a.duration) setProgress(a.currentTime / a.duration);
     };
     const onEnd = () => {
-      if (index < scenes.length - 1) setIndex(index + 1);
-      else setPlaying(false);
+      if (index < scenes.length - 1) {
+        // Small silent breath between scenes so voice feels natural.
+        if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = setTimeout(() => setIndex(index + 1), INTER_SCENE_GAP_MS);
+      } else {
+        setPlaying(false);
+      }
     };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnd);
@@ -217,26 +242,27 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   return (
     <div className="w-full">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border bg-white shadow-sm">
-        {/* Previous scene sits underneath and fades out */}
+        {/* Previous scene sits on top and fades out over CROSSFADE_MS */}
         {prevScene && (
           <div
             key={`prev-${prevScene.id}`}
-            className="absolute inset-0"
+            className="absolute inset-0 z-10"
             style={{
-              opacity: transitioning ? 0 : 1,
-              transition: "opacity 400ms ease-out",
+              opacity: transitionPhase === "in" ? 0 : 1,
+              transform: transitionPhase === "in" ? "scale(1.03)" : "scale(1)",
+              transition: `opacity ${CROSSFADE_MS}ms ease-in-out, transform ${CROSSFADE_MS}ms ease-in-out`,
+              willChange: "opacity, transform",
             }}
           >
             <SceneStage scene={prevScene} progress={1} />
           </div>
         )}
-        {/* Current scene fades in on top */}
+        {/* Current scene underneath, gently scaling in */}
         <div
           key={`cur-${scene.id}`}
           className="absolute inset-0"
           style={{
-            opacity: transitioning ? 0 : 1,
-            animation: "sceneIn 400ms ease-out both",
+            animation: `sceneIn ${CROSSFADE_MS}ms ease-out both`,
           }}
         >
           <SceneStage scene={scene} progress={progress} videoRef={videoRef} />
@@ -300,8 +326,8 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
 
       <style>{`
         @keyframes sceneIn {
-          from { opacity: 0; transform: scale(1.02); }
-          to   { opacity: 1; transform: scale(1); }
+          from { opacity: 0.001; transform: scale(1.04); filter: blur(6px); }
+          to   { opacity: 1; transform: scale(1); filter: blur(0); }
         }
       `}</style>
     </div>
