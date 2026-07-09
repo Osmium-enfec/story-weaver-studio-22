@@ -457,9 +457,22 @@ function Index() {
           ? script.trim().split(/\s+/).slice(0, 8).join(" ") || "Untitled explainer"
           : audioFile?.name.replace(/\.[^.]+$/, "") || "Untitled explainer");
 
+      // Upload master audio once, reuse URL on every scene.
+      const rawMaster = readyScenes[0]?.masterAudioUrl;
+      const portableMaster = rawMaster
+        ? await toPortableUrl(rawMaster, userId, pid, extFromUrl(rawMaster, "wav"))
+        : undefined;
+
       const portable = await Promise.all(
         readyScenes.map(async (s) => {
-          const audioUrl = await toPortableUrl(s.audioUrl, userId, pid, extFromUrl(s.audioUrl, "mp3"));
+          // In master mode we still upload the per-scene audioUrl only when
+          // it isn't identical to the master (script mode: per-scene TTS
+          // clips are kept as a fallback).
+          const audioUrl =
+            s.audioUrl === rawMaster && portableMaster
+              ? portableMaster
+              : await toPortableUrl(s.audioUrl, userId, pid, extFromUrl(s.audioUrl, "mp3"));
+          const masterAudioUrl = portableMaster ?? s.masterAudioUrl;
           if (s.kind === "image") {
             const backgroundUrl = s.backgroundUrl
               ? await toPortableUrl(s.backgroundUrl, userId, pid, extFromUrl(s.backgroundUrl, "png"))
@@ -470,11 +483,12 @@ function Index() {
                 mediaUrl: await toPortableUrl(el.mediaUrl, userId, pid, extFromUrl(el.mediaUrl, "png")),
               })),
             );
-            return { ...s, audioUrl, backgroundUrl, elements };
+            return { ...s, audioUrl, masterAudioUrl, backgroundUrl, elements };
           }
-          return { ...s, audioUrl };
+          return { ...s, audioUrl, masterAudioUrl };
         }),
       );
+
 
 
       const firstImg = portable.find(
