@@ -245,9 +245,15 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     const a = audioRef.current;
     if (!a) return;
     let advanced = false;
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let sawPlaying = false;
+
     const advance = () => {
       if (advanced) return;
       advanced = true;
+      if (stallTimer) clearTimeout(stallTimer);
+      if (watchdog) clearTimeout(watchdog);
       if (index < scenes.length - 1) {
         if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
         advanceTimerRef.current = setTimeout(() => setIndex(index + 1), INTER_SCENE_GAP_MS);
@@ -255,36 +261,61 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
         setPlaying(false);
       }
     };
+
     const onTime = () => {
       if (a.duration && isFinite(a.duration)) {
         setProgress(Math.min(1, a.currentTime / a.duration));
       }
     };
+    const onPlaying = () => {
+      sawPlaying = true;
+      if (stallTimer) {
+        clearTimeout(stallTimer);
+        stallTimer = null;
+      }
+    };
     const onEnd = () => advance();
     const onError = () => {
-      // Audio missing/broken: fall back to scene's planned duration.
+      // Real audio failure — no point waiting.
       setProgress(1);
       advance();
     };
+
     a.addEventListener("timeupdate", onTime);
+    a.addEventListener("playing", onPlaying);
     a.addEventListener("ended", onEnd);
     a.addEventListener("error", onError);
 
-    // Safety net: some browsers skip `ended` if playback stalls, and code
-    // scenes with a missing/short audio track would hang forever otherwise.
-    // Always schedule a forced advance based on the scene's planned duration.
-    const fallbackMs =
-      Math.max(1500, (scene?.durationMs ?? 4000) / PLAYBACK_RATE) + 1200;
-    const fallback = setTimeout(() => {
-      setProgress(1);
-      advance();
-    }, fallbackMs);
+    // Watchdog: only fires if audio NEVER starts playing within a generous
+    // window (broken/missing file, autoplay block). If playback starts, we
+    // rely on the real `ended` event so no sentence is ever cut short.
+    watchdog = setTimeout(() => {
+      if (!sawPlaying) {
+        setProgress(1);
+        advance();
+      }
+    }, 8000);
+
+    // Fallback ONLY for scenes that have no meaningful audio (e.g. code scene
+    // with a broken clip): if the audio element still hasn't produced any
+    // playback progress after `durationMs + generous buffer`, force advance.
+    const hardCapMs =
+      Math.max(3000, (scene?.durationMs ?? 4000) / PLAYBACK_RATE) + 6000;
+    stallTimer = setTimeout(() => {
+      // If audio actually played through, `ended` already advanced us.
+      if (!advanced) {
+        setProgress(1);
+        advance();
+      }
+    }, hardCapMs);
 
     return () => {
       a.removeEventListener("timeupdate", onTime);
+      a.removeEventListener("playing", onPlaying);
       a.removeEventListener("ended", onEnd);
       a.removeEventListener("error", onError);
-      clearTimeout(fallback);
+      if (stallTimer) clearTimeout(stallTimer);
+      if (watchdog) clearTimeout(watchdog);
     };
   }, [index, scenes.length, scene?.id, scene?.durationMs]);
 
