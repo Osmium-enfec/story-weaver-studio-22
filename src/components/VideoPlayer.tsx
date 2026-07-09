@@ -55,6 +55,7 @@ function ImageScene({
         />
       )}
       {scene.elements?.map((el) => {
+        const single = (scene.elements?.length ?? 0) === 1;
         const shown = t >= el.appearAt;
         // Local progress since element appeared, 0..1 across ~450ms window (approx via scene duration)
         const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
@@ -81,6 +82,12 @@ function ImageScene({
             break;
         }
 
+        // Single-element scenes look empty at the planner's default width.
+        // Boost the element to fill the canvas centre.
+        const width = single ? Math.max(0.6, el.w * 2.2) : el.w;
+        const leftPct = single ? 50 : el.x * 100;
+        const topPct = single ? 50 : el.y * 100;
+
         return (
           <img
             key={el.id}
@@ -88,9 +95,9 @@ function ImageScene({
             alt=""
             className="absolute select-none"
             style={{
-              left: `${el.x * 100}%`,
-              top: `${el.y * 100}%`,
-              width: `${el.w * 100}%`,
+              left: `${leftPct}%`,
+              top: `${topPct}%`,
+              width: `${width * 100}%`,
               transform: `translate(-50%, -50%) ${transform}`,
               transformOrigin: "center center",
               opacity,
