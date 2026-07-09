@@ -15,7 +15,7 @@ export const seedAdminUser = createServerFn({ method: "POST" }).handler(async ()
     if (error) throw error;
     return { ok: true, action: "updated" as const };
   }
-  const { error } = await supabaseAdmin.auth.createUser({
+  const { error } = await supabaseAdmin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
