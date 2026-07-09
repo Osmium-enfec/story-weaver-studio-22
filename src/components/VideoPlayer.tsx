@@ -504,14 +504,17 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           HD (1080p 60fps)
         </button>
         {exportQuality && (
-          <div className="ml-2 flex items-center gap-2 text-xs text-muted-foreground">
-            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted">
+          <div className="ml-2 flex min-w-[240px] flex-1 items-center gap-2 text-xs text-muted-foreground">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-primary transition-[width]"
                 style={{ width: `${Math.round(exportProgress * 100)}%` }}
               />
             </div>
-            {Math.round(exportProgress * 100)}% — recording in real time
+            <span className="whitespace-nowrap tabular-nums">
+              {Math.round(exportProgress * 100)}%
+            </span>
+            <span className="truncate opacity-80">{exportStage}</span>
           </div>
         )}
       </div>
