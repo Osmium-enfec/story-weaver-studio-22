@@ -171,6 +171,34 @@ export function snapRangesToSilence(
 }
 
 /**
+ * Decode `file`, snap sentence ranges to nearby silence, and return
+ * per-scene boundaries in milliseconds. Does NOT slice — the app keeps
+ * the ORIGINAL audio playing continuously and switches visuals at
+ * these timestamps.
+ */
+export async function computeSnappedRangesMs(
+  file: File,
+  ranges: SentenceRange[],
+): Promise<{ startMs: number; endMs: number }[]> {
+  const ab = await file.arrayBuffer();
+  const AC = window.AudioContext || (window as any).webkitAudioContext;
+  const ctx: AudioContext = new AC();
+  const buf = await ctx.decodeAudioData(ab.slice(0));
+  const snapped = snapRangesToSilence(buf, ranges);
+  await ctx.close().catch(() => {});
+  // Ensure scenes are contiguous: each scene's start == previous end.
+  const out: { startMs: number; endMs: number }[] = [];
+  for (let i = 0; i < snapped.length; i++) {
+    const start = i === 0 ? 0 : out[i - 1].endMs;
+    const end = i === snapped.length - 1
+      ? Math.max(start + 200, (buf.length / buf.sampleRate) * 1000)
+      : Math.max(start + 200, snapped[i].end * 1000);
+    out.push({ startMs: start, endMs: end });
+  }
+  return out;
+}
+
+/**
  * Slice a full audio file into per-range WAV blob URLs.
  * Snaps sentence ranges to silence gaps so cuts feel natural.
  * Returns { audioUrls, durationsMs } same length as ranges.
