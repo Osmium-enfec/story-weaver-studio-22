@@ -98,26 +98,33 @@ function Index() {
       const initial: SceneProgress[] = plans.map((p) => ({ ...p, status: "planning" }));
       setProgress(initial);
 
-      const results = await Promise.all(
-        plans.map(async (p, i) => {
+      // Limit concurrency to stay under ElevenLabs' 5 concurrent-request cap.
+      const CONCURRENCY = 3;
+      const results: (Scene | null)[] = new Array(plans.length).fill(null);
+      let cursor = 0;
+      async function worker() {
+        while (true) {
+          const i = cursor++;
+          if (i >= plans.length) return;
+          const p = plans[i];
           try {
             const s = await buildScene(p);
+            results[i] = s;
             setProgress((prev) => {
               const next = [...prev];
               next[i] = { ...next[i], status: "ready", mediaUrl: s.mediaUrl, audioUrl: s.audioUrl };
               return next;
             });
-            return s;
           } catch (e: any) {
             setProgress((prev) => {
               const next = [...prev];
               next[i] = { ...next[i], status: "error", error: e?.message || "failed" };
               return next;
             });
-            return null;
           }
-        }),
-      );
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, plans.length) }, worker));
 
       const ok = results.filter((r): r is Scene => r !== null);
       if (ok.length === 0) throw new Error("Every scene failed to generate.");
