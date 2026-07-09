@@ -1,4 +1,5 @@
 import type { Scene } from "@/components/VideoPlayer";
+import fixWebmDuration from "fix-webm-duration";
 
 export type RenderQuality = "preview" | "hd";
 
@@ -251,12 +252,11 @@ export async function renderVideo(
     } catch {}
   }
 
-  // Recorder
-  const videoStream = canvas.captureStream(fps);
-  const stream = new MediaStream([
-    ...videoStream.getVideoTracks(),
-    ...dest.stream.getAudioTracks(),
-  ]);
+  // Recorder — request frames manually so background-tab throttling can't stall us.
+  const videoTrack = (canvas as HTMLCanvasElement & {
+    captureStream: (fps?: number) => MediaStream;
+  }).captureStream(0).getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
+  const stream = new MediaStream([videoTrack, ...dest.stream.getAudioTracks()]);
   const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
     ? "video/webm;codecs=vp9,opus"
     : "video/webm";
@@ -269,25 +269,49 @@ export async function renderVideo(
   const stopped = new Promise<Blob>((resolve) => {
     recorder.onstop = () => resolve(new Blob(chunks, { type: "video/webm" }));
   });
-  recorder.start();
+  recorder.start(1000);
 
   const totalDuration = scenes.reduce(
-    (a, s) => a + s.durationMs / PLAYBACK_RATE + INTER_SCENE_GAP_MS,
+    (a, s, i) =>
+      a + s.durationMs / PLAYBACK_RATE + (i < scenes.length - 1 ? INTER_SCENE_GAP_MS : 0),
     0,
   );
+  const recordStart = performance.now();
   let elapsed = 0;
+  const frameInterval = 1000 / fps;
+
+  const pushFrame = () => {
+    if (typeof videoTrack.requestFrame === "function") videoTrack.requestFrame();
+  };
+
+  const runPhase = async (
+    durMs: number,
+    draw: (progress: number) => void,
+  ) => {
+    const start = performance.now();
+    let nextFrame = start;
+    while (true) {
+      const now = performance.now();
+      const p = Math.min(1, (now - start) / durMs);
+      draw(p);
+      pushFrame();
+      if (p >= 1) break;
+      nextFrame += frameInterval;
+      const wait = Math.max(0, nextFrame - performance.now());
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  };
 
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
     const durMs = scene.durationMs / PLAYBACK_RATE;
-    const startAt = audioCtx.currentTime;
     const buf = audioBuffers.get(scene.audioUrl);
     if (buf) {
       const src = audioCtx.createBufferSource();
       src.buffer = buf;
       src.playbackRate.value = PLAYBACK_RATE;
       src.connect(dest);
-      src.start(startAt);
+      src.start(audioCtx.currentTime);
     }
 
     const video = scene.kind === "stock" ? vidCache.get(scene.mediaUrl!) : null;
@@ -296,53 +320,55 @@ export async function renderVideo(
       video.play().catch(() => {});
     }
 
-    const startPerf = performance.now();
-    await new Promise<void>((resolve) => {
-      const tick = () => {
-        const now = performance.now() - startPerf;
-        const progress = Math.min(1, now / durMs);
-        if (scene.kind === "image") {
-          const bg = scene.backgroundUrl ? bgCache.get(scene.backgroundUrl) ?? null : null;
-          const els = (scene.elements ?? [])
-            .map((el) => {
-              const img = elCache.get(el.mediaUrl);
-              return img ? { img, el } : null;
-            })
-            .filter((x): x is { img: HTMLImageElement; el: any } => !!x);
-          drawImageScene(ctx, scene, progress, W, H, bg, els);
-        } else if (scene.kind === "code") {
-          drawCodeScene(ctx, scene, progress, W, H);
-        } else if (video) {
-          ctx.fillStyle = "#000";
-          ctx.fillRect(0, 0, W, H);
-          drawContain(ctx, video, 0, 0, W, H, "cover");
-        } else {
-          ctx.fillStyle = "#fff";
-          ctx.fillRect(0, 0, W, H);
-        }
-        drawSubtitle(ctx, scene.subtitle, W, H);
-        onProgress?.(Math.min(1, (elapsed + now) / totalDuration));
-        if (progress < 1) requestAnimationFrame(tick);
-        else resolve();
-      };
-      requestAnimationFrame(tick);
+    await runPhase(durMs, (progress) => {
+      if (scene.kind === "image") {
+        const bg = scene.backgroundUrl ? bgCache.get(scene.backgroundUrl) ?? null : null;
+        const els = (scene.elements ?? [])
+          .map((el) => {
+            const img = elCache.get(el.mediaUrl);
+            return img ? { img, el } : null;
+          })
+          .filter((x): x is { img: HTMLImageElement; el: any } => !!x);
+        drawImageScene(ctx, scene, progress, W, H, bg, els);
+      } else if (scene.kind === "code") {
+        drawCodeScene(ctx, scene, progress, W, H);
+      } else if (video) {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, W, H);
+        drawContain(ctx, video, 0, 0, W, H, "cover");
+      } else {
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, W, H);
+      }
+      onProgress?.(Math.min(1, (elapsed + progress * durMs) / totalDuration));
     });
 
     if (video) video.pause();
     elapsed += durMs;
 
     if (i < scenes.length - 1) {
-      // Silent gap between scenes; keep the last frame visible.
-      await new Promise((r) => setTimeout(r, INTER_SCENE_GAP_MS));
+      // Keep pushing frames during the silent gap so the video track never stalls.
+      await runPhase(INTER_SCENE_GAP_MS, () => {
+        // Redraw last frame content is already on canvas; just push frames.
+      });
       elapsed += INTER_SCENE_GAP_MS;
       onProgress?.(Math.min(1, elapsed / totalDuration));
     }
   }
 
   recorder.stop();
-  const blob = await stopped;
+  const rawBlob = await stopped;
+  const actualDurationMs = performance.now() - recordStart;
   audioCtx.close().catch(() => {});
-  return blob;
+
+  // MediaRecorder writes WebM without a Duration element, which makes the file
+  // unseekable (appears stuck; clicking a scrub jumps to the end). Patch it.
+  try {
+    const fixed = await fixWebmDuration(rawBlob, actualDurationMs, { logger: false });
+    return fixed;
+  } catch {
+    return rawBlob;
+  }
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
