@@ -492,8 +492,7 @@ function Index() {
 
 
       const firstImg = portable.find(
-        (s): s is Scene & { backgroundUrl?: string } =>
-          s.kind === "image" && !!(s as any).backgroundUrl,
+        (s) => s.kind === "image" && !!(s as any).backgroundUrl,
       );
       const thumbnail_url = firstImg ? (firstImg as any).backgroundUrl : undefined;
 
