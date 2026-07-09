@@ -151,8 +151,8 @@ function SceneStage({
 // - INTER_SCENE_GAP_MS: silent breath between scenes so voice feels natural.
 // - CROSSFADE_MS: how long the outgoing scene overlaps the incoming one.
 // - PLAYBACK_RATE: <1 slows narration slightly for a calmer pace.
-const INTER_SCENE_GAP_MS = 550;
-const CROSSFADE_MS = 750;
+const INTER_SCENE_GAP_MS = 900;
+const CROSSFADE_MS = 900;
 const PLAYBACK_RATE = 0.95;
 
 export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
