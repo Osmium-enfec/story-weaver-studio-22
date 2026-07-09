@@ -95,6 +95,22 @@ function Index() {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [projectTitle, setProjectTitle] = useState<string>("");
 
+  // Approx credit-usage counters (client-side estimate, not a bill)
+  const [stats, setStats] = useState({
+    imagesNew: 0,
+    imagesCached: 0,
+    tts: 0,
+    plan: 0,
+    stt: 0,
+    sttSkipped: false,
+    planSkipped: false,
+  });
+  const statsRef = useRef(stats);
+  function bumpStats(patch: Partial<typeof stats>) {
+    statsRef.current = { ...statsRef.current, ...patch };
+    setStats(statsRef.current);
+  }
+
   // ---------- Build one scene ----------
   async function buildScene(
     plan: ScenePlan,
