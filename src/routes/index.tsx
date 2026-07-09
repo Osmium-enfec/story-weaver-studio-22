@@ -415,9 +415,10 @@ function Index() {
       return next;
     });
     try {
-      const preAudio = precomputedAudioRef.current;
-      const precomputed = preAudio
-        ? { audioUrl: preAudio.urls[i], durationMs: preAudio.durations[i] }
+      // Retry after generation — reuse existing master audio window if any.
+      const existing = resultsRef.current[i];
+      const precomputed = existing?.masterAudioUrl
+        ? { audioUrl: existing.masterAudioUrl, durationMs: (existing.endMs ?? 0) - (existing.startMs ?? 0) }
         : undefined;
       const s = await buildScene(plan, precomputed);
       const { _cached, ...scene } = s as any;
