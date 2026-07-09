@@ -242,26 +242,27 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   return (
     <div className="w-full">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border bg-white shadow-sm">
-        {/* Previous scene sits underneath and fades out */}
+        {/* Previous scene sits on top and fades out over CROSSFADE_MS */}
         {prevScene && (
           <div
             key={`prev-${prevScene.id}`}
-            className="absolute inset-0"
+            className="absolute inset-0 z-10"
             style={{
-              opacity: transitioning ? 0 : 1,
-              transition: "opacity 400ms ease-out",
+              opacity: transitionPhase === "in" ? 0 : 1,
+              transform: transitionPhase === "in" ? "scale(1.03)" : "scale(1)",
+              transition: `opacity ${CROSSFADE_MS}ms ease-in-out, transform ${CROSSFADE_MS}ms ease-in-out`,
+              willChange: "opacity, transform",
             }}
           >
             <SceneStage scene={prevScene} progress={1} />
           </div>
         )}
-        {/* Current scene fades in on top */}
+        {/* Current scene underneath, gently scaling in */}
         <div
           key={`cur-${scene.id}`}
           className="absolute inset-0"
           style={{
-            opacity: transitioning ? 0 : 1,
-            animation: "sceneIn 400ms ease-out both",
+            animation: `sceneIn ${CROSSFADE_MS}ms ease-out both`,
           }}
         >
           <SceneStage scene={scene} progress={progress} videoRef={videoRef} />
