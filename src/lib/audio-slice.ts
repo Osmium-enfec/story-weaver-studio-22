@@ -61,7 +61,7 @@ export function alignSentences(sentences: string[], words: SttWord[]): SentenceR
   });
 }
 
-function encodeWav(buffer: AudioBuffer): ArrayBuffer {
+export function encodeWav(buffer: AudioBuffer): ArrayBuffer {
   const numCh = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const length = buffer.length * numCh * 2 + 44;
