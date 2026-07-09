@@ -14,13 +14,96 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      image_assets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          embedding: string
+          id: string
+          kind: string
+          prompt: string
+          public_url: string
+          storage_path: string
+          usage_count: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          embedding: string
+          id?: string
+          kind: string
+          prompt: string
+          public_url: string
+          storage_path: string
+          usage_count?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          embedding?: string
+          id?: string
+          kind?: string
+          prompt?: string
+          public_url?: string
+          storage_path?: string
+          usage_count?: number
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          audio_mode: string
+          created_at: string
+          id: string
+          scenes: Json
+          script: string | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audio_mode?: string
+          created_at?: string
+          id?: string
+          scenes?: Json
+          script?: string | null
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audio_mode?: string
+          created_at?: string
+          id?: string
+          scenes?: Json
+          script?: string | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      bump_image_asset_usage: { Args: { asset_id: string }; Returns: undefined }
+      match_image_asset: {
+        Args: {
+          match_kind: string
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          id: string
+          public_url: string
+          similarity: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
