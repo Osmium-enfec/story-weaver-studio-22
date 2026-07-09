@@ -36,7 +36,7 @@ function ProjectDetail() {
             <div className="text-xs text-muted-foreground mb-6">
               Saved {new Date(data.updated_at).toLocaleString()}
             </div>
-            <VideoPlayer scenes={data.scenes as Scene[]} />
+            <VideoPlayer scenes={data.scenes as unknown as Scene[]} />
           </>
         ) : null}
       </div>
