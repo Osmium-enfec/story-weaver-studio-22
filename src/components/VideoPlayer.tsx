@@ -244,25 +244,49 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    const onTime = () => {
-      if (a.duration) setProgress(a.currentTime / a.duration);
-    };
-    const onEnd = () => {
+    let advanced = false;
+    const advance = () => {
+      if (advanced) return;
+      advanced = true;
       if (index < scenes.length - 1) {
-        // Small silent breath between scenes so voice feels natural.
         if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
         advanceTimerRef.current = setTimeout(() => setIndex(index + 1), INTER_SCENE_GAP_MS);
       } else {
         setPlaying(false);
       }
     };
+    const onTime = () => {
+      if (a.duration && isFinite(a.duration)) {
+        setProgress(Math.min(1, a.currentTime / a.duration));
+      }
+    };
+    const onEnd = () => advance();
+    const onError = () => {
+      // Audio missing/broken: fall back to scene's planned duration.
+      setProgress(1);
+      advance();
+    };
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnd);
+    a.addEventListener("error", onError);
+
+    // Safety net: some browsers skip `ended` if playback stalls, and code
+    // scenes with a missing/short audio track would hang forever otherwise.
+    // Always schedule a forced advance based on the scene's planned duration.
+    const fallbackMs =
+      Math.max(1500, (scene?.durationMs ?? 4000) / PLAYBACK_RATE) + 1200;
+    const fallback = setTimeout(() => {
+      setProgress(1);
+      advance();
+    }, fallbackMs);
+
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnd);
+      a.removeEventListener("error", onError);
+      clearTimeout(fallback);
     };
-  }, [index, scenes.length]);
+  }, [index, scenes.length, scene?.id, scene?.durationMs]);
 
   if (!scene) return null;
 
