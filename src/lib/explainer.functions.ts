@@ -162,6 +162,16 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       return Math.max(lo, Math.min(hi, n));
     };
 
+    // Planner sometimes returns code as string[] or wrapped in ``` fences.
+    const normalizeCode = (v: any): string => {
+      let s = "";
+      if (Array.isArray(v)) s = v.join("\n");
+      else if (v == null) s = "";
+      else s = String(v);
+      s = s.replace(/^\s*```[a-zA-Z]*\n?/, "").replace(/\n?```\s*$/, "");
+      return s.trim();
+    };
+
     const scenes: ScenePlan[] = arr.slice(0, 40).map((meta: any, i: number) => {
       const rawKind = meta?.kind;
       const kind: SceneKind =
