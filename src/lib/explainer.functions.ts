@@ -146,8 +146,26 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
     } catch {
       parsed = {};
     }
-    const arr: any[] = Array.isArray(parsed) ? parsed : parsed.scenes ?? parsed.items ?? [];
-    if (!arr.length) throw new Error("Planner returned no scenes");
+    let arr: any[] = Array.isArray(parsed) ? parsed : parsed.scenes ?? parsed.items ?? [];
+    if (!arr.length) {
+      // Fallback: split the script into sentences and make one image scene each
+      // so we never hard-fail on a bad planner response.
+      const sentences = data.script
+        .replace(/\s+/g, " ")
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      arr = (sentences.length ? sentences : [data.script.trim()]).map((s) => ({
+        kind: "image",
+        sentence: s,
+        narrationText: s,
+        durationMs: 3500,
+        backgroundPrompt: s,
+        elements: [],
+        subtitle: s.split(" ").slice(0, 8).join(" "),
+      }));
+    }
+
 
     const animations: ScenePlan["animation"][] = [
       "kenburns-in",
