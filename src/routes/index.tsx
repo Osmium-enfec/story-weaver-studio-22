@@ -107,7 +107,7 @@ function Index() {
   const navigate = useNavigate();
 
   const plansRef = useRef<ScenePlan[]>([]);
-  const precomputedAudioRef = useRef<{ urls: string[]; durations: number[] } | null>(null);
+  
   const projectIdRef = useRef<string | null>(null);
   const storageFolderRef = useRef<string | null>(null);
   const resultsRef = useRef<(Scene | null)[]>([]);
