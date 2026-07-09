@@ -101,7 +101,78 @@ function encodeWav(buffer: AudioBuffer): ArrayBuffer {
 }
 
 /**
+ * Snap sentence-aligned ranges to the nearest silence in the waveform so
+ * scenes cut where the speaker actually pauses, not mid-word.
+ * `silenceThresh` is amplitude (0..1); `minSilenceMs` is min continuous
+ * silence to count. Adjusts each range's `end` (and next range's `start`)
+ * to the middle of the nearest silence window found within +/- maxDriftMs.
+ */
+function snapRangesToSilence(
+  buffer: AudioBuffer,
+  ranges: SentenceRange[],
+  opts: { silenceThresh?: number; minSilenceMs?: number; maxDriftMs?: number } = {},
+): SentenceRange[] {
+  const silenceThresh = opts.silenceThresh ?? 0.02;
+  const minSilenceMs = opts.minSilenceMs ?? 180;
+  const maxDriftMs = opts.maxDriftMs ?? 600;
+  const sr = buffer.sampleRate;
+  const ch = buffer.getChannelData(0);
+
+  // RMS window of 20ms
+  const win = Math.max(1, Math.floor(sr * 0.02));
+  const rms: number[] = [];
+  for (let i = 0; i < ch.length; i += win) {
+    let sum = 0;
+    const end = Math.min(ch.length, i + win);
+    for (let j = i; j < end; j++) sum += ch[j] * ch[j];
+    rms.push(Math.sqrt(sum / (end - i)));
+  }
+  const winMs = (win / sr) * 1000;
+  const minSilenceWins = Math.max(1, Math.round(minSilenceMs / winMs));
+
+  // Find silence midpoints (in seconds) — center of any run of quiet windows.
+  const silences: number[] = [];
+  let runStart = -1;
+  for (let i = 0; i < rms.length; i++) {
+    const quiet = rms[i] < silenceThresh;
+    if (quiet && runStart < 0) runStart = i;
+    else if (!quiet && runStart >= 0) {
+      if (i - runStart >= minSilenceWins) {
+        silences.push(((runStart + i) / 2) * (winMs / 1000));
+      }
+      runStart = -1;
+    }
+  }
+  if (runStart >= 0 && rms.length - runStart >= minSilenceWins) {
+    silences.push(((runStart + rms.length) / 2) * (winMs / 1000));
+  }
+
+  const nearestSilence = (t: number) => {
+    let best = t;
+    let bestD = Infinity;
+    for (const s of silences) {
+      const d = Math.abs(s - t);
+      if (d < bestD && d * 1000 <= maxDriftMs) {
+        best = s;
+        bestD = d;
+      }
+    }
+    return best;
+  };
+
+  const snapped = ranges.map((r) => ({ ...r }));
+  for (let i = 0; i < snapped.length - 1; i++) {
+    const boundary = (snapped[i].end + snapped[i + 1].start) / 2;
+    const snap = nearestSilence(boundary);
+    snapped[i].end = snap;
+    snapped[i + 1].start = snap;
+  }
+  return snapped;
+}
+
+/**
  * Slice a full audio file into per-range WAV blob URLs.
+ * Snaps sentence ranges to silence gaps so cuts feel natural.
  * Returns { audioUrls, durationsMs } same length as ranges.
  */
 export async function sliceAudioIntoScenes(
@@ -113,10 +184,12 @@ export async function sliceAudioIntoScenes(
   const ctx: AudioContext = new AC();
   const full = await ctx.decodeAudioData(ArrayBufferData.slice(0));
 
+  const snapped = snapRangesToSilence(full, ranges);
+
   const audioUrls: string[] = [];
   const durationsMs: number[] = [];
 
-  for (const r of ranges) {
+  for (const r of snapped) {
     const sr = full.sampleRate;
     const startSample = Math.max(0, Math.floor(r.start * sr));
     const endSample = Math.min(full.length, Math.max(startSample + 1, Math.floor(r.end * sr)));
