@@ -252,7 +252,7 @@ function Index() {
     setProjectTitle("");
     setProgress([]);
     plansRef.current = [];
-    precomputedAudioRef.current = null;
+    
     statsRef.current = { imagesNew: 0, imagesCached: 0, tts: 0, plan: 0, stt: 0, sttSkipped: false, planSkipped: false };
     setStats(statsRef.current);
 
