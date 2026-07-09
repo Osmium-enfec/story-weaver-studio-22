@@ -57,7 +57,7 @@ function Index() {
               return { url: img.dataUrl, fellBack: true };
             },
           ),
-      generateNarration({ data: { text: plan.sentence } }),
+      generateNarration({ data: { text: plan.narrationText || plan.sentence } }),
     ]);
 
     // measure audio duration client-side
