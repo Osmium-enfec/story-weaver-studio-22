@@ -397,6 +397,12 @@ function Index() {
     if (readyScenes.length === 0) return null;
     if (!silent) setSaving(true);
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Not signed in");
+      const pid = projectIdRef.current ?? crypto.randomUUID();
+      projectIdRef.current = pid;
+
       const title =
         (overrideTitle && overrideTitle.trim()) ||
         (projectTitle && projectTitle.trim()) ||
@@ -406,13 +412,15 @@ function Index() {
 
       const portable = await Promise.all(
         readyScenes.map(async (s) => {
-          const audioUrl = await urlToDataUrl(s.audioUrl);
+          const audioUrl = await toPortableUrl(s.audioUrl, userId, pid, extFromUrl(s.audioUrl, "mp3"));
           if (s.kind === "image") {
-            const backgroundUrl = s.backgroundUrl ? await urlToDataUrl(s.backgroundUrl) : undefined;
+            const backgroundUrl = s.backgroundUrl
+              ? await toPortableUrl(s.backgroundUrl, userId, pid, extFromUrl(s.backgroundUrl, "png"))
+              : undefined;
             const elements = await Promise.all(
               (s.elements ?? []).map(async (el) => ({
                 ...el,
-                mediaUrl: await urlToDataUrl(el.mediaUrl),
+                mediaUrl: await toPortableUrl(el.mediaUrl, userId, pid, extFromUrl(el.mediaUrl, "png")),
               })),
             );
             return { ...s, audioUrl, backgroundUrl, elements };
@@ -420,6 +428,7 @@ function Index() {
           return { ...s, audioUrl };
         }),
       );
+
 
       const firstImg = portable.find(
         (s): s is Scene & { backgroundUrl?: string } =>
