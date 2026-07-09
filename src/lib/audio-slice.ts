@@ -107,7 +107,7 @@ export function encodeWav(buffer: AudioBuffer): ArrayBuffer {
  * silence to count. Adjusts each range's `end` (and next range's `start`)
  * to the middle of the nearest silence window found within +/- maxDriftMs.
  */
-function snapRangesToSilence(
+export function snapRangesToSilence(
   buffer: AudioBuffer,
   ranges: SentenceRange[],
   opts: { silenceThresh?: number; minSilenceMs?: number; maxDriftMs?: number } = {},
