@@ -351,6 +351,45 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
         </div>
       </div>
 
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+        <span className="mr-1 text-xs font-medium text-muted-foreground">Download:</span>
+        <button
+          onClick={() => handleExport("preview")}
+          disabled={!!exportQuality}
+          className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {exportQuality === "preview" ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Download size={12} />
+          )}
+          Current quality (720p 30fps)
+        </button>
+        <button
+          onClick={() => handleExport("hd")}
+          disabled={!!exportQuality}
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {exportQuality === "hd" ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Download size={12} />
+          )}
+          HD (1080p 60fps)
+        </button>
+        {exportQuality && (
+          <div className="ml-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{ width: `${Math.round(exportProgress * 100)}%` }}
+              />
+            </div>
+            {Math.round(exportProgress * 100)}% — recording in real time
+          </div>
+        )}
+      </div>
+
       <style>{`
         @keyframes sceneIn {
           from { opacity: 0.001; transform: scale(1.04); filter: blur(6px); }
