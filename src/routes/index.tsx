@@ -43,25 +43,42 @@ function Index() {
   const [topError, setTopError] = useState<string | null>(null);
 
   async function buildScene(plan: ScenePlan): Promise<Scene> {
-    const mediaPromise: Promise<{ url?: string; fellBack?: boolean } | null> =
+    type ImageComp = {
+      kind: "image";
+      backgroundUrl: string;
+      elements: { id: string; prompt: string; x: number; y: number; w: number; appearAt: number; anim: any; mediaUrl: string }[];
+    };
+    type StockOrFallback = { kind: "stock"; videoUrl: string } | { kind: "image-fallback"; imageUrl: string };
+
+    const visualPromise: Promise<ImageComp | StockOrFallback | null> =
       plan.kind === "code"
         ? Promise.resolve(null)
         : plan.kind === "image"
-          ? generateSceneImage({ data: { prompt: plan.imagePrompt || plan.sentence } }).then(
-              (r) => ({ url: r.dataUrl }),
-            )
+          ? (async () => {
+              const comp = plan.composition!;
+              const [bg, ...els] = await Promise.all([
+                generateSceneBackground({ data: { prompt: comp.backgroundPrompt } }),
+                ...comp.elements.map((el) =>
+                  generateSceneElement({ data: { prompt: el.prompt } }).then((r) => ({
+                    ...el,
+                    mediaUrl: r.dataUrl,
+                  })),
+                ),
+              ]);
+              return { kind: "image" as const, backgroundUrl: bg.dataUrl, elements: els };
+            })()
           : searchStockClip({ data: { query: plan.pexelsQuery || plan.sentence } }).then(
-              async (r) => {
-                if (r.videoUrl) return { url: r.videoUrl };
-                const img = await generateSceneImage({
+              async (r): Promise<StockOrFallback> => {
+                if (r.videoUrl) return { kind: "stock", videoUrl: r.videoUrl };
+                const bg = await generateSceneBackground({
                   data: { prompt: plan.sentence },
                 });
-                return { url: img.dataUrl, fellBack: true };
+                return { kind: "image-fallback", imageUrl: bg.dataUrl };
               },
             );
 
-    const [media, audio] = await Promise.all([
-      mediaPromise,
+    const [visual, audio] = await Promise.all([
+      visualPromise,
       generateNarration({ data: { text: plan.narrationText || plan.sentence } }),
     ]);
 
@@ -73,12 +90,9 @@ function Index() {
       a.addEventListener("error", () => resolve(4000));
     });
 
-    return {
+    const base = {
       id: plan.id,
       subtitle: plan.subtitle,
-      kind:
-        plan.kind === "stock" && media?.fellBack ? "image" : plan.kind,
-      mediaUrl: media?.url,
       audioUrl: audio.audioUrl,
       durationMs: dur,
       animation: plan.animation,
@@ -87,6 +101,28 @@ function Index() {
       codeLanguage: plan.codeLanguage,
       codeVariant: plan.codeVariant,
     };
+
+    if (plan.kind === "code") return { ...base, kind: "code" };
+    if (visual && "backgroundUrl" in visual) {
+      return {
+        ...base,
+        kind: "image",
+        backgroundUrl: visual.backgroundUrl,
+        elements: visual.elements,
+      };
+    }
+    if (visual && visual.kind === "stock") {
+      return { ...base, kind: "stock", mediaUrl: visual.videoUrl };
+    }
+    if (visual && visual.kind === "image-fallback") {
+      return {
+        ...base,
+        kind: "image",
+        backgroundUrl: visual.imageUrl,
+        elements: [],
+      };
+    }
+    return { ...base, kind: "image", backgroundUrl: undefined, elements: [] };
   }
 
   async function handleGenerate() {
