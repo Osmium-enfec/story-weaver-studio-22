@@ -228,6 +228,8 @@ function Index() {
     setProgress([]);
     plansRef.current = [];
     precomputedAudioRef.current = null;
+    statsRef.current = { imagesNew: 0, imagesCached: 0, tts: 0, plan: 0, stt: 0, sttSkipped: false, planSkipped: false };
+    setStats(statsRef.current);
 
     try {
       // Require sign-in (image library server fn is auth-only)
@@ -243,18 +245,38 @@ function Index() {
 
       if (mode === "audio") {
         if (!audioFile) throw new Error("Please select an audio file.");
-        const form = new FormData();
-        form.append("file", audioFile);
-        const res = await fetch("/api/transcribe", { method: "POST", body: form });
-        if (!res.ok) throw new Error(`Transcription failed: ${res.status} ${await res.text()}`);
-        const stt: SttResult = await res.json();
-        transcript = stt.text;
-        sttWords = stt.words ?? [];
+        const audioKey = await hashFile(audioFile);
+        const cachedStt = getCachedStt<SttResult>(audioKey);
+        if (cachedStt) {
+          transcript = cachedStt.text;
+          sttWords = cachedStt.words ?? [];
+          bumpStats({ sttSkipped: true });
+        } else {
+          const form = new FormData();
+          form.append("file", audioFile);
+          const res = await fetch("/api/transcribe", { method: "POST", body: form });
+          if (!res.ok) throw new Error(`Transcription failed: ${res.status} ${await res.text()}`);
+          const stt: SttResult = await res.json();
+          transcript = stt.text;
+          sttWords = stt.words ?? [];
+          setCachedStt(audioKey, stt);
+          bumpStats({ stt: 1 });
+        }
       }
 
-      const { scenes: plans } = await planScript({
-        data: { script: transcript, preserveWords: mode === "audio" },
-      });
+      const preserveWords = mode === "audio";
+      const planKey = await hashText(`${preserveWords ? "PW:" : "SC:"}${transcript}`);
+      const cachedPlan = getCachedPlan<{ scenes: ScenePlan[] }>(planKey);
+      let plans: ScenePlan[];
+      if (cachedPlan) {
+        plans = cachedPlan.scenes;
+        bumpStats({ planSkipped: true });
+      } else {
+        const res = await planScript({ data: { script: transcript, preserveWords } });
+        plans = res.scenes;
+        setCachedPlan(planKey, res);
+        bumpStats({ plan: 1 });
+      }
       plansRef.current = plans;
 
       let preAudio: { urls: string[]; durations: number[] } | null = null;
