@@ -186,6 +186,11 @@ function Index() {
     const [visual, audio] = await Promise.all([visualPromise, audioPromise]);
     const { audioUrl, durationMs: dur } = audio;
     const allCached = totalImgs > 0 && cachedHits === totalImgs;
+    bumpStats({
+      imagesNew: statsRef.current.imagesNew + (totalImgs - cachedHits),
+      imagesCached: statsRef.current.imagesCached + cachedHits,
+      tts: statsRef.current.tts + (precomputedAudio ? 0 : 1),
+    });
 
     const base = {
       id: plan.id,
