@@ -10,8 +10,8 @@ export type SceneKind = "image" | "stock" | "code";
 export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
 export interface ScenePlan {
   id: string;
-  sentence: string; // clean, for subtitles
-  narrationText: string; // v3-tagged, for TTS
+  sentence: string;
+  narrationText: string;
   subtitle: string;
   kind: SceneKind;
   imagePrompt?: string;
@@ -23,7 +23,7 @@ export interface ScenePlan {
   animation: "kenburns-in" | "kenburns-out" | "fade" | "slide-left";
 }
 
-// ---------- Plan + enhance a script (single LLM call) ----------
+// ---------- Plan + enhance a script ----------
 const PlanInput = z.object({ script: z.string().min(1).max(8000) });
 
 export const planScript = createServerFn({ method: "POST" })
@@ -50,30 +50,21 @@ STEP 2 — For each enhanced sentence, produce:
 - kind: one of
     "code"  — sentence is about code, syntax, an API, a function, a file.
     "image" — abstract concepts, ideas, metaphors, workflows.
-    "stock" — concrete real-world things (people, nature, cities, tech products).
-- If kind = "image": imagePrompt (short subject-only description, no style words).
+    "stock" — concrete real-world things (people, nature, cities, products).
+- If kind = "image": imagePrompt (short subject-only description, no style).
 - If kind = "stock": pexelsQuery (2–4 keywords).
 - If kind = "code":
-    code: a short realistic snippet (5–15 lines, no backticks, real syntax).
+    code: short realistic snippet (5–15 lines, real syntax, no backticks).
     codeLanguage: "ts" | "js" | "tsx" | "py" | "sh" | "json" | "html".
     codeVariant: one of
-      "typing" (types out char by char — best for introducing new code),
-      "morph"  (line-by-line diff to codeTo — best when comparing before/after),
-      "scroll" (scrolls a long file — best for showing a whole module),
-      "flight" (lines fly in from sides — best for punchy list-style code).
-    codeTo: REQUIRED only for "morph" — the target snippet to morph into.
+      "typing" (types out char by char — introducing new code),
+      "morph"  (line-by-line diff to codeTo — comparing before/after),
+      "scroll" (scrolls a long file — showing a whole module),
+      "flight" (lines fly in from sides — punchy list-style code).
+    codeTo: REQUIRED only for "morph".
 - subtitle: <= 8 words drawn from the sentence.
 
 Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
-  Use 1–3 tags per sentence, placed BEFORE the words they modify.
-  Also use ellipses (…) and commas to shape pacing. Do NOT invent new tags.
-- kind: "image" for abstract concepts, ideas, metaphors; "stock" for concrete
-  real-world things (people, nature, cities, food, animals, tech products).
-- imagePrompt (if image): short subject-only description (no style words).
-- pexelsQuery (if stock): 2–4 keywords for Pexels video search.
-- subtitle: <= 8 words drawn from the sentence.
-
-Return ONLY strict JSON: { "scenes": [ { sentence, narrationText, kind, imagePrompt?, pexelsQuery?, subtitle } ] }. No prose.`;
 
     const res = await fetch(`${AI_URL}/chat/completions`, {
       method: "POST",
@@ -110,9 +101,16 @@ Return ONLY strict JSON: { "scenes": [ { sentence, narrationText, kind, imagePro
     ];
 
     const scenes: ScenePlan[] = arr.slice(0, 40).map((meta: any, i: number) => {
-      const kind: SceneKind = meta?.kind === "stock" ? "stock" : "image";
+      const rawKind = meta?.kind;
+      const kind: SceneKind =
+        rawKind === "code" ? "code" : rawKind === "stock" ? "stock" : "image";
       const sentence = String(meta?.sentence ?? "").trim() || `Scene ${i + 1}`;
       const narrationText = String(meta?.narrationText ?? "").trim() || sentence;
+      const codeVariant: CodeVariant = ["typing", "morph", "scroll", "flight"].includes(
+        meta?.codeVariant,
+      )
+        ? meta.codeVariant
+        : "typing";
       return {
         id: `s${i}`,
         sentence,
@@ -124,6 +122,13 @@ Return ONLY strict JSON: { "scenes": [ { sentence, narrationText, kind, imagePro
           kind === "stock"
             ? String(meta?.pexelsQuery ?? sentence.split(" ").slice(0, 3).join(" "))
             : undefined,
+        code: kind === "code" ? String(meta?.code ?? "// code") : undefined,
+        codeTo:
+          kind === "code" && codeVariant === "morph"
+            ? String(meta?.codeTo ?? meta?.code ?? "")
+            : undefined,
+        codeLanguage: kind === "code" ? String(meta?.codeLanguage ?? "ts") : undefined,
+        codeVariant: kind === "code" ? codeVariant : undefined,
         animation: animations[i % animations.length],
       };
     });
