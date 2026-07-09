@@ -584,6 +584,24 @@ function Index() {
 
         {progress.length > 0 && (
           <section className="mt-10">
+            <div className="mb-3 rounded-md border bg-muted/40 p-3 text-xs">
+              <div className="mb-1 font-medium text-foreground">
+                Approx. credit usage this run
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+                <span>🖼 New images: <b className="text-foreground">{stats.imagesNew}</b> (~2 cr each)</span>
+                <span>♻ Cached images: <b className="text-foreground">{stats.imagesCached}</b> (free)</span>
+                <span>🎙 TTS clips: <b className="text-foreground">{stats.tts}</b></span>
+                <span>🧠 Plan: <b className="text-foreground">{stats.planSkipped ? "cached" : stats.plan}</b></span>
+                {mode === "audio" && (
+                  <span>📝 STT: <b className="text-foreground">{stats.sttSkipped ? "cached" : stats.stt}</b></span>
+                )}
+              </div>
+              <div className="mt-1.5 text-[11px] text-muted-foreground">
+                Estimated total: <b className="text-foreground">~{stats.imagesNew * 2 + stats.tts + stats.plan + stats.stt}</b> credits.
+                Re-running the same audio or script skips STT & planning; identical prompts reuse the image library — so a re-run is nearly free.
+              </div>
+            </div>
             <h2 className="mb-3 flex items-center justify-between text-sm font-medium text-muted-foreground">
               <span>Scenes ({progress.filter((p) => p.status === "ready").length}/{progress.length})</span>
               {totalCached > 0 && (
