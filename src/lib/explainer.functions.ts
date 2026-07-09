@@ -135,19 +135,43 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           { role: "user", content: data.script },
         ],
         response_format: { type: "json_object" },
+        max_tokens: 16000,
       }),
     });
     if (!res.ok) throw new Error(`Planner failed: ${res.status} ${await res.text()}`);
     const json = await res.json();
-    const raw = json.choices?.[0]?.message?.content ?? "{}";
-    let parsed: any;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      parsed = {};
+    const raw: string = json.choices?.[0]?.message?.content ?? "";
+    const finishReason = json.choices?.[0]?.finish_reason;
+    console.log("[planner] finish_reason:", finishReason, "len:", raw.length, "usage:", json.usage);
+
+    // Robust JSON extraction: strip markdown fences and try to close a
+    // truncated JSON array so a MAX_TOKENS cut-off still yields scenes.
+    const tryParse = (s: string): any => { try { return JSON.parse(s); } catch { return null; } };
+    let parsed: any = tryParse(raw);
+    if (!parsed) {
+      let cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+      const start = cleaned.search(/[\{\[]/);
+      if (start >= 0) cleaned = cleaned.slice(start);
+      parsed = tryParse(cleaned);
+      if (!parsed) {
+        // Truncated? Cut back to the last complete `}` inside the scenes array
+        // and close the array + object.
+        const lastObj = cleaned.lastIndexOf("}");
+        if (lastObj > 0) {
+          const trimmed = cleaned.slice(0, lastObj + 1) + "]}";
+          parsed = tryParse(trimmed);
+        }
+      }
+      if (!parsed) {
+        console.error("[planner] failed to parse raw output:", raw.slice(0, 800));
+        parsed = {};
+      }
     }
+
     let arr: any[] = Array.isArray(parsed) ? parsed : parsed.scenes ?? parsed.items ?? [];
     if (!arr.length) {
+      console.warn("[planner] empty scenes — falling back to sentence split. finish:", finishReason);
+
       // Fallback: split the script into sentences and make one image scene each
       // so we never hard-fail on a bad planner response.
       const sentences = data.script
