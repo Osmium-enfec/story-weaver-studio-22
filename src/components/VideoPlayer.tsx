@@ -170,8 +170,9 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const prevIndexRef = useRef(0);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [exportQuality, setExportQuality] = useState<RenderQuality | null>(null);
+  const [exportQuality, setExportQuality] = useState<ExportQuality | null>(null);
   const [exportProgress, setExportProgress] = useState(0);
+  const [exportStage, setExportStage] = useState("");
 
   const scene = scenes[index];
 
@@ -184,20 +185,25 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
     }));
   }, [scenes, masterMode]);
 
-  async function handleExport(quality: RenderQuality) {
+  async function handleExport(quality: ExportQuality) {
     if (exportQuality) return;
     setExportQuality(quality);
     setExportProgress(0);
+    setExportStage("starting…");
     try {
-      const blob = await renderVideo(scenes, quality, (p) => setExportProgress(p));
-      const label = quality === "hd" ? "1080p60" : "preview";
-      downloadBlob(blob, `explainer-${label}-${Date.now()}.webm`);
+      const blob = await exportToMp4(scenes, masterAudioUrl, quality, (stage, ratio) => {
+        setExportStage(stage);
+        setExportProgress(ratio);
+      });
+      const label = quality === "hd" ? "1080p60" : "720p30";
+      downloadBlob(blob, `explainer-${label}-${Date.now()}.mp4`);
     } catch (e) {
       console.error("Export failed", e);
       alert("Export failed: " + (e as Error).message);
     } finally {
       setExportQuality(null);
       setExportProgress(0);
+      setExportStage("");
     }
   }
 
