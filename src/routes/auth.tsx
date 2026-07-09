@@ -65,9 +65,8 @@ function AuthPage() {
       <div className="mx-auto max-w-md px-6 py-16">
         <div className="mb-6 text-center">
           <Sparkles className="mx-auto text-primary" size={28} />
-          <h1 className="mt-2 text-2xl font-bold">
-            {mode === "signin" ? "Welcome back" : "Create your account"}
-          </h1>
+          <h1 className="mt-2 text-2xl font-bold">Welcome back</h1>
+
           <p className="text-sm text-muted-foreground mt-1">
             Save projects and reuse AI-generated assets.
           </p>
