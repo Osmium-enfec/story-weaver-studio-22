@@ -304,12 +304,15 @@ function Index() {
       }
       plansRef.current = plans;
 
-      let preAudio: { urls: string[]; durations: number[] } | null = null;
+      // AUDIO MODE: compute snapped scene time windows on the ORIGINAL uploaded
+      // audio. We do NOT slice — the whole file plays as a single master track,
+      // and visuals switch at these timestamps.
+      let audioWindows: { startMs: number; endMs: number }[] | null = null;
+      let masterAudioUrl: string | null = null;
       if (mode === "audio" && sttWords && audioFile) {
         const ranges = alignSentences(plans.map((p) => p.sentence), sttWords);
-        const { audioUrls, durationsMs } = await sliceAudioIntoScenes(audioFile, ranges);
-        preAudio = { urls: audioUrls, durations: durationsMs };
-        precomputedAudioRef.current = preAudio;
+        audioWindows = await computeSnappedRangesMs(audioFile, ranges);
+        masterAudioUrl = URL.createObjectURL(audioFile);
       }
 
       const initial: SceneProgress[] = plans.map((p) => ({ ...p, status: "planning" }));
@@ -326,9 +329,15 @@ function Index() {
           if (i >= plans.length) return;
           const p = plans[i];
           try {
-            const precomputed = preAudio
-              ? { audioUrl: preAudio.urls[i], durationMs: preAudio.durations[i] }
-              : undefined;
+            // In audio mode, skip TTS: reuse the master audio URL as a
+            // placeholder and use the snapped window as the duration.
+            const precomputed =
+              audioWindows && masterAudioUrl
+                ? {
+                    audioUrl: masterAudioUrl,
+                    durationMs: audioWindows[i].endMs - audioWindows[i].startMs,
+                  }
+                : undefined;
             const s = await buildScene(p, precomputed);
             const { _cached, ...scene } = s as any;
             resultsArr[i] = scene;
@@ -353,6 +362,39 @@ function Index() {
 
       const ok = resultsArr.filter((r): r is Scene => r !== null).length;
       if (ok === 0) throw new Error("Every scene failed to generate.");
+
+      // ---------- Build the MASTER audio ----------
+      // Script mode: concatenate the per-sentence TTS clips into ONE track,
+      //              then attach shared masterAudioUrl + windows to each scene.
+      // Audio mode: masterAudioUrl already set to the uploaded file.
+      let finalMaster = masterAudioUrl;
+      let finalWindows = audioWindows;
+      if (!finalMaster && mode === "script") {
+        const readyOrdered = resultsArr.filter((r): r is Scene => r !== null);
+        try {
+          const concat = await concatAudioClips(readyOrdered.map((s) => s.audioUrl), 300);
+          finalMaster = concat.url;
+          // Map back to plan order (all plans succeeded → same order)
+          finalWindows = concat.ranges;
+        } catch (err) {
+          console.warn("Concat failed, falling back to per-scene audio:", err);
+        }
+      }
+      if (finalMaster && finalWindows) {
+        const merged: (Scene | null)[] = resultsArr.map((s, i) => {
+          if (!s) return null;
+          const w = finalWindows![i];
+          return {
+            ...s,
+            masterAudioUrl: finalMaster!,
+            startMs: w?.startMs ?? 0,
+            endMs: w?.endMs ?? (w?.startMs ?? 0) + s.durationMs,
+          };
+        });
+        resultsRef.current = merged;
+        setResults(merged);
+      }
+
       // Final autosave with all scenes settled.
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       persist(undefined, true);
@@ -362,6 +404,7 @@ function Index() {
       setRunning(false);
     }
   }
+
 
   async function handleRetry(i: number) {
     const plan = plansRef.current[i];
