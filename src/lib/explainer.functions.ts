@@ -370,7 +370,9 @@ export const generateNarration = createServerFn({ method: "POST" })
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            text: data.text,
+            // Trailing ellipsis gives ElevenLabs a natural ~600ms tail pause
+            // so the next scene doesn't start abruptly on top of speech.
+            text: data.text.replace(/[.!?…]*\s*$/, "") + " ... ",
             model_id: ELEVEN_MODEL,
             voice_settings: {
               stability: 0.5,
