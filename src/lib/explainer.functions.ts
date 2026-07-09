@@ -36,7 +36,7 @@ export const planScript = createServerFn({ method: "POST" })
 
     const sys = `You are a video director. For each sentence in an explainer video script, decide:
 - kind: "image" for abstract concepts, ideas, metaphors, or when no realistic footage would fit; "stock" for concrete real-world things (people, nature, cities, food, animals, tech products) that Pexels would have great footage of.
-- imagePrompt (if image): a concise prompt for a flat, minimal illustration on pure white background, single subject, editorial style.
+- imagePrompt (if image): describe the SUBJECT/SCENE only in one short sentence. Do NOT include style words — style is applied separately. E.g. "a laptop connected to a friendly robot with a chat bubble".
 - pexelsQuery (if stock): 2-4 keywords for Pexels video search.
 - subtitle: a short (<= 8 words) caption drawn from the sentence.
 Return ONLY a JSON array with items {index, kind, imagePrompt?, pexelsQuery?, subtitle}. No prose.`;
@@ -120,7 +120,7 @@ export const generateSceneImage = createServerFn({ method: "POST" })
         messages: [
           {
             role: "user",
-            content: `Flat minimal editorial illustration on a pure white background, single clear subject, soft muted colors, no text. Subject: ${data.prompt}`,
+            content: `Create a hand-drawn Excalidraw-inspired whiteboard illustration in 16:9. Bright pure white background with a soft light-gray rounded frame. Thick black sketch outlines, slightly imperfect hand-drawn shapes, pastel color fills, soft shadows, friendly rounded typography. Spacious layout with clear separation between elements, no overlapping arrows or text. Use color highlights: blue for tech/code, green for success, purple for technical terms, orange for tools/actions, red only for warnings. Playful educational icons (laptops, chat bubbles, robots, toolboxes, folders, charts, checkmarks, light bulbs, stars, arrows) where relevant. Minimal, large, readable text labels only. Premium classroom-doodle mood, beginner-friendly, suitable for voiceover animation.\n\nSubject: ${data.prompt}`,
           },
         ],
         modalities: ["image", "text"],
