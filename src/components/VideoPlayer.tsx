@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
-import { renderVideo, downloadBlob, type RenderQuality } from "@/lib/render-video";
+import { exportToMp4, downloadBlob, type ExportQuality } from "@/lib/ffmpeg-stitcher";
+
 
 export interface ResolvedElement extends CompositionElement {
   mediaUrl: string;
