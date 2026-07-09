@@ -61,17 +61,40 @@ const SAMPLE = `Every day, billions of people search the web for answers. But se
 
 type InputMode = "script" | "audio";
 
-// Convert blob:/http URL to data URL (for saving projects).
-async function urlToDataUrl(url: string): Promise<string> {
-  if (url.startsWith("data:")) return url;
+// Upload local (data:/blob:) URLs to storage; leave remote URLs untouched.
+// Returns a small public URL suitable for storing in the projects.scenes JSONB.
+async function toPortableUrl(url: string, userId: string, projectId: string, ext: string): Promise<string> {
+  if (!url) return url;
+  if (/^https?:\/\//.test(url)) return url; // already remote (stock, library)
   const res = await fetch(url);
   const blob = await res.blob();
-  return await new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = reject;
-    r.readAsDataURL(blob);
+  const path = `${userId}/${projectId}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from("project-assets").upload(path, blob, {
+    contentType: blob.type || undefined,
+    upsert: false,
   });
+  if (error) throw error;
+  const { data } = supabase.storage.from("project-assets").createSignedUrl
+    ? await supabase.storage.from("project-assets").createSignedUrl(path, 60 * 60 * 24 * 365 * 5)
+    : { data: null as any };
+  return data?.signedUrl ?? supabase.storage.from("project-assets").getPublicUrl(path).data.publicUrl;
+}
+
+function extFromUrl(url: string, fallback: string): string {
+  if (url.startsWith("data:")) {
+    const m = url.match(/^data:([^;]+)/);
+    if (m) {
+      const mime = m[1];
+      if (mime.includes("png")) return "png";
+      if (mime.includes("jpeg") || mime.includes("jpg")) return "jpg";
+      if (mime.includes("webp")) return "webp";
+      if (mime.includes("mpeg")) return "mp3";
+      if (mime.includes("wav")) return "wav";
+      if (mime.includes("webm")) return "webm";
+      if (mime.includes("ogg")) return "ogg";
+    }
+  }
+  return fallback;
 }
 
 function Index() {
@@ -85,6 +108,7 @@ function Index() {
   const plansRef = useRef<ScenePlan[]>([]);
   const precomputedAudioRef = useRef<{ urls: string[]; durations: number[] } | null>(null);
   const projectIdRef = useRef<string | null>(null);
+  const storageFolderRef = useRef<string | null>(null);
   const resultsRef = useRef<(Scene | null)[]>([]);
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [progress, setProgress] = useState<SceneProgress[]>([]);
@@ -374,6 +398,13 @@ function Index() {
     if (readyScenes.length === 0) return null;
     if (!silent) setSaving(true);
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Not signed in");
+      if (!storageFolderRef.current) storageFolderRef.current = crypto.randomUUID();
+      const pid = storageFolderRef.current;
+
+
       const title =
         (overrideTitle && overrideTitle.trim()) ||
         (projectTitle && projectTitle.trim()) ||
@@ -383,13 +414,15 @@ function Index() {
 
       const portable = await Promise.all(
         readyScenes.map(async (s) => {
-          const audioUrl = await urlToDataUrl(s.audioUrl);
+          const audioUrl = await toPortableUrl(s.audioUrl, userId, pid, extFromUrl(s.audioUrl, "mp3"));
           if (s.kind === "image") {
-            const backgroundUrl = s.backgroundUrl ? await urlToDataUrl(s.backgroundUrl) : undefined;
+            const backgroundUrl = s.backgroundUrl
+              ? await toPortableUrl(s.backgroundUrl, userId, pid, extFromUrl(s.backgroundUrl, "png"))
+              : undefined;
             const elements = await Promise.all(
               (s.elements ?? []).map(async (el) => ({
                 ...el,
-                mediaUrl: await urlToDataUrl(el.mediaUrl),
+                mediaUrl: await toPortableUrl(el.mediaUrl, userId, pid, extFromUrl(el.mediaUrl, "png")),
               })),
             );
             return { ...s, audioUrl, backgroundUrl, elements };
@@ -397,6 +430,7 @@ function Index() {
           return { ...s, audioUrl };
         }),
       );
+
 
       const firstImg = portable.find(
         (s): s is Scene & { backgroundUrl?: string } =>
