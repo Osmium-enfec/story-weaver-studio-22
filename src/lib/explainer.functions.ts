@@ -8,13 +8,34 @@ const ELEVEN_MODEL = "eleven_v3";
 // ---------- Types shared with client ----------
 export type SceneKind = "image" | "stock" | "code";
 export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
+export type ElementAnim = "pop" | "fade" | "slide-up" | "slide-left" | "slide-right";
+
+export interface CompositionElement {
+  id: string;
+  prompt: string;
+  /** center X, 0..1 across 16:9 canvas */
+  x: number;
+  /** center Y, 0..1 */
+  y: number;
+  /** width as fraction of canvas width, 0..1 */
+  w: number;
+  /** fraction of scene duration when element appears, 0..1 */
+  appearAt: number;
+  anim: ElementAnim;
+}
+
+export interface SceneComposition {
+  backgroundPrompt: string;
+  elements: CompositionElement[];
+}
+
 export interface ScenePlan {
   id: string;
   sentence: string;
   narrationText: string;
   subtitle: string;
   kind: SceneKind;
-  imagePrompt?: string;
+  composition?: SceneComposition; // for kind = "image"
   pexelsQuery?: string;
   code?: string;
   codeTo?: string;
@@ -39,7 +60,7 @@ STEP 1 — Enhance the script:
 - Keep the meaning and length roughly similar.
 - Split into 4–14 short, punchy sentences (each 6–20 words).
 
-STEP 2 — For each enhanced sentence, produce:
+STEP 2 — For each enhanced sentence, produce a scene object:
 - sentence: clean sentence (no audio tags, used for on-screen subtitle).
 - narrationText: same sentence enhanced for ElevenLabs v3 expressive TTS.
   Add inline audio tags in square brackets to shape delivery.
@@ -51,7 +72,22 @@ STEP 2 — For each enhanced sentence, produce:
     "code"  — sentence is about code, syntax, an API, a function, a file.
     "image" — abstract concepts, ideas, metaphors, workflows.
     "stock" — concrete real-world things (people, nature, cities, products).
-- If kind = "image": imagePrompt (short subject-only description, no style).
+- If kind = "image": composition object with:
+    backgroundPrompt: describe an EMPTY 16:9 whiteboard background scene
+      (soft pastel wash, subtle grid or dot texture, no foreground objects,
+      no text). Sets the mood.
+    elements: array of 2–5 items appearing one-by-one. Each element:
+      id: short slug ("rocket","chart","user").
+      prompt: single subject description (e.g. "a smiling cartoon rocket
+        with flames"), NO style words — style is added later. NO text/labels.
+      x: 0..1 center X on the canvas (0=left, 1=right).
+      y: 0..1 center Y (0=top, 1=bottom).
+      w: 0..1 width fraction (typical 0.18–0.35).
+      appearAt: 0..1 fraction of the scene duration when this element
+        appears. First element ~0.05, last element <= 0.75. Spread evenly.
+      anim: one of "pop","fade","slide-up","slide-left","slide-right".
+    IMPORTANT: distribute elements across the canvas — don't overlap.
+    Use a mental grid: left/center/right, top/middle/bottom.
 - If kind = "stock": pexelsQuery (2–4 keywords).
 - If kind = "code":
     code: short realistic snippet (5–15 lines, real syntax, no backticks).
@@ -100,6 +136,12 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       "slide-left",
     ];
 
+    const clamp = (v: any, lo: number, hi: number, dflt: number) => {
+      const n = Number(v);
+      if (!isFinite(n)) return dflt;
+      return Math.max(lo, Math.min(hi, n));
+    };
+
     const scenes: ScenePlan[] = arr.slice(0, 40).map((meta: any, i: number) => {
       const rawKind = meta?.kind;
       const kind: SceneKind =
@@ -111,13 +153,58 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       )
         ? meta.codeVariant
         : "typing";
+
+      let composition: SceneComposition | undefined;
+      if (kind === "image") {
+        const rawEls: any[] = Array.isArray(meta?.composition?.elements)
+          ? meta.composition.elements
+          : [];
+        const validAnims: ElementAnim[] = [
+          "pop",
+          "fade",
+          "slide-up",
+          "slide-left",
+          "slide-right",
+        ];
+        const elements: CompositionElement[] = rawEls
+          .slice(0, 6)
+          .map((el: any, ei: number) => ({
+            id: String(el?.id ?? `el${ei}`).slice(0, 24),
+            prompt: String(el?.prompt ?? sentence).slice(0, 200),
+            x: clamp(el?.x, 0.05, 0.95, 0.2 + (ei * 0.6) / Math.max(1, rawEls.length - 1)),
+            y: clamp(el?.y, 0.1, 0.9, 0.5),
+            w: clamp(el?.w, 0.1, 0.5, 0.25),
+            appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
+            anim: validAnims.includes(el?.anim) ? el.anim : "pop",
+          }));
+        composition = {
+          backgroundPrompt: String(
+            meta?.composition?.backgroundPrompt ??
+              `soft pastel whiteboard background for: ${sentence}`,
+          ).slice(0, 300),
+          elements: elements.length
+            ? elements
+            : [
+                {
+                  id: "main",
+                  prompt: sentence,
+                  x: 0.5,
+                  y: 0.5,
+                  w: 0.35,
+                  appearAt: 0.05,
+                  anim: "pop",
+                },
+              ],
+        };
+      }
+
       return {
         id: `s${i}`,
         sentence,
         narrationText,
         subtitle: String(meta?.subtitle ?? "").trim() || sentence.slice(0, 60),
         kind,
-        imagePrompt: kind === "image" ? String(meta?.imagePrompt ?? sentence) : undefined,
+        composition,
         pexelsQuery:
           kind === "stock"
             ? String(meta?.pexelsQuery ?? sentence.split(" ").slice(0, 3).join(" "))
@@ -136,14 +223,16 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
     return { scenes };
   });
 
-// ---------- Generate image (Gemini via gateway) ----------
-const ImgInput = z.object({ prompt: z.string().min(1) });
+// ---------- Generate one composited BACKGROUND (16:9, empty scene) ----------
+const BgInput = z.object({ prompt: z.string().min(1) });
 
-export const generateSceneImage = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => ImgInput.parse(d))
+export const generateSceneBackground = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => BgInput.parse(d))
   .handler(async ({ data }) => {
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("LOVABLE_API_KEY missing");
+
+    const styled = `Empty 16:9 widescreen hand-drawn Excalidraw-style whiteboard background. Very light pastel wash (soft cream, mint, sky-blue, or lavender), subtle dotted or faint grid texture, gentle vignette. NO foreground objects, NO characters, NO icons, NO text, NO arrows — background only. Wide landscape composition. Mood context: ${data.prompt}`;
 
     const res = await fetch(`${AI_URL}/images/generations`, {
       method: "POST",
@@ -153,19 +242,46 @@ export const generateSceneImage = createServerFn({ method: "POST" })
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        messages: [
-          {
-            role: "user",
-            content: `Create a hand-drawn Excalidraw-inspired whiteboard illustration in 16:9. Bright pure white background with a soft light-gray rounded frame. Thick black sketch outlines, slightly imperfect hand-drawn shapes, pastel color fills, soft shadows, friendly rounded typography. Spacious layout with clear separation between elements, no overlapping arrows or text. Use color highlights: blue for tech/code, green for success, purple for technical terms, orange for tools/actions, red only for warnings. Playful educational icons (laptops, chat bubbles, robots, toolboxes, folders, charts, checkmarks, light bulbs, stars, arrows) where relevant. Minimal, large, readable text labels only. Premium classroom-doodle mood, beginner-friendly, suitable for voiceover animation.\n\nSubject: ${data.prompt}`,
-          },
-        ],
+        messages: [{ role: "user", content: styled }],
         modalities: ["image", "text"],
       }),
     });
-    if (!res.ok) throw new Error(`Image failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw new Error(`Background failed: ${res.status} ${await res.text()}`);
     const json = await res.json();
     const b64 = json.data?.[0]?.b64_json;
-    if (!b64) throw new Error("No image returned");
+    if (!b64) throw new Error("No background image returned");
+    return { dataUrl: `data:image/png;base64,${b64}` };
+  });
+
+// ---------- Generate a single ELEMENT (isolated on pure white, for multiply blend) ----------
+const ElInput = z.object({ prompt: z.string().min(1) });
+
+export const generateSceneElement = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => ElInput.parse(d))
+  .handler(async ({ data }) => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("LOVABLE_API_KEY missing");
+
+    const styled = `A SINGLE isolated hand-drawn Excalidraw-style illustration of: ${data.prompt}.
+Thick black sketch outlines, slightly imperfect hand-drawn shapes, pastel color fills, soft shadows. Playful, friendly, educational.
+CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous padding on all sides. Absolutely no other elements, no background scenery, no text, no labels, no borders, no frame. Square framing. Just the subject on white.`;
+
+    const res = await fetch(`${AI_URL}/images/generations`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content: styled }],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (!res.ok) throw new Error(`Element failed: ${res.status} ${await res.text()}`);
+    const json = await res.json();
+    const b64 = json.data?.[0]?.b64_json;
+    if (!b64) throw new Error("No element image returned");
     return { dataUrl: `data:image/png;base64,${b64}` };
   });
 
@@ -237,7 +353,6 @@ export const generateNarration = createServerFn({ method: "POST" })
         throw new Error(`TTS failed: ${res.status} ${lastErr}`);
       }
       lastErr = await res.text();
-      // Exponential backoff with jitter for 429 / 5xx
       const delay = Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 400;
       await new Promise((r) => setTimeout(r, delay));
     }

@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Play, Pause, RotateCcw } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
+import type { CompositionElement } from "@/lib/explainer.functions";
+
+export interface ResolvedElement extends CompositionElement {
+  mediaUrl: string;
+}
 
 export interface Scene {
   id: string;
   subtitle: string;
   kind: "image" | "stock" | "code";
+  /** stock: video URL */
   mediaUrl?: string;
+  /** image: composited background + elements */
+  backgroundUrl?: string;
+  elements?: ResolvedElement[];
   audioUrl: string;
   durationMs: number;
   animation: "kenburns-in" | "kenburns-out" | "fade" | "slide-left";
@@ -16,14 +25,149 @@ export interface Scene {
   codeVariant?: CodeVariant;
 }
 
+/** Renders a single image scene: background + elements revealed one-by-one. */
+function ImageScene({
+  scene,
+  progress,
+}: {
+  scene: Scene;
+  progress: number;
+}) {
+  const t = progress;
+  const bgStyle: React.CSSProperties =
+    scene.animation === "kenburns-in"
+      ? { transform: `scale(${1 + 0.08 * t})` }
+      : scene.animation === "kenburns-out"
+        ? { transform: `scale(${1.08 - 0.08 * t})` }
+        : scene.animation === "slide-left"
+          ? { transform: `translateX(${(0.5 - t) * 20}px) scale(1.04)` }
+          : { transform: "scale(1.02)" };
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-white">
+      {scene.backgroundUrl && (
+        <img
+          src={scene.backgroundUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-100 ease-linear"
+          style={bgStyle}
+        />
+      )}
+      {scene.elements?.map((el) => {
+        const shown = t >= el.appearAt;
+        // Local progress since element appeared, 0..1 across ~450ms window (approx via scene duration)
+        const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
+        const p = shown ? Math.min(1, (t - el.appearAt) / revealWindow) : 0;
+        const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+
+        let transform = "";
+        let opacity = eased;
+        switch (el.anim) {
+          case "pop":
+            transform = `scale(${0.6 + 0.4 * eased})`;
+            break;
+          case "fade":
+            transform = "scale(1)";
+            break;
+          case "slide-up":
+            transform = `translateY(${(1 - eased) * 40}px)`;
+            break;
+          case "slide-left":
+            transform = `translateX(${(1 - eased) * -60}px)`;
+            break;
+          case "slide-right":
+            transform = `translateX(${(1 - eased) * 60}px)`;
+            break;
+        }
+
+        return (
+          <img
+            key={el.id}
+            src={el.mediaUrl}
+            alt=""
+            className="absolute select-none"
+            style={{
+              left: `${el.x * 100}%`,
+              top: `${el.y * 100}%`,
+              width: `${el.w * 100}%`,
+              transform: `translate(-50%, -50%) ${transform}`,
+              transformOrigin: "center center",
+              opacity,
+              mixBlendMode: "multiply",
+              transition: "none",
+              pointerEvents: "none",
+            }}
+            draggable={false}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function SceneStage({
+  scene,
+  progress,
+  videoRef,
+}: {
+  scene: Scene;
+  progress: number;
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
+}) {
+  if (scene.kind === "code") {
+    return (
+      <CodeScene
+        code={scene.code ?? ""}
+        codeTo={scene.codeTo}
+        language={scene.codeLanguage}
+        variant={scene.codeVariant ?? "typing"}
+        progress={progress}
+      />
+    );
+  }
+  if (scene.kind === "image") {
+    return <ImageScene scene={scene} progress={progress} />;
+  }
+  return (
+    <video
+      ref={videoRef}
+      src={scene.mediaUrl}
+      muted
+      playsInline
+      className="h-full w-full object-cover"
+    />
+  );
+}
+
 export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [prevScene, setPrevScene] = useState<Scene | null>(null);
+  const [transitioning, setTransitioning] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const prevIndexRef = useRef(0);
 
   const scene = scenes[index];
+
+  // Scene change: snapshot the previous scene for a 400ms crossfade.
+  useEffect(() => {
+    if (prevIndexRef.current !== index) {
+      const p = scenes[prevIndexRef.current];
+      if (p) {
+        setPrevScene(p);
+        setTransitioning(true);
+        const t = setTimeout(() => {
+          setTransitioning(false);
+          setPrevScene(null);
+        }, 400);
+        prevIndexRef.current = index;
+        return () => clearTimeout(t);
+      }
+      prevIndexRef.current = index;
+    }
+  }, [index, scenes]);
 
   useEffect(() => {
     setProgress(0);
@@ -70,53 +214,35 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
 
   if (!scene) return null;
 
-  const t = progress;
-  const kenIn = { transform: `scale(${1 + 0.15 * t})`, opacity: 1 };
-  const kenOut = { transform: `scale(${1.15 - 0.15 * t})`, opacity: 1 };
-  const fade = {
-    opacity: t < 0.1 ? t / 0.1 : t > 0.9 ? (1 - t) / 0.1 : 1,
-    transform: "scale(1)",
-  };
-  const slide = { transform: `translateX(${(0.5 - t) * 40}px) scale(1.05)`, opacity: 1 };
-  const style =
-    scene.animation === "kenburns-in"
-      ? kenIn
-      : scene.animation === "kenburns-out"
-        ? kenOut
-        : scene.animation === "slide-left"
-          ? slide
-          : fade;
-
   return (
     <div className="w-full">
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border bg-white shadow-sm">
-        <div className="absolute inset-0 flex items-center justify-center">
-          {scene.kind === "code" ? (
-            <CodeScene
-              code={scene.code ?? ""}
-              codeTo={scene.codeTo}
-              language={scene.codeLanguage}
-              variant={scene.codeVariant ?? "typing"}
-              progress={progress}
-            />
-          ) : scene.kind === "image" ? (
-            <img
-              src={scene.mediaUrl}
-              alt=""
-              className="h-full w-full object-contain transition-transform"
-              style={{ ...style, transitionDuration: "80ms" }}
-            />
-          ) : (
-            <video
-              ref={videoRef}
-              src={scene.mediaUrl}
-              muted
-              playsInline
-              className="h-full w-full object-cover"
-            />
-          )}
+        {/* Previous scene sits underneath and fades out */}
+        {prevScene && (
+          <div
+            key={`prev-${prevScene.id}`}
+            className="absolute inset-0"
+            style={{
+              opacity: transitioning ? 0 : 1,
+              transition: "opacity 400ms ease-out",
+            }}
+          >
+            <SceneStage scene={prevScene} progress={1} />
+          </div>
+        )}
+        {/* Current scene fades in on top */}
+        <div
+          key={`cur-${scene.id}`}
+          className="absolute inset-0"
+          style={{
+            opacity: transitioning ? 0 : 1,
+            animation: "sceneIn 400ms ease-out both",
+          }}
+        >
+          <SceneStage scene={scene} progress={progress} videoRef={videoRef} />
         </div>
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-6">
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-6">
           <p className="text-center text-lg font-medium text-white drop-shadow">
             {scene.subtitle}
           </p>
@@ -171,6 +297,13 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes sceneIn {
+          from { opacity: 0; transform: scale(1.02); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }
