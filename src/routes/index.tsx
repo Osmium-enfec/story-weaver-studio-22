@@ -239,6 +239,7 @@ function Index() {
       const initial: SceneProgress[] = plans.map((p) => ({ ...p, status: "planning" }));
       setProgress(initial);
       const resultsArr: (Scene | null)[] = new Array(plans.length).fill(null);
+      resultsRef.current = resultsArr;
       setResults([...resultsArr]);
 
       const CONCURRENCY = 3;
@@ -255,12 +256,14 @@ function Index() {
             const s = await buildScene(p, precomputed);
             const { _cached, ...scene } = s as any;
             resultsArr[i] = scene;
+            resultsRef.current = resultsArr;
             setResults([...resultsArr]);
             setProgress((prev) => {
               const next = [...prev];
               next[i] = { ...next[i], status: "ready", mediaUrl: scene.mediaUrl, audioUrl: scene.audioUrl, cached: _cached };
               return next;
             });
+            scheduleAutoSave();
           } catch (e: any) {
             setProgress((prev) => {
               const next = [...prev];
@@ -274,6 +277,9 @@ function Index() {
 
       const ok = resultsArr.filter((r): r is Scene => r !== null).length;
       if (ok === 0) throw new Error("Every scene failed to generate.");
+      // Final autosave with all scenes settled.
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      persist(undefined, true);
     } catch (e: any) {
       setTopError(e?.message || "Something went wrong.");
     } finally {
