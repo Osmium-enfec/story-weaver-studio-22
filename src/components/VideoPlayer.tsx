@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, RotateCcw } from "lucide-react";
+import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
+import { renderVideo, downloadBlob, type RenderQuality } from "@/lib/render-video";
 
 export interface ResolvedElement extends CompositionElement {
   mediaUrl: string;
@@ -54,6 +55,7 @@ function ImageScene({
         />
       )}
       {scene.elements?.map((el) => {
+        const single = (scene.elements?.length ?? 0) === 1;
         const shown = t >= el.appearAt;
         // Local progress since element appeared, 0..1 across ~450ms window (approx via scene duration)
         const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
@@ -80,6 +82,12 @@ function ImageScene({
             break;
         }
 
+        // Single-element scenes look empty at the planner's default width.
+        // Boost the element to fill the canvas centre.
+        const width = single ? Math.max(0.6, el.w * 2.2) : el.w;
+        const leftPct = single ? 50 : el.x * 100;
+        const topPct = single ? 50 : el.y * 100;
+
         return (
           <img
             key={el.id}
@@ -87,9 +95,9 @@ function ImageScene({
             alt=""
             className="absolute select-none"
             style={{
-              left: `${el.x * 100}%`,
-              top: `${el.y * 100}%`,
-              width: `${el.w * 100}%`,
+              left: `${leftPct}%`,
+              top: `${topPct}%`,
+              width: `${width * 100}%`,
               transform: `translate(-50%, -50%) ${transform}`,
               transformOrigin: "center center",
               opacity,
@@ -158,6 +166,25 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const prevIndexRef = useRef(0);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [exportQuality, setExportQuality] = useState<RenderQuality | null>(null);
+  const [exportProgress, setExportProgress] = useState(0);
+
+  async function handleExport(quality: RenderQuality) {
+    if (exportQuality) return;
+    setExportQuality(quality);
+    setExportProgress(0);
+    try {
+      const blob = await renderVideo(scenes, quality, (p) => setExportProgress(p));
+      const label = quality === "hd" ? "1080p60" : "preview";
+      downloadBlob(blob, `explainer-${label}-${Date.now()}.webm`);
+    } catch (e) {
+      console.error("Export failed", e);
+      alert("Export failed: " + (e as Error).message);
+    } finally {
+      setExportQuality(null);
+      setExportProgress(0);
+    }
+  }
 
   const scene = scenes[index];
 
@@ -322,6 +349,45 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
             Scene {index + 1} / {scenes.length}
           </div>
         </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+        <span className="mr-1 text-xs font-medium text-muted-foreground">Download:</span>
+        <button
+          onClick={() => handleExport("preview")}
+          disabled={!!exportQuality}
+          className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {exportQuality === "preview" ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Download size={12} />
+          )}
+          Current quality (720p 30fps)
+        </button>
+        <button
+          onClick={() => handleExport("hd")}
+          disabled={!!exportQuality}
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {exportQuality === "hd" ? (
+            <Loader2 size={12} className="animate-spin" />
+          ) : (
+            <Download size={12} />
+          )}
+          HD (1080p 60fps)
+        </button>
+        {exportQuality && (
+          <div className="ml-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="h-1.5 w-32 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full bg-primary transition-[width]"
+                style={{ width: `${Math.round(exportProgress * 100)}%` }}
+              />
+            </div>
+            {Math.round(exportProgress * 100)}% — recording in real time
+          </div>
+        )}
       </div>
 
       <style>{`
