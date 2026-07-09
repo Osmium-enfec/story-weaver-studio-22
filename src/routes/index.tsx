@@ -400,8 +400,9 @@ function Index() {
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData.user?.id;
       if (!userId) throw new Error("Not signed in");
-      const pid = projectIdRef.current ?? crypto.randomUUID();
-      projectIdRef.current = pid;
+      if (!storageFolderRef.current) storageFolderRef.current = crypto.randomUUID();
+      const pid = storageFolderRef.current;
+
 
       const title =
         (overrideTitle && overrideTitle.trim()) ||
