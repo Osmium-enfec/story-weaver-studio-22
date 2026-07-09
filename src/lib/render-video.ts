@@ -1,4 +1,5 @@
 import type { Scene } from "@/components/VideoPlayer";
+import fixWebmDuration from "fix-webm-duration";
 
 export type RenderQuality = "preview" | "hd";
 
