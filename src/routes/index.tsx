@@ -76,12 +76,16 @@ function Index() {
 
   const plansRef = useRef<ScenePlan[]>([]);
   const precomputedAudioRef = useRef<{ urls: string[]; durations: number[] } | null>(null);
+  const projectIdRef = useRef<string | null>(null);
+  const resultsRef = useRef<(Scene | null)[]>([]);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [progress, setProgress] = useState<SceneProgress[]>([]);
   const [results, setResults] = useState<(Scene | null)[]>([]);
   const [topError, setTopError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [projectTitle, setProjectTitle] = useState<string>("");
 
   // ---------- Build one scene ----------
   async function buildScene(
@@ -189,6 +193,9 @@ function Index() {
     setTopError(null);
     setSaveMsg(null);
     setResults([]);
+    resultsRef.current = [];
+    projectIdRef.current = null;
+    setProjectTitle("");
     setProgress([]);
     plansRef.current = [];
     precomputedAudioRef.current = null;
@@ -232,6 +239,7 @@ function Index() {
       const initial: SceneProgress[] = plans.map((p) => ({ ...p, status: "planning" }));
       setProgress(initial);
       const resultsArr: (Scene | null)[] = new Array(plans.length).fill(null);
+      resultsRef.current = resultsArr;
       setResults([...resultsArr]);
 
       const CONCURRENCY = 3;
@@ -248,12 +256,14 @@ function Index() {
             const s = await buildScene(p, precomputed);
             const { _cached, ...scene } = s as any;
             resultsArr[i] = scene;
+            resultsRef.current = resultsArr;
             setResults([...resultsArr]);
             setProgress((prev) => {
               const next = [...prev];
               next[i] = { ...next[i], status: "ready", mediaUrl: scene.mediaUrl, audioUrl: scene.audioUrl, cached: _cached };
               return next;
             });
+            scheduleAutoSave();
           } catch (e: any) {
             setProgress((prev) => {
               const next = [...prev];
@@ -267,6 +277,9 @@ function Index() {
 
       const ok = resultsArr.filter((r): r is Scene => r !== null).length;
       if (ok === 0) throw new Error("Every scene failed to generate.");
+      // Final autosave with all scenes settled.
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      persist(undefined, true);
     } catch (e: any) {
       setTopError(e?.message || "Something went wrong.");
     } finally {
@@ -289,7 +302,8 @@ function Index() {
         : undefined;
       const s = await buildScene(plan, precomputed);
       const { _cached, ...scene } = s as any;
-      setResults((prev) => { const n = [...prev]; n[i] = scene; return n; });
+      setResults((prev) => { const n = [...prev]; n[i] = scene; resultsRef.current = n; return n; });
+      scheduleAutoSave();
       setProgress((prev) => {
         const next = [...prev];
         next[i] = { ...next[i], status: "ready", mediaUrl: scene.mediaUrl, audioUrl: scene.audioUrl, cached: _cached };
@@ -304,22 +318,23 @@ function Index() {
     }
   }
 
-  async function handleSave() {
-    setSaving(true);
-    setSaveMsg(null);
+  async function persist(overrideTitle?: string, silent = false): Promise<string | null> {
+    const readyScenes = resultsRef.current.filter((s): s is Scene => s !== null);
+    if (readyScenes.length === 0) return null;
+    if (!silent) setSaving(true);
     try {
-      const title = prompt("Name this project:", "Untitled explainer");
-      if (!title) { setSaving(false); return; }
+      const title =
+        overrideTitle ??
+        projectTitle ??
+        (mode === "script"
+          ? script.trim().split(/\s+/).slice(0, 8).join(" ") || "Untitled explainer"
+          : audioFile?.name.replace(/\.[^.]+$/, "") || "Untitled explainer");
 
-      // Inline any blob: URLs to data URLs so the project is portable.
-      const readyScenes = results.filter((s): s is Scene => s !== null);
       const portable = await Promise.all(
         readyScenes.map(async (s) => {
           const audioUrl = await urlToDataUrl(s.audioUrl);
           if (s.kind === "image") {
-            const backgroundUrl = s.backgroundUrl
-              ? await urlToDataUrl(s.backgroundUrl)
-              : undefined;
+            const backgroundUrl = s.backgroundUrl ? await urlToDataUrl(s.backgroundUrl) : undefined;
             const elements = await Promise.all(
               (s.elements ?? []).map(async (el) => ({
                 ...el,
@@ -340,6 +355,7 @@ function Index() {
 
       const { id } = await saveProject({
         data: {
+          id: projectIdRef.current ?? undefined,
           title,
           script: mode === "script" ? script : undefined,
           audio_mode: mode === "script" ? "tts" : "upload",
@@ -347,13 +363,29 @@ function Index() {
           thumbnail_url,
         },
       });
-      setSaveMsg("Saved!");
-      setTimeout(() => navigate({ to: "/project/$id", params: { id } }), 500);
+      projectIdRef.current = id;
+      setProjectTitle(title);
+      setSaveMsg(silent ? `Auto-saved · ${new Date().toLocaleTimeString()}` : "Saved!");
+      return id;
     } catch (e: any) {
       setSaveMsg(`Save failed: ${e?.message || e}`);
+      return null;
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
     }
+  }
+
+  function scheduleAutoSave() {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      persist(undefined, true);
+    }, 1500);
+  }
+
+  async function handleRename() {
+    const t = prompt("Rename project:", projectTitle || "Untitled explainer");
+    if (!t) return;
+    await persist(t, false);
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -551,16 +583,18 @@ function Index() {
         {scenes.length > 0 && !running && (
           <section className="mt-10">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-medium text-muted-foreground">Your video</h2>
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Your video {projectTitle && <span className="ml-2 text-foreground">· {projectTitle}</span>}
+              </h2>
               <div className="flex items-center gap-2">
                 {saveMsg && <span className="text-xs text-muted-foreground">{saveMsg}</span>}
                 <button
-                  onClick={handleSave}
+                  onClick={handleRename}
                   disabled={saving}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-accent disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                  Save project
+                  Rename & save
                 </button>
               </div>
             </div>
