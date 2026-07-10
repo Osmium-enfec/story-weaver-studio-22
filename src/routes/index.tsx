@@ -12,9 +12,10 @@ import {
 import {
   planScript,
   generateNarration,
+  generateSceneComposite,
   type ScenePlan,
 } from "@/lib/explainer.functions";
-import { findOrGenerateImage } from "@/lib/image-library.functions";
+import { cropAndClear } from "@/lib/crop-composite";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import type { SceneBackground } from "@/lib/scene-background";
