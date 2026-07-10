@@ -766,7 +766,10 @@ function Index() {
   );
 }
 
+import bgLoopAsset from "@/assets/bg-loop.mp4.asset.json";
+
 const BG_PRESETS: { label: string; bg: SceneBackground }[] = [
+  { label: "Video Loop", bg: { kind: "video", url: bgLoopAsset.url } },
   { label: "Whiteboard", bg: { kind: "whiteboard" } },
   { label: "Sky", bg: { kind: "solid", color: "#e0f2fe" } },
   { label: "Mint", bg: { kind: "solid", color: "#dcfce7" } },
