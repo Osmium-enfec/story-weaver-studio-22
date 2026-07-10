@@ -92,8 +92,14 @@ STEP 2 — For each sentence, produce a scene object:
 - sentence: clean sentence (no audio tags, used for on-screen subtitle).
 ${narrationRule}
 - kind: one of
-    "code"  — sentence is about code, syntax, an API, a function, a file.
-    "image" — everything else. Use AI-generated illustrations, never stock footage.
+    "code"  — ONLY when the sentence explicitly discusses source code,
+      programming syntax, a specific function/method name, a file path,
+      a shell command, or a code snippet the viewer should read. Marketing
+      or general-audience sentences (e.g. "billions search the web",
+      "the future is here", "AI understands you") are NEVER code — use
+      "image" for those. When in doubt, choose "image".
+    "image" — the default for all narrative, marketing, explanatory, or
+      general-audience sentences. Use AI-generated illustrations.
 - If kind = "image": composition object with:
     backgroundPrompt: short mood/setting description of the scene
       (e.g. "workflow diagram about data processing"). Used only to steer
