@@ -221,8 +221,8 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
 
     const scenes: ScenePlan[] = arr.slice(0, 40).map((meta: any, i: number) => {
       const rawKind = meta?.kind;
-      const kind: SceneKind =
-        rawKind === "code" ? "code" : rawKind === "stock" ? "stock" : "image";
+      // Only "image" and "code" now — legacy "stock" plans fall back to image.
+      const kind: SceneKind = rawKind === "code" ? "code" : "image";
       const sentence = String(meta?.sentence ?? "").trim() || `Scene ${i + 1}`;
       const narrationText = String(meta?.narrationText ?? "").trim() || sentence;
       const codeVariant: CodeVariant = ["typing", "morph", "scroll", "flight"].includes(
@@ -243,21 +243,20 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           "slide-left",
           "slide-right",
         ];
+        // x/y/w are overridden by the grid layout on the client, but we still
+        // fill them so the type stays satisfied and legacy consumers work.
         const elements: CompositionElement[] = rawEls
           .slice(0, 6)
           .map((el: any, ei: number) => ({
             id: String(el?.id ?? `el${ei}`).slice(0, 24),
             prompt: String(el?.prompt ?? sentence).slice(0, 200),
             label: el?.label ? String(el.label).slice(0, 40) : undefined,
-            x: clamp(el?.x, 0.05, 0.95, 0.2 + (ei * 0.6) / Math.max(1, rawEls.length - 1)),
-            y: clamp(el?.y, 0.3, 0.75, 0.5),
-            w: clamp(el?.w, 0.1, 0.5, 0.22),
+            x: 0.5,
+            y: 0.55,
+            w: 0.22,
             appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
             anim: validAnims.includes(el?.anim) ? el.anim : "pop",
           }));
-        const validColors: PillColor[] = ["green", "blue", "yellow", "purple", "orange", "pink"];
-        const rawTitleColor = meta?.composition?.titleColor;
-        const rawFlow = meta?.composition?.flowSteps;
         composition = {
           backgroundPrompt: String(
             meta?.composition?.backgroundPrompt ??
@@ -265,14 +264,7 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           ).slice(0, 300),
           title: meta?.composition?.title
             ? String(meta.composition.title).slice(0, 60)
-            : undefined,
-          titleColor: validColors.includes(rawTitleColor) ? rawTitleColor : "blue",
-          flowSteps: Array.isArray(rawFlow)
-            ? rawFlow.slice(0, 5).map((s: any) => String(s).slice(0, 24)).filter(Boolean)
-            : undefined,
-          footerMessage: meta?.composition?.footerMessage
-            ? String(meta.composition.footerMessage).slice(0, 120)
-            : undefined,
+            : sentence.split(/\s+/).slice(0, 4).join(" "),
           elements: elements.length
             ? elements
             : [
@@ -296,10 +288,6 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         subtitle: String(meta?.subtitle ?? "").trim() || sentence.slice(0, 60),
         kind,
         composition,
-        pexelsQuery:
-          kind === "stock"
-            ? String(meta?.pexelsQuery ?? sentence.split(" ").slice(0, 3).join(" "))
-            : undefined,
         code:
           kind === "code"
             ? normalizeCode(meta?.code) ||
