@@ -3,6 +3,28 @@
 // ffmpeg rasterizer can share the same drawing code.
 
 import type { Scene } from "@/components/VideoPlayer";
+import {
+  CARD_PADDING_FRAC,
+  DEFAULT_BACKGROUND,
+  backgroundToCanvasFill,
+  type SceneBackground,
+} from "./scene-background";
+
+export interface DrawOptions {
+  background?: SceneBackground;
+  transparent?: Map<string, HTMLImageElement>;
+}
+
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 
 export function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
