@@ -18,6 +18,7 @@ import { findOrGenerateImage } from "@/lib/image-library.functions";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import type { SceneBackground } from "@/lib/scene-background";
+import bgLoopAsset from "@/assets/bg-loop.mp4.asset.json";
 
 import {
   alignSentences,
