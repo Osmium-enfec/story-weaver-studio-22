@@ -3,14 +3,16 @@ import { useCallback, useRef, useState } from "react";
 
 // Layout applied to the source image. Each entry crops a rectangle from
 // the source in fractions of image width/height (x/y = top-left).
+// These normalized boxes match the 1 px margin-applied safe boxes on a
+// 1600 × 900 px canvas.
 const SLICE_LAYOUT: Array<{ label: string; x: number; y: number; w: number; h: number }> = [
-  { label: "Header (80×15)",    x: 0.10, y: 0.00, w: 0.80, h: 0.15 },
-  { label: "Subheader (60×10)", x: 0.20, y: 0.15, w: 0.60, h: 0.10 },
-  { label: "Col 1 (23×65)",     x: 0.04, y: 0.25, w: 0.23, h: 0.65 },
-  { label: "Col 2 (23×65)",     x: 0.27, y: 0.25, w: 0.23, h: 0.65 },
-  { label: "Col 3 (23×65)",     x: 0.50, y: 0.25, w: 0.23, h: 0.65 },
-  { label: "Col 4 (23×65)",     x: 0.73, y: 0.25, w: 0.23, h: 0.65 },
-  { label: "Footer (80×10)",    x: 0.10, y: 0.90, w: 0.80, h: 0.10 },
+  { label: "Main title banner",  x: 161 / 1600, y: 36 / 900,  w: 1278 / 1600, h: 133 / 900 },
+  { label: "Subtitle",           x: 321 / 1600, y: 186 / 900, w: 958 / 1600,  h: 88 / 900 },
+  { label: "Option A card",      x: 41 / 1600,  y: 301 / 900, w: 366 / 1600,  h: 453 / 900 },
+  { label: "Option B card",      x: 425 / 1600, y: 301 / 900, w: 366 / 1600,  h: 453 / 900 },
+  { label: "Option C card",      x: 809 / 1600, y: 301 / 900, w: 366 / 1600,  h: 453 / 900 },
+  { label: "Option D card",      x: 1193 / 1600, y: 301 / 900, w: 366 / 1600, h: 453 / 900 },
+  { label: "Bottom answer banner", x: 161 / 1600, y: 781 / 900, w: 1278 / 1600, h: 88 / 900 },
 ];
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
