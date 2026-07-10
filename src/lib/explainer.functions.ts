@@ -267,17 +267,31 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           .map((el: any, ei: number) => ({
             id: String(el?.id ?? `el${ei}`).slice(0, 24),
             prompt: String(el?.prompt ?? sentence).slice(0, 200),
+            label: el?.label ? String(el.label).slice(0, 40) : undefined,
             x: clamp(el?.x, 0.05, 0.95, 0.2 + (ei * 0.6) / Math.max(1, rawEls.length - 1)),
-            y: clamp(el?.y, 0.1, 0.9, 0.5),
-            w: clamp(el?.w, 0.1, 0.5, 0.25),
+            y: clamp(el?.y, 0.3, 0.75, 0.5),
+            w: clamp(el?.w, 0.1, 0.5, 0.22),
             appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
             anim: validAnims.includes(el?.anim) ? el.anim : "pop",
           }));
+        const validColors: PillColor[] = ["green", "blue", "yellow", "purple", "orange", "pink"];
+        const rawTitleColor = meta?.composition?.titleColor;
+        const rawFlow = meta?.composition?.flowSteps;
         composition = {
           backgroundPrompt: String(
             meta?.composition?.backgroundPrompt ??
               `soft pastel whiteboard background for: ${sentence}`,
           ).slice(0, 300),
+          title: meta?.composition?.title
+            ? String(meta.composition.title).slice(0, 60)
+            : undefined,
+          titleColor: validColors.includes(rawTitleColor) ? rawTitleColor : "blue",
+          flowSteps: Array.isArray(rawFlow)
+            ? rawFlow.slice(0, 5).map((s: any) => String(s).slice(0, 24)).filter(Boolean)
+            : undefined,
+          footerMessage: meta?.composition?.footerMessage
+            ? String(meta.composition.footerMessage).slice(0, 120)
+            : undefined,
           elements: elements.length
             ? elements
             : [
@@ -285,8 +299,8 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
                   id: "main",
                   prompt: sentence,
                   x: 0.5,
-                  y: 0.5,
-                  w: 0.35,
+                  y: 0.55,
+                  w: 0.3,
                   appearAt: 0.05,
                   anim: "pop",
                 },
