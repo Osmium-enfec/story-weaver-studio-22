@@ -784,6 +784,38 @@ function Index() {
                           ))}
                         </div>
                       )}
+                      {(p.steps?.length ?? 0) > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {p.steps!.map((s, k) => {
+                            const color =
+                              s.status === "ok"
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : s.status === "warn"
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : s.status === "error"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-muted text-muted-foreground border-border";
+                            const icon =
+                              s.status === "ok" ? "✓"
+                              : s.status === "warn" ? "!"
+                              : s.status === "error" ? "✕"
+                              : "…";
+                            return (
+                              <span
+                                key={k}
+                                title={s.message || ""}
+                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${color}`}
+                              >
+                                <span className="font-mono">{icon}</span>
+                                <span>{s.name}</span>
+                                {s.message && (
+                                  <span className="max-w-[220px] truncate opacity-75">· {s.message}</span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                     {p.status === "error" && !running && (
                       <button
