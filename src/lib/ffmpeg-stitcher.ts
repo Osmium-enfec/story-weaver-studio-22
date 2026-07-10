@@ -87,12 +87,11 @@ export async function exportToMp4(
     i < scenes.length - 1 ? n + fadeFrames : n,
   );
   const totalFrames = extFrames.reduce((a, b) => a + b, 0);
-  const totalUnits = totalFrames + scenes.length + 2;
+  // units: 1 per rasterized frame + 1 per scene encode + (scenes-1) xfade passes + 1 mux
+  const totalUnits = totalFrames + scenes.length + Math.max(0, scenes.length - 1) + 1;
   let unitsDone = 0;
-  const tick = (n = 1) => {
-    unitsDone += n;
-    return unitsDone / totalUnits;
-  };
+  const frac = () => Math.min(0.999, unitsDone / totalUnits);
+  const tick = (n = 1) => { unitsDone += n; return frac(); };
 
   const segments: string[] = [];
   const segDurSec: number[] = [];
