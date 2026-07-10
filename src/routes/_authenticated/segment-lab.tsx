@@ -98,6 +98,34 @@ function SegmentLab() {
     }
   };
 
+  // Compose the 7 selected tiles onto a 16:9 canvas using COMPOSE_LAYOUT.
+  useEffect(() => {
+    if (parts.length < 7) { setComposed(null); return; }
+    let cancelled = false;
+    (async () => {
+      const W = 1600, H = 900;
+      const canvas = composeCanvasRef.current ?? document.createElement("canvas");
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, W, H);
+      for (const slot of COMPOSE_LAYOUT) {
+        const src = parts[slot.tile];
+        if (!src) continue;
+        const img = await loadImage(src);
+        const dx = slot.x * W;
+        const dy = slot.y * H;
+        const dw = slot.w * W;
+        const dh = slot.h * H;
+        // stretch (non-uniform) into the slot — that is the requested behavior
+        ctx.drawImage(img, dx, dy, dw, dh);
+      }
+      if (!cancelled) setComposed(canvas.toDataURL("image/png"));
+    })();
+    return () => { cancelled = true; };
+  }, [parts]);
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="mb-2 text-3xl font-semibold">Segment Lab</h1>
