@@ -184,6 +184,25 @@ function SegmentLab() {
           </div>
         </div>
       )}
+
+      {composed && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">
+            Composed 16:9 canvas (tiles stretched into layout)
+          </h2>
+          <div className="overflow-hidden rounded-lg border bg-white p-2 shadow-sm">
+            <img src={composed} alt="composed" className="w-full" style={{ aspectRatio: "16 / 9" }} />
+          </div>
+          <a
+            href={composed}
+            download="composed-16x9.png"
+            className="mt-3 inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Download PNG
+          </a>
+        </div>
+      )}
+      <canvas ref={composeCanvasRef} className="hidden" />
     </div>
   );
 }
