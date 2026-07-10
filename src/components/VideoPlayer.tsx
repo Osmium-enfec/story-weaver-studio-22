@@ -10,6 +10,7 @@ import {
   type SceneBackground,
 } from "@/lib/scene-background";
 import { getTransparentUrl } from "@/lib/remove-white-bg";
+import { layoutFor } from "@/lib/scene-layouts";
 
 
 
