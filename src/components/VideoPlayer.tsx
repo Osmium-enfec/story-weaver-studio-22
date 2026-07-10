@@ -474,7 +474,12 @@ export function VideoPlayer({
               willChange: "opacity, transform",
             }}
           >
-            <SceneStage scene={prevScene} progress={1} />
+            <SceneStage
+              scene={prevScene}
+              progress={1}
+              background={background}
+              transparentMap={transparentMap}
+            />
           </div>
         )}
         <div
@@ -482,8 +487,15 @@ export function VideoPlayer({
           className="absolute inset-0"
           style={{ animation: `sceneIn ${CROSSFADE_MS}ms ease-out both` }}
         >
-          <SceneStage scene={scene} progress={progress} videoRef={videoRef} />
+          <SceneStage
+            scene={scene}
+            progress={progress}
+            videoRef={videoRef}
+            background={background}
+            transparentMap={transparentMap}
+          />
         </div>
+
 
         <audio ref={audioRef} src={audioSrc} preload="auto" />
       </div>
