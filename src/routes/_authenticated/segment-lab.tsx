@@ -54,8 +54,7 @@ function SegmentLab() {
     setError(null);
     setLayers([]);
     try {
-      setStatus("Labeling elements with vision model…");
-      setStatus("Running Grounded-SAM on Replicate (30–90s)…");
+      setStatus("Segmenting with Gemini 2.5 Pro (10–30s)…");
       const res = await runSegment({ data: { imageDataUrl: imageUrl } });
       setStatus(`Got ${res.layers.length} masks. Extracting transparent PNGs…`);
 
@@ -64,7 +63,7 @@ function SegmentLab() {
         const l = res.layers[i];
         setStatus(`Extracting layer ${i + 1}/${res.layers.length}: ${l.label}`);
         try {
-          const b = await extractLayer(imageUrl, l.maskUrl);
+          const b = await extractLayerFromBboxMask(imageUrl, l.maskDataUrl, l.box);
           bitmaps.push({
             ...b,
             id: l.id,
