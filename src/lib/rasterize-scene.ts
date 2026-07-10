@@ -124,8 +124,12 @@ export function drawImageSceneFrame(
   const background = opts.background ?? DEFAULT_BACKGROUND;
   const customBg = background.kind !== "whiteboard";
 
-  // Outer canvas: user-picked color / gradient, or plain white for whiteboard mode.
-  if (customBg) {
+  // Outer canvas: user-picked color / gradient / video, or plain white.
+  if (background.kind === "video" && opts.videoBg) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    drawContain(ctx, opts.videoBg, 0, 0, W, H, "cover");
+  } else if (customBg) {
     backgroundToCanvasFill(ctx, background, W, H);
   } else {
     ctx.fillStyle = "#ffffff";
