@@ -8,6 +8,8 @@ import {
   type TemplateRegion,
 } from "@/lib/mask-templates";
 import { computeMaskStyle, totalDuration, type TimelineItem } from "@/lib/mask-reveal";
+import { generateMcqImage } from "@/lib/mcq-image.functions";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
