@@ -37,11 +37,27 @@ async function pollPrediction(id: string, maxSec = 300): Promise<any> {
 
 async function runReplicate(model: string, input: Record<string, unknown>): Promise<any> {
   const headers = replicateHeaders();
-  const res = await fetch(`${GATEWAY}/models/${model}/predictions`, {
+  // Try official model endpoint first; fall back to community (version) endpoint on 404.
+  let res = await fetch(`${GATEWAY}/models/${model}/predictions`, {
     method: "POST",
     headers,
     body: JSON.stringify({ input }),
   });
+  if (res.status === 404) {
+    // Community model: fetch latest version, then POST to /predictions with version.
+    const mres = await fetch(`${GATEWAY}/models/${model}`, { headers });
+    if (!mres.ok) {
+      throw new Error(`Replicate model lookup failed [${mres.status}]: ${await mres.text()}`);
+    }
+    const meta = await mres.json();
+    const version = meta?.latest_version?.id;
+    if (!version) throw new Error(`Replicate model ${model} has no latest_version`);
+    res = await fetch(`${GATEWAY}/predictions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ version, input }),
+    });
+  }
   if (res.status === 402) {
     throw new Error("Replicate account has no credit. Enable billing at https://replicate.com/account/billing.");
   }
