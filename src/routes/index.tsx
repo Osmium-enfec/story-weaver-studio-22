@@ -639,6 +639,9 @@ function Index() {
             </div>
           )}
 
+          <BackgroundPicker value={background} onChange={setBackground} />
+
+
           <div className="flex items-center justify-between">
             <div className="text-xs text-muted-foreground">
               {mode === "script"
