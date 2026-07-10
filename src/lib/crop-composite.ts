@@ -124,22 +124,46 @@ async function processWithMask(
 }
 
 /**
- * Crop `bbox` (normalized 0..1) from `compositeUrl`. If `maskUrl` is provided,
- * uses it as an alpha channel (pixel-precise element cutout). Otherwise falls
- * back to white-background removal on the rectangular crop.
+ * Rectangle crop only — no background removal, no mask. Used for text runs
+ * where OCR gave us a tight bbox and any alpha processing would eat glyphs.
+ */
+async function processRect(compositeUrl: string, bbox: Bbox, pad: number): Promise<string> {
+  const img = await loadCorsImage(compositeUrl);
+  const IW = img.naturalWidth || 1;
+  const IH = img.naturalHeight || 1;
+  const { sx, sy, sw, sh } = computeCropRect(bbox, pad, IW, IH);
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return compositeUrl;
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+  return canvas.toDataURL("image/png");
+}
+
+/**
+ * Crop `bbox` (normalized 0..1) from `compositeUrl`.
+ * mode:
+ *   "mask"  — SAM mask as alpha (needs maskUrl)
+ *   "white" — remove white background from rectangle (default when no mask)
+ *   "rect"  — plain rectangle crop, no alpha work (best for text)
  */
 export function cropAndClear(
   compositeUrl: string,
   bbox: Bbox,
   padFrac = 0.06,
   maskUrl?: string,
+  mode?: "mask" | "white" | "rect",
 ): Promise<string> {
-  const key = `${compositeUrl.slice(0, 64)}|${maskUrl ? "M:" + maskUrl.slice(0, 48) : "W"}|${bbox.x.toFixed(3)},${bbox.y.toFixed(3)},${bbox.w.toFixed(3)},${bbox.h.toFixed(3)}|${padFrac}`;
+  const resolved: "mask" | "white" | "rect" = mode ?? (maskUrl ? "mask" : "white");
+  const key = `${compositeUrl.slice(0, 64)}|${resolved}|${maskUrl ? maskUrl.slice(0, 48) : ""}|${bbox.x.toFixed(3)},${bbox.y.toFixed(3)},${bbox.w.toFixed(3)},${bbox.h.toFixed(3)}|${padFrac}`;
   let p = cache.get(key);
   if (!p) {
-    p = (maskUrl
-      ? processWithMask(compositeUrl, maskUrl, bbox, padFrac)
-      : processWhiteBg(compositeUrl, bbox, padFrac)
+    p = (resolved === "rect"
+      ? processRect(compositeUrl, bbox, padFrac)
+      : resolved === "mask" && maskUrl
+        ? processWithMask(compositeUrl, maskUrl, bbox, padFrac)
+        : processWhiteBg(compositeUrl, bbox, padFrac)
     ).catch(() => compositeUrl);
     cache.set(key, p);
   }
