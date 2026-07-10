@@ -37,19 +37,23 @@ export interface MaskTemplate {
 }
 
 // Derived from the 1659x948 MCQ coordinates already dialed in.
+// Natural top-down MCQ layout — matches how GPT lays elements out in the
+// generated image (title at top, subtitle under it, 4 option cards in a row,
+// answer banner at bottom). Keep fractions in sync with the prompt in
+// `src/lib/mcq-image.functions.ts`.
 const mcq: MaskTemplate = {
   id: "mcq-four-card",
   label: "MCQ · four cards",
-  aspect: 1659 / 948,
+  aspect: 1536 / 1024,
   regions: [
-    { id: "title", label: "Title banner", x: 339 / 1659, y: 559 / 948, w: 741 / 1659, h: 151 / 948, defaultAnim: "fade", defaultDurationMs: 400 },
-    { id: "subtitle", label: "Subtitle", x: 419 / 1659, y: 218 / 948, w: 189 / 1659, h: 43 / 948, defaultAnim: "wipe-left", defaultDurationMs: 400 },
-    { id: "option-a", label: "Option A", x: 113 / 1659, y: 315 / 948, w: 274 / 1659, h: 584 / 948, defaultAnim: "wipe-left", defaultDurationMs: 450 },
-    { id: "option-b", label: "Option B", x: 478 / 1659, y: 315 / 948, w: 331 / 1659, h: 458 / 948, defaultAnim: "wipe-left", defaultDurationMs: 450 },
-    { id: "option-c", label: "Option C", x: 846 / 1659, y: 315 / 948, w: 331 / 1659, h: 458 / 948, defaultAnim: "wipe-left", defaultDurationMs: 450 },
-    { id: "option-d", label: "Option D", x: 1215 / 1659, y: 315 / 948, w: 321 / 1659, h: 458 / 948, defaultAnim: "wipe-left", defaultDurationMs: 450 },
-    { id: "answer", label: "Answer banner", x: 322 / 1659, y: 790 / 948, w: 1025 / 1659, h: 114 / 948, defaultAnim: "fade", defaultDurationMs: 600 },
-  ].map((r) => ({ ...r, padX: 0.012, padY: 0.02 } as TemplateRegion)),
+    { id: "title",    label: "Title banner",  x: 0.08, y: 0.06, w: 0.84, h: 0.14, defaultAnim: "fade", defaultDurationMs: 1000 },
+    { id: "subtitle", label: "Subtitle",      x: 0.15, y: 0.22, w: 0.70, h: 0.06, defaultAnim: "fade", defaultDurationMs: 1000 },
+    { id: "option-a", label: "Option A",      x: 0.05, y: 0.32, w: 0.21, h: 0.50, defaultAnim: "fade", defaultDurationMs: 1000 },
+    { id: "option-b", label: "Option B",      x: 0.28, y: 0.32, w: 0.21, h: 0.50, defaultAnim: "fade", defaultDurationMs: 1000 },
+    { id: "option-c", label: "Option C",      x: 0.51, y: 0.32, w: 0.21, h: 0.50, defaultAnim: "fade", defaultDurationMs: 1000 },
+    { id: "option-d", label: "Option D",      x: 0.74, y: 0.32, w: 0.21, h: 0.50, defaultAnim: "fade", defaultDurationMs: 1000 },
+    { id: "answer",   label: "Answer banner", x: 0.10, y: 0.85, w: 0.80, h: 0.11, defaultAnim: "fade", defaultDurationMs: 1000 },
+  ].map((r) => ({ ...r, padX: 0.015, padY: 0.025 } as TemplateRegion)),
 };
 
 const comparison: MaskTemplate = {
