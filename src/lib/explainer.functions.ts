@@ -770,7 +770,7 @@ Rules:
         { role: "system", content: sys },
         { role: "user", content: [
           { type: "text", text: "List every distinct visual element in this image." },
-          { type: "image_url", image_url: { url: imageUrl } },
+          { type: "image_url", image_url: { url: imageUrlOrDataUrl } },
         ] },
       ],
       response_format: { type: "json_object" },
