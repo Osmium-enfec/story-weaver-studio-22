@@ -93,38 +93,27 @@ STEP 2 — For each sentence, produce a scene object:
 ${narrationRule}
 - kind: one of
     "code"  — sentence is about code, syntax, an API, a function, a file.
-    "image" — abstract concepts, ideas, metaphors, workflows.
-    "stock" — concrete real-world things (people, nature, cities, products).
+    "image" — everything else. Use AI-generated illustrations, never stock footage.
 - If kind = "image": composition object with:
-    backgroundPrompt: describe the SETTING/mood of the scene (e.g. "workflow diagram
-      about data processing"). Used by the image model along with the baked title.
-    title: short hand-drawn TITLE (2-5 words) shown as a colored pill at the TOP of the
-      background image. Required for image scenes.
-    titleColor: one of "green","blue","yellow","purple","orange","pink" — pick a color
-      that fits the sentence's mood.
-    flowSteps: OPTIONAL array of 2-5 very short words shown as a hand-drawn
-      "A → B → C" arrow flow directly under the title. Use ONLY when the sentence
-      literally describes a pipeline / sequence / progression. Otherwise omit.
-    footerMessage: OPTIONAL short takeaway sentence (<= 10 words) shown in a purple
-      pill with a cute robot mascot at the BOTTOM of the background. Use for
-      summary / punch-line scenes; omit for mid-flow scenes.
-    elements: array of 2–5 items appearing one-by-one. Each element:
-      id: short slug ("rocket","chart","user").
-      prompt: single subject description (e.g. "a smiling cartoon rocket
-        with flames"), NO style words — style is added later. NO text/labels.
-      label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the element
-        by the player (e.g. "read", "chunk", "embed"). Use for diagram/pipeline
-        elements that benefit from a name; omit for purely decorative subjects.
-      x: 0..1 center X on the canvas (0=left, 1=right).
-      y: 0..1 center Y (0=top, 1=bottom). Keep 0.30–0.75 — top ~0-0.22 is
-        reserved for the title pill and bottom ~0.82-1.0 for the footer pill.
-      w: 0..1 width fraction (typical 0.14–0.28).
-      appearAt: 0..1 fraction of the scene duration when this element
-        appears. First element ~0.05, last element <= 0.75. Spread evenly.
-      anim: one of "pop","fade","slide-up","slide-left","slide-right".
-    IMPORTANT: distribute elements across the canvas — don't overlap.
-    Use a mental grid: left/center/right, top/middle/bottom.
-- If kind = "stock": pexelsQuery (2–4 keywords).
+    backgroundPrompt: short mood/setting description of the scene
+      (e.g. "workflow diagram about data processing"). Used only to steer
+      the background style — do NOT include text here.
+    title: short hand-drawn TITLE (2-5 words) rendered by the player at the
+      TOP of the scene in an Excalidraw-style handwritten font. REQUIRED for
+      image scenes. Keep it a plain topic label, no punctuation.
+    elements: array of 1–6 distinct visual items appearing one-by-one. Element
+      positions are chosen automatically by a fixed grid layout — do NOT
+      include x/y/w. Each element:
+        id: short slug ("rocket","chart","user").
+        prompt: single subject description (e.g. "a smiling cartoon rocket
+          with flames"), NO style words — style is added later. NO text/labels.
+        label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the
+          element by the player (e.g. "read", "chunk", "embed").
+        appearAt: 0..1 fraction of the scene duration when this element
+          appears. First element ~0.05, last element <= 0.75. Spread evenly.
+        anim: one of "pop","fade","slide-up","slide-left","slide-right".
+    Prefer 2, 3, 4 or 6 elements — these map to the cleanest grid layouts
+    (50/50, thirds, 2x2, 3x2). Use 1 only for a single hero illustration.
 - If kind = "code":
     code: short realistic snippet (5–15 lines, real syntax, no backticks).
     codeLanguage: "ts" | "js" | "tsx" | "py" | "sh" | "json" | "html".
