@@ -207,7 +207,14 @@ function Index() {
 
             const { compositeUrl, elements: seg } = result;
             if (!seg.length) {
-              return { kind: "image" as const, title: comp.title, elements: [] };
+              // Single-image mode: show the composite as the scene background.
+              totalImgs = 0;
+              return {
+                kind: "image" as const,
+                title: comp.title,
+                backgroundUrl: compositeUrl,
+                elements: [],
+              };
             }
 
             emit({ name: "generate-elements", status: "running" });
@@ -247,6 +254,7 @@ function Index() {
               message: `${genNew} new, ${genCached} reused`,
             });
             return { kind: "image" as const, title: comp.title, elements: els };
+
 
           })();
 
