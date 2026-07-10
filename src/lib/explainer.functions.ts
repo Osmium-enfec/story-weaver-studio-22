@@ -745,6 +745,79 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
   });
 
 
+// ---------- Debug: segment an ARBITRARY uploaded image ----------
+const SegmentImageInput = z.object({
+  imageDataUrl: z.string().min(1),
+  labels: z.array(z.string().min(1).max(120)).min(1).max(8),
+});
+
+export const segmentUploadedImage = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => SegmentImageInput.parse(d))
+  .handler(async ({ data }) => {
+    const steps: CompositeStep[] = [];
+
+    let uploadUrl: string;
+    try {
+      uploadUrl = await uploadToReplicate(data.imageDataUrl);
+      steps.push({ name: "upload", status: "ok" });
+    } catch (e: any) {
+      steps.push({ name: "upload", status: "error", message: e?.message || "upload failed" });
+      throw new Error(`upload: ${e?.message || "failed"}`);
+    }
+
+    let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
+    try {
+      detections = await detectWithGroundingDino(uploadUrl, data.labels);
+      steps.push({ name: "segment", status: "ok", message: `${detections.length} boxes` });
+    } catch (e: any) {
+      steps.push({ name: "segment", status: "warn", message: e?.message || "segmentation failed" });
+    }
+
+    const used = new Set<number>();
+    const matched = data.labels.map((label) => {
+      const idx = matchDetection(label, detections, used);
+      if (idx < 0) return { label, bbox: null as any, confidence: 0 };
+      used.add(idx);
+      return { label, bbox: detections[idx].bbox, confidence: detections[idx].confidence };
+    });
+    const matchCount = matched.filter((r) => r.bbox).length;
+    steps.push({
+      name: "match",
+      status: matchCount === 0 ? "warn" : "ok",
+      message: `${matchCount}/${data.labels.length} matched`,
+    });
+
+    let maskCount = 0;
+    const masks = await Promise.all(
+      matched.map(async (el) => {
+        if (!el.bbox) return null;
+        try {
+          const m = await segmentOneWithGroundedSam(uploadUrl, el.label);
+          if (m) maskCount++;
+          return m;
+        } catch (e: any) {
+          console.warn(`[sam] "${el.label}" failed:`, e?.message);
+          return null;
+        }
+      }),
+    );
+    steps.push({
+      name: "sam",
+      status: maskCount === 0 && matchCount > 0 ? "warn" : "ok",
+      message: `${maskCount}/${matchCount} masks`,
+    });
+
+    const elements = matched.map((el, i) => ({
+      label: el.label,
+      bbox: el.bbox,
+      confidence: el.confidence,
+      maskUrl: masks[i] ?? null,
+    }));
+
+    // Also return all raw detections so user can see everything the model saw.
+    return { uploadUrl, elements, detections, steps };
+  });
+
 // ---------- TTS (ElevenLabs v3, Liam voice) ----------
 const TtsInput = z.object({ text: z.string().min(1).max(4000) });
 
