@@ -751,7 +751,7 @@ const SegmentImageInput = z.object({
   labels: z.array(z.string().min(1).max(120)).max(24).optional().default([]),
 });
 
-async function autoListElements(imageUrl: string): Promise<string[]> {
+async function autoListElements(imageUrlOrDataUrl: string): Promise<string[]> {
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("LOVABLE_API_KEY missing");
   const sys = `You are labeling every distinct visual element in an image for open-vocabulary object detection (Grounding-DINO).
