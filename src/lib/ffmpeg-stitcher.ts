@@ -126,6 +126,9 @@ export async function exportToMp4(
   const segments: string[] = [];
   const segDurSec: number[] = [];
 
+  // Absolute time (across all scenes) accumulator, used to seek the looping bg video.
+  let absTimeSec = 0;
+
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
     const realFrames = origFrames[i];
@@ -146,8 +149,17 @@ export async function exportToMp4(
       if (video) {
         try { await seekVideo(video, tSec); } catch { /* ignore */ }
       }
+      if (videoBgEl) {
+        const dur = videoBgEl.duration || 1;
+        const loopT = (absTimeSec + f / fps) % dur;
+        try { await seekVideo(videoBgEl, loopT); } catch { /* ignore */ }
+      }
 
-      drawSceneFrame(ctx, scene, progress, W, H, assets, { background, transparent: transparentImgs });
+      drawSceneFrame(ctx, scene, progress, W, H, assets, {
+        background,
+        transparent: transparentImgs,
+        videoBg: videoBgEl ?? undefined,
+      });
 
       const bytes = await canvasToPngBytes(canvas);
       const name = `s${i}_f${String(f).padStart(5, "0")}.png`;
