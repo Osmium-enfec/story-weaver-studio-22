@@ -150,11 +150,12 @@ function Index() {
     let totalImgs = 0;
     type ImageComp = {
       kind: "image";
-      backgroundUrl: string;
+      backgroundUrl?: string;
       title?: string;
       elements: {
-        id: string; prompt: string; label?: string; x: number; y: number; w: number;
+        id: string; label?: string; x: number; y: number; w: number;
         appearAt: number; anim: any; mediaUrl: string;
+        bbox?: { x: number; y: number; w: number; h: number };
       }[];
     };
 
@@ -165,27 +166,51 @@ function Index() {
             const comp = plan.composition;
             if (!comp) return null;
             const compElements = Array.isArray(comp.elements) ? comp.elements : [];
-            totalImgs = 1 + compElements.length;
-            // Background prompt stays a plain mood description — the title is
-            // rendered as text by the player, not baked into the AI image.
-            const bgPrompt = comp.backgroundPrompt;
-            const [bg, ...els] = await Promise.all([
-              findOrGenerateImage({ data: { prompt: bgPrompt, kind: "background" } }),
-              ...compElements.map((el) =>
-                findOrGenerateImage({ data: { prompt: el.prompt, kind: "element" } }).then((r) => ({
-                  ...el,
-                  mediaUrl: r.dataUrl,
-                  _c: r.cached,
+            totalImgs = 1; // one composite call per scene
+            if (compElements.length === 0) {
+              return { kind: "image" as const, title: comp.title, elements: [] };
+            }
+
+            const { compositeUrl, elements: seg } = await generateSceneComposite({
+              data: {
+                compositePrompt:
+                  comp.compositePrompt ??
+                  comp.backgroundPrompt ??
+                  plan.sentence,
+                title: comp.title,
+                elements: compElements.map((el) => ({
+                  id: el.id,
+                  segmentPrompt: el.segmentPrompt || el.label || el.id,
                 })),
-              ),
-            ]);
-            if (bg.cached) cachedHits++;
-            cachedHits += els.filter((e) => e._c).length;
+              },
+            });
+
+            const byId = new Map(seg.map((s) => [s.id, s.bbox]));
+            const els = await Promise.all(
+              compElements.map(async (el) => {
+                const bbox = byId.get(el.id);
+                const mediaUrl = bbox
+                  ? await cropAndClear(compositeUrl, bbox)
+                  : compositeUrl;
+                return {
+                  id: el.id,
+                  label: el.label,
+                  x: el.x,
+                  y: el.y,
+                  w: el.w,
+                  appearAt: el.appearAt,
+                  anim: el.anim,
+                  mediaUrl,
+                  bbox: bbox ?? undefined,
+                };
+              }),
+            );
             return {
               kind: "image" as const,
-              backgroundUrl: bg.dataUrl,
+              // Keep composite as backgroundUrl only when user picked
+              // whiteboard bg — otherwise the elements alone read cleaner.
               title: comp.title,
-              elements: els.map(({ _c, ...rest }) => rest),
+              elements: els,
             };
           })();
 
