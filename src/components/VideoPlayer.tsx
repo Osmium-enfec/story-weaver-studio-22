@@ -125,6 +125,23 @@ function ImageScene({
         )}
         {(() => {
           const els = scene.elements ?? [];
+          if (els.length === 0) {
+            // Empty scene → show the sentence text so the card is never blank.
+            return (
+              <div
+                className="absolute inset-0 flex items-center justify-center p-10 text-center"
+                style={{
+                  fontFamily: '"Caveat", "Kalam", cursive',
+                  fontWeight: 700,
+                  fontSize: "clamp(24px, 5%, 56px)",
+                  color: "#1a1a1a",
+                  lineHeight: 1.2,
+                }}
+              >
+                {scene.subtitle}
+              </div>
+            );
+          }
           const layout = layoutFor(els.length);
           return els.map((el, i) => {
             const pos = layout[i] ?? { x: el.x, y: el.y, w: el.w };
@@ -176,6 +193,13 @@ function ImageScene({
                   className="block w-full"
                   style={useTransparent ? undefined : { mixBlendMode: "multiply" }}
                   draggable={false}
+                  onError={() =>
+                    console.error("[ImageScene] element image failed to load", {
+                      sceneId: scene.id,
+                      elId: el.id,
+                      src: src?.slice(0, 80),
+                    })
+                  }
                 />
                 {el.label && (
                   <div
@@ -215,7 +239,16 @@ function SceneStage({
   background: SceneBackground;
   transparentMap: Map<string, string>;
 }) {
-  console.log("[SceneStage]", { id: scene.id, kind: scene.kind, hasCode: !!scene.code, codeLen: scene.code?.length, codeVariant: scene.codeVariant });
+  console.log("[SceneStage]", {
+    id: scene.id,
+    kind: scene.kind,
+    codeLen: scene.code?.length ?? 0,
+    codeVariant: scene.codeVariant ?? null,
+    elements: (scene.elements ?? []).length,
+    elementUrls: (scene.elements ?? []).map((e) => e.mediaUrl?.slice(0, 60)),
+    bgUrl: scene.backgroundUrl?.slice(0, 60) ?? null,
+    subtitle: scene.subtitle,
+  });
   if (scene.kind === "code") {
     return (
       <CodeScene
