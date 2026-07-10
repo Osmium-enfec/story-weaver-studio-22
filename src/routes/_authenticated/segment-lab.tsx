@@ -100,7 +100,7 @@ function SegmentLab() {
     <div className="mx-auto max-w-5xl px-6 py-10">
       <h1 className="mb-2 text-3xl font-semibold">Segment Lab</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Upload an image and slice it into 7 parts using the explainer layout (header, subheader, 4 columns, footer).
+        Upload an image and slice it into 7 parts using the exact safe boxes for a 1600 × 900 px canvas (title banner, subtitle, four option cards, bottom banner).
       </p>
 
       <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
