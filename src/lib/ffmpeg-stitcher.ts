@@ -87,12 +87,11 @@ export async function exportToMp4(
     i < scenes.length - 1 ? n + fadeFrames : n,
   );
   const totalFrames = extFrames.reduce((a, b) => a + b, 0);
-  const totalUnits = totalFrames + scenes.length + 2;
+  // units: 1 per rasterized frame + 1 per scene encode + (scenes-1) xfade passes + 1 mux
+  const totalUnits = totalFrames + scenes.length + Math.max(0, scenes.length - 1) + 1;
   let unitsDone = 0;
-  const tick = (n = 1) => {
-    unitsDone += n;
-    return unitsDone / totalUnits;
-  };
+  const frac = () => Math.min(0.999, unitsDone / totalUnits);
+  const tick = (n = 1) => { unitsDone += n; return frac(); };
 
   const segments: string[] = [];
   const segDurSec: number[] = [];
@@ -124,15 +123,16 @@ export async function exportToMp4(
       const name = `s${i}_f${String(f).padStart(5, "0")}.png`;
       await ffmpeg.writeFile(name, bytes);
 
+      tick(1);
       if (f % 5 === 0 || f === frames - 1) {
         onProgress(
           `rasterize scene ${i + 1}/${scenes.length} · frame ${f + 1}/${frames}`,
-          tick(f === frames - 1 ? frames - (f % 5) : 5) - 0.0001,
+          frac(),
         );
       }
     }
 
-    onProgress(`encoding scene ${i + 1}/${scenes.length}`, unitsDone / totalUnits);
+    onProgress(`encoding scene ${i + 1}/${scenes.length}`, frac());
 
     const segName = `seg${i}.mp4`;
     await ffmpeg.exec([
@@ -150,49 +150,56 @@ export async function exportToMp4(
     segments.push(segName);
     segDurSec.push(frames / fps);
     tick(1);
-    onProgress(`encoded scene ${i + 1}/${scenes.length}`, unitsDone / totalUnits);
+    onProgress(`encoded scene ${i + 1}/${scenes.length}`, frac());
 
     for (let f = 0; f < frames; f++) {
       try { await ffmpeg.deleteFile(`s${i}_f${String(f).padStart(5, "0")}.png`); } catch {}
     }
   }
 
-  onProgress("stitching segments with fade…", unitsDone / totalUnits);
+  onProgress("stitching segments with fade…", frac());
 
   if (segments.length === 1) {
     await ffmpeg.exec(["-y", "-i", segments[0], "-c", "copy", "video.mp4"]);
   } else {
-    // Build xfade filter chain: v0+v1 -> vx1, vx1+v2 -> vx2, ...
-    const inputs: string[] = [];
-    for (const s of segments) { inputs.push("-i", s); }
-    const parts: string[] = [];
-    let prev = "[0:v]";
-    let acc = segDurSec[0];
+    // Pairwise xfade: only 2 inputs live at once (avoids OOM at 1080p60).
+    // acc.mp4 = seg0; for i=1..n-1: acc.mp4 + seg{i} -> next.mp4 via xfade.
+    await ffmpeg.exec(["-y", "-i", segments[0], "-c", "copy", "acc.mp4"]);
+    let accDur = segDurSec[0];
     for (let i = 1; i < segments.length; i++) {
-      const offset = acc - FADE_DUR;
-      const out = i === segments.length - 1 ? "[vout]" : `[vx${i}]`;
-      parts.push(
-        `${prev}[${i}:v]xfade=transition=fade:duration=${FADE_DUR}:offset=${offset.toFixed(3)}${out}`,
-      );
-      acc = acc + segDurSec[i] - FADE_DUR;
-      prev = out;
+      const offset = accDur - FADE_DUR;
+      const outName = i === segments.length - 1 ? "video.mp4" : "next.mp4";
+      await ffmpeg.exec([
+        "-y",
+        "-i", "acc.mp4",
+        "-i", segments[i],
+        "-filter_complex",
+        `[0:v][1:v]xfade=transition=fade:duration=${FADE_DUR}:offset=${offset.toFixed(3)},format=yuv420p[vout]`,
+        "-map", "[vout]",
+        "-c:v", "libx264",
+        "-preset", preset,
+        "-crf", String(crf),
+        "-pix_fmt", "yuv420p",
+        "-r", String(fps),
+        "-movflags", "+faststart",
+        outName,
+      ]);
+      accDur = accDur + segDurSec[i] - FADE_DUR;
+      // Free the segment we just consumed + roll next -> acc
+      try { await ffmpeg.deleteFile(segments[i]); } catch {}
+      if (outName === "next.mp4") {
+        try { await ffmpeg.deleteFile("acc.mp4"); } catch {}
+        await ffmpeg.exec(["-y", "-i", "next.mp4", "-c", "copy", "acc.mp4"]);
+        try { await ffmpeg.deleteFile("next.mp4"); } catch {}
+      } else {
+        try { await ffmpeg.deleteFile("acc.mp4"); } catch {}
+      }
+      tick(1);
+      onProgress(`stitched ${i}/${segments.length - 1}`, frac());
     }
-    await ffmpeg.exec([
-      "-y",
-      ...inputs,
-      "-filter_complex", parts.join(";"),
-      "-map", "[vout]",
-      "-c:v", "libx264",
-      "-preset", preset,
-      "-crf", String(crf),
-      "-pix_fmt", "yuv420p",
-      "-r", String(fps),
-      "-movflags", "+faststart",
-      "video.mp4",
-    ]);
+    try { await ffmpeg.deleteFile(segments[0]); } catch {}
   }
-  tick(1);
-  onProgress("muxing audio…", unitsDone / totalUnits);
+  onProgress("muxing audio…", frac());
 
   let finalName = "video.mp4";
   if (masterAudioUrl) {
