@@ -123,10 +123,11 @@ export async function exportToMp4(
       const name = `s${i}_f${String(f).padStart(5, "0")}.png`;
       await ffmpeg.writeFile(name, bytes);
 
+      tick(1);
       if (f % 5 === 0 || f === frames - 1) {
         onProgress(
           `rasterize scene ${i + 1}/${scenes.length} · frame ${f + 1}/${frames}`,
-          tick(f === frames - 1 ? frames - (f % 5) : 5) - 0.0001,
+          frac(),
         );
       }
     }
