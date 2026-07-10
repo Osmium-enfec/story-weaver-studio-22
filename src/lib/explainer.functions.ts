@@ -724,36 +724,17 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       message: `${matched}/${data.elements.length} elements matched`,
     });
 
-    // 5) SAM: per-element pixel mask (Grounding-DINO + SAM via schananas/grounded_sam).
-    // Run in parallel, but only for matched elements (skip failed ones to save credits).
-    let maskCount = 0;
-    const masks = await Promise.all(
-      withBbox.map(async (el) => {
-        if (!el.bbox) return null;
-        try {
-          const m = await segmentOneWithGroundedSam(uploadUrl, el.segmentPrompt);
-          if (m) maskCount++;
-          return m;
-        } catch (e: any) {
-          console.warn(`[sam] "${el.segmentPrompt}" failed:`, e?.message);
-          return null;
-        }
-      }),
-    );
-    steps.push({
-      name: "sam",
-      status: maskCount === 0 && matched > 0 ? "warn" : "ok",
-      message: `${maskCount}/${matched} masks`,
-    });
-
-    const resolved = withBbox.map((el, i) => ({
+    // (SAM step removed — elements are regenerated individually by the client
+    // using the bbox as placement metadata only.)
+    const resolved = withBbox.map((el) => ({
       id: el.id,
       bbox: el.bbox,
-      maskUrl: masks[i] ?? null,
+      maskUrl: null as string | null,
     }));
 
     return { compositeUrl, elements: resolved, steps };
   });
+
 
 
 // ---------- Debug: multi-detector segmentation of an ARBITRARY uploaded image ----------
