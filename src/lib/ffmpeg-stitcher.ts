@@ -9,6 +9,7 @@ import {
   preloadSceneAssets,
   drawSceneFrame,
   seekVideo,
+  loadVideo,
 } from "./rasterize-scene";
 import { DEFAULT_BACKGROUND, type SceneBackground } from "./scene-background";
 import { preloadTransparent } from "./remove-white-bg";
@@ -95,6 +96,9 @@ export async function exportToMp4(
     }),
   );
 
+  // Preload the looping background video (if any) so we can seek per frame.
+  const videoBgEl =
+    background.kind === "video" ? await loadVideo(background.url).catch(() => null) : null;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -122,6 +126,9 @@ export async function exportToMp4(
   const segments: string[] = [];
   const segDurSec: number[] = [];
 
+  // Absolute time (across all scenes) accumulator, used to seek the looping bg video.
+  let absTimeSec = 0;
+
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
     const realFrames = origFrames[i];
@@ -142,8 +149,17 @@ export async function exportToMp4(
       if (video) {
         try { await seekVideo(video, tSec); } catch { /* ignore */ }
       }
+      if (videoBgEl) {
+        const dur = videoBgEl.duration || 1;
+        const loopT = (absTimeSec + f / fps) % dur;
+        try { await seekVideo(videoBgEl, loopT); } catch { /* ignore */ }
+      }
 
-      drawSceneFrame(ctx, scene, progress, W, H, assets, { background, transparent: transparentImgs });
+      drawSceneFrame(ctx, scene, progress, W, H, assets, {
+        background,
+        transparent: transparentImgs,
+        videoBg: videoBgEl ?? undefined,
+      });
 
       const bytes = await canvasToPngBytes(canvas);
       const name = `s${i}_f${String(f).padStart(5, "0")}.png`;
@@ -157,6 +173,10 @@ export async function exportToMp4(
         );
       }
     }
+
+    // Advance absolute time by the REAL scene duration (not the extended one),
+    // so the background video loop stays in sync with the master audio.
+    absTimeSec += durSec;
 
     onProgress(`encoding scene ${i + 1}/${scenes.length}`, frac());
 

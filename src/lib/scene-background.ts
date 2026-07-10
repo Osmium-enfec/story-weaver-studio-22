@@ -5,7 +5,8 @@
 export type SceneBackground =
   | { kind: "whiteboard" }
   | { kind: "solid"; color: string }
-  | { kind: "gradient"; from: string; to: string; angle?: number };
+  | { kind: "gradient"; from: string; to: string; angle?: number }
+  | { kind: "video"; url: string };
 
 export const DEFAULT_BACKGROUND: SceneBackground = { kind: "whiteboard" };
 
@@ -15,6 +16,7 @@ export function backgroundToCss(bg: SceneBackground): string {
     const angle = bg.angle ?? 135;
     return `linear-gradient(${angle}deg, ${bg.from}, ${bg.to})`;
   }
+  // whiteboard and video render their outer layer separately.
   return "#ffffff";
 }
 

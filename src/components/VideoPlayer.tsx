@@ -60,6 +60,7 @@ function ImageScene({
 }) {
   const t = progress;
   const customBg = background.kind !== "whiteboard";
+  const videoBg = background.kind === "video" ? background.url : null;
   const bgStyle: React.CSSProperties =
     scene.animation === "kenburns-in"
       ? { transform: `scale(${1 + 0.08 * t})` }
@@ -76,6 +77,17 @@ function ImageScene({
       className="relative h-full w-full overflow-hidden"
       style={{ background: backgroundToCss(background) }}
     >
+      {videoBg && (
+        <video
+          key={videoBg}
+          src={videoBg}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
       {/* Inner card: on custom bg we inset a white rounded card (like the reference).
           On whiteboard, we let the AI background fill edge-to-edge. */}
       <div

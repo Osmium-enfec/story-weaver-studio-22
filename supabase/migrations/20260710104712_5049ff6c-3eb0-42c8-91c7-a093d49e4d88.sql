@@ -1,0 +1,1 @@
+DELETE FROM public.image_assets; DELETE FROM public.projects;

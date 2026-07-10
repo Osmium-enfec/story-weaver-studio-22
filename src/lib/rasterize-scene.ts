@@ -14,6 +14,9 @@ import { layoutFor } from "./scene-layouts";
 export interface DrawOptions {
   background?: SceneBackground;
   transparent?: Map<string, HTMLImageElement>;
+  /** For background.kind === "video". Caller must seek/advance the element
+   *  before calling drawSceneFrame; we just draw its current frame. */
+  videoBg?: HTMLVideoElement;
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -121,8 +124,12 @@ export function drawImageSceneFrame(
   const background = opts.background ?? DEFAULT_BACKGROUND;
   const customBg = background.kind !== "whiteboard";
 
-  // Outer canvas: user-picked color / gradient, or plain white for whiteboard mode.
-  if (customBg) {
+  // Outer canvas: user-picked color / gradient / video, or plain white.
+  if (background.kind === "video" && opts.videoBg) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    drawContain(ctx, opts.videoBg, 0, 0, W, H, "cover");
+  } else if (customBg) {
     backgroundToCanvasFill(ctx, background, W, H);
   } else {
     ctx.fillStyle = "#ffffff";

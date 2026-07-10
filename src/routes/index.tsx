@@ -18,6 +18,7 @@ import { findOrGenerateImage } from "@/lib/image-library.functions";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import type { SceneBackground } from "@/lib/scene-background";
+import bgLoopAsset from "@/assets/bg-loop.mp4.asset.json";
 
 import {
   alignSentences,
@@ -120,7 +121,7 @@ function Index() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [projectTitle, setProjectTitle] = useState<string>("");
-  const [background, setBackground] = useState<SceneBackground>({ kind: "whiteboard" });
+  const [background, setBackground] = useState<SceneBackground>({ kind: "video", url: bgLoopAsset.url });
 
 
   // Approx credit-usage counters (client-side estimate, not a bill)
@@ -766,7 +767,9 @@ function Index() {
   );
 }
 
+
 const BG_PRESETS: { label: string; bg: SceneBackground }[] = [
+  { label: "Video Loop", bg: { kind: "video", url: bgLoopAsset.url } },
   { label: "Whiteboard", bg: { kind: "whiteboard" } },
   { label: "Sky", bg: { kind: "solid", color: "#e0f2fe" } },
   { label: "Mint", bg: { kind: "solid", color: "#dcfce7" } },
@@ -788,6 +791,7 @@ function BackgroundPicker({
   const preview = (bg: SceneBackground) => {
     if (bg.kind === "solid") return bg.color;
     if (bg.kind === "gradient") return `linear-gradient(${bg.angle ?? 135}deg, ${bg.from}, ${bg.to})`;
+    if (bg.kind === "video") return "linear-gradient(135deg, #0f172a, #6366f1)";
     return "repeating-linear-gradient(45deg, #f8fafc 0 8px, #eef2f7 8px 16px)";
   };
   return (
