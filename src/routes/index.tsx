@@ -53,12 +53,15 @@ export const Route = createFileRoute("/")({
 });
 
 type SceneStatus = "pending" | "planning" | "ready" | "error";
+type StepStatus = "running" | "ok" | "warn" | "error";
+interface SceneStep { name: string; status: StepStatus; message?: string }
 interface SceneProgress extends ScenePlan {
   status: SceneStatus;
   error?: string;
   mediaUrl?: string;
   audioUrl?: string;
   cached?: boolean;
+  steps?: SceneStep[];
 }
 
 const SAMPLE = `Every day, billions of people search the web for answers. But search hasn't changed much in decades. Now, AI can understand what you actually mean. It reads across millions of pages in seconds. And gives you a clear, direct answer instead of a list of links. The future of search is finally here.`;
