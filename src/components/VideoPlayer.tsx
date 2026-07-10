@@ -21,10 +21,12 @@ export interface Scene {
   id: string;
   subtitle: string;
   kind: "image" | "stock" | "code";
-  /** stock: video URL */
+  /** stock (legacy): video URL. New scenes never use this. */
   mediaUrl?: string;
   /** image: composited background + elements */
   backgroundUrl?: string;
+  /** Hand-drawn topic title rendered at the top of an image scene. */
+  title?: string;
   elements?: ResolvedElement[];
   /** Per-scene TTS clip (used when there is no master track / for fallback). */
   audioUrl: string;
