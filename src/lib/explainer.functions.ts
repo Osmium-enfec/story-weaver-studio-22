@@ -10,9 +10,13 @@ export type SceneKind = "image" | "stock" | "code";
 export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
 export type ElementAnim = "pop" | "fade" | "slide-up" | "slide-left" | "slide-right";
 
+export type PillColor = "green" | "blue" | "yellow" | "purple" | "orange" | "pink";
+
 export interface CompositionElement {
   id: string;
   prompt: string;
+  /** Optional short hand-drawn label rendered UNDER the element by the player. */
+  label?: string;
   /** center X, 0..1 across 16:9 canvas */
   x: number;
   /** center Y, 0..1 */
@@ -26,6 +30,13 @@ export interface CompositionElement {
 
 export interface SceneComposition {
   backgroundPrompt: string;
+  /** Baked-in title (colored pill at the top of the background). */
+  title?: string;
+  titleColor?: PillColor;
+  /** Baked-in "A → B → C" arrow flow under the title. */
+  flowSteps?: string[];
+  /** Baked-in purple robot mascot pill message at the bottom. */
+  footerMessage?: string;
   elements: CompositionElement[];
 }
 
