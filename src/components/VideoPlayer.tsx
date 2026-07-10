@@ -290,7 +290,8 @@ export function VideoPlayer({
       const blob = await exportToMp4(scenes, masterAudioUrl, quality, (stage, ratio) => {
         setExportStage(stage);
         setExportProgress(ratio);
-      });
+      }, background);
+
       const label = quality === "hd" ? "1080p60" : "720p30";
       downloadBlob(blob, `explainer-${label}-${Date.now()}.mp4`);
     } catch (e) {
