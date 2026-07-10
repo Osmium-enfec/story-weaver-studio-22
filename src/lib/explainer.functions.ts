@@ -751,7 +751,7 @@ const SegmentImageInput = z.object({
   labels: z.array(z.string().min(1).max(120)).max(24).optional().default([]),
 });
 
-async function autoListElements(imageUrl: string): Promise<string[]> {
+async function autoListElements(imageUrlOrDataUrl: string): Promise<string[]> {
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("LOVABLE_API_KEY missing");
   const sys = `You are labeling every distinct visual element in an image for open-vocabulary object detection (Grounding-DINO).
@@ -770,7 +770,7 @@ Rules:
         { role: "system", content: sys },
         { role: "user", content: [
           { type: "text", text: "List every distinct visual element in this image." },
-          { type: "image_url", image_url: { url: imageUrl } },
+          { type: "image_url", image_url: { url: imageUrlOrDataUrl } },
         ] },
       ],
       response_format: { type: "json_object" },
@@ -803,7 +803,7 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
     let labels: string[] = data.labels ?? [];
     if (labels.length === 0) {
       try {
-        labels = await autoListElements(uploadUrl);
+        labels = await autoListElements(data.imageDataUrl);
         steps.push({ name: "auto-list", status: labels.length ? "ok" : "warn", message: `${labels.length} labels` });
       } catch (e: any) {
         steps.push({ name: "auto-list", status: "error", message: e?.message || "auto-list failed" });
