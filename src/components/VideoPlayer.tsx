@@ -215,6 +215,7 @@ function SceneStage({
   background: SceneBackground;
   transparentMap: Map<string, string>;
 }) {
+  console.log("[SceneStage]", { id: scene.id, kind: scene.kind, hasCode: !!scene.code, codeLen: scene.code?.length, codeVariant: scene.codeVariant });
   if (scene.kind === "code") {
     return (
       <CodeScene
