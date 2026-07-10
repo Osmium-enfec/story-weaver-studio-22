@@ -1,79 +1,58 @@
 
-# Segment Lab → Mask-Based Reveal Studio
+# Segment Lab → Magic Layer Clone
 
-Pivot Segment Lab from "crop image into 7 tiles" to a **mask-reveal editor**: the original PNG is never modified; opaque white rectangles cover regions and animate away on a timeline.
+## Recommendation: Option A (upgrade our own pipeline)
 
-## Scope (MVP — this iteration)
+Why A over B (hosted API like Photoroom):
+- We already own the Replicate connector, Grounded-SAM, and the composite-detection code — most of the plumbing exists.
+- Hosted "layer splitter" APIs (Photoroom, Clipdrop) don't actually return semantic layers with labels + z-order; they only do bg-removal or one-object cutout. We'd still have to build the multi-object loop ourselves.
+- A gives us full control of the label vocabulary, which matters because our end goal is feeding layers back into the explainer video (each layer needs a stable name + bbox to be animated).
+- Cost is the same order of magnitude (~$0.01–0.03/image via Replicate).
 
-Single-page tool at `/segment-lab`. No backend changes, no image generation, no video export yet. Everything runs client-side. Later iterations wire this into the main explainer pipeline.
+Option C (Canva Connect API) is out — Magic Layer isn't exposed externally.
 
-## What we build
+## What we build in Segment Lab (fresh page, replaces current mask-reveal UI)
 
-### 1. Layout template system
-New file `src/lib/mask-templates.ts` defining reusable templates. Start with:
-- `mcq-four-card` (title, subtitle, 4 option cards, answer banner) — using the 1659×948 boxes already in segment-lab
-- `comparison-two-column`
-- `three-step-process`
-- `title-with-three-points`
+Single flow: upload image → get back N transparent PNG layers + a JSON manifest → preview them stacked and toggle-able.
 
-Each template = `{ id, canvas: {w,h}, regions: [{id, label, x, y, w, h, safetyPadding}] }`. Coordinates stored as fractions so any canvas size works.
+### Pipeline (all in one server function, `segmentImageLayers`)
 
-### 2. Rewritten Segment Lab page (`src/routes/_authenticated/segment-lab.tsx`)
+1. **Label discovery** — send the image to `google/gemini-3-flash-preview` via Lovable AI Gateway with a prompt: "list every distinct visual element in this image as short noun phrases, comma-separated". Returns e.g. `"title pill, dog character, arrow, footer robot, option card A, option card B..."`.
+2. **Detection** — send image + that label list to Grounding-DINO on Replicate → bboxes per label.
+3. **Segmentation** — send image + bboxes to **SAM 2** (`meta/sam-2`) on Replicate → precise mask per bbox.
+4. **Merging** — IoU-based merge (>0.7 overlap OR same label + touching bboxes) so sub-parts of one thing collapse into one layer.
+5. **Cutout** — for each merged mask, crop the image with the mask as alpha → transparent PNG.
+6. **Inpaint background** — run `lama` (or `zylim0702/sd-inpaint`) once on the union of all masks → clean background plate.
+7. Return `{ background: dataUrl, layers: [{ id, label, bbox, maskUrl, pngUrl, zIndex }] }`.
 
-Three-panel layout:
+Z-index heuristic: smaller bbox area = higher z-index (things on top are usually smaller than things behind).
 
-**Left panel** — template picker + region list
-- Choose template (dropdown)
-- List of regions with visibility toggles, drag-to-reorder for reveal sequence
+### UI (Segment Lab rewrite)
 
-**Center panel** — canvas
-- Uploaded PNG rendered as `<img>` at natural size (scaled to fit)
-- Absolutely-positioned white `<div>` masks per region (with `safetyPadding` expansion)
-- Masks draggable + resizable via handles (plain mouse events, no external lib for MVP)
-- Toggle "show mask outlines" for editing vs preview
+Three panels:
+- **Left**: uploaded image + "Analyze" button, then progress ("labeling → detecting → segmenting → cutting out → inpainting bg").
+- **Center**: preview canvas showing the reconstructed image from stacked layers + background plate. Each layer has a checkbox to show/hide and a slider to offset it (proves layers are truly separated).
+- **Right**: layer list — thumbnail, label, bbox, z-index, download-PNG button, "download all as ZIP".
 
-**Right panel** — selected region properties
-- x, y, w, h numeric inputs
-- Reveal animation: `fade | wipe-left | wipe-right | wipe-up | wipe-down | instant`
-- Start time (ms), duration (ms)
-- Ease: `linear | ease-out | ease-in-out`
+No mask-reveal / MCQ animation stuff in this iteration — we're validating extraction quality first, exactly like you said.
 
-**Bottom bar** — timeline + transport
-- Play / Pause / Restart
-- Scrubber showing region reveal markers
-- Total duration auto-computed from last region end
+### Files
 
-### 3. Reveal engine
-New file `src/lib/mask-reveal.ts` — pure functions:
-- `computeMaskStyle(region, timeMs, animation)` returns CSS `{opacity, transform, transition}` for the current time
-- Driven by a `requestAnimationFrame` loop in the page while playing
-- Instant apply (scrub) also supported
+- `src/lib/segment-layers.functions.ts` — new server fn orchestrating steps 1–6, using Replicate connector via gateway. Uses `LOVABLE_API_KEY` + `LOVABLE_CONNECTOR_REPLICATE_API_KEY`.
+- `src/lib/layer-compose.ts` — client helpers: apply mask as alpha, IoU merge, stack layers on canvas.
+- `src/routes/_authenticated/segment-lab.tsx` — full rewrite (current mask-reveal code archived, we'll bring bits back later if useful).
 
-Animations use CSS `transform: scaleX/scaleY` with `transform-origin` for wipes, `opacity` for fade — matches the writeup exactly.
-
-### 4. Persistence (local only for MVP)
-Save/load current scene (template id + region overrides + timeline) to `localStorage` under `segment-lab:scene`. Export/import JSON button so a scene can be copied out.
-
-## Explicitly out of scope this pass
-- Image generation with template-constrained prompts (next step, will reuse `src/lib/image-library.functions.ts`)
-- Polygon / brush masks (rectangles only for MVP)
-- Non-white background handling
-- Video export via ffmpeg / Remotion (next step, will reuse `src/lib/ffmpeg-stitcher.ts`)
-- Voiceover sync (next step)
-- Wiring into the main explainer flow at `src/routes/index.tsx`
-
-Once the mask editor + timeline preview feel right, we layer generation → export → voiceover sync on top in follow-up plans.
+### Explicitly out of scope this pass
+- Vectorization (SVG trace) — layers stay as PNGs.
+- Wiring into the explainer video at `src/routes/index.tsx` — happens only after Segment Lab looks right.
+- Manual layer editing (brush, split, merge in UI).
 
 ## Technical section
 
-- No new npm deps. Native DOM drag/resize handles; no Fabric/Konva yet (keeps bundle small; can upgrade later if polygon/brush is needed).
-- Canvas display uses CSS scale so internal coordinates stay in image pixels (matches how current `SLICE_LAYOUT` works).
-- Region `safetyPadding` defaults to 24px; mask box = content box expanded by padding on all sides.
-- Timeline loop uses `performance.now()` + `rAF`; pausing captures elapsed offset.
-- File touched: `src/routes/_authenticated/segment-lab.tsx` (full rewrite). New files: `src/lib/mask-templates.ts`, `src/lib/mask-reveal.ts`.
-- Existing 1659×948 MCQ coordinates become the seed data for the `mcq-four-card` template so nothing you already dialed in is lost.
-
-## Open questions before I build
-
-1. For the MVP, is starting with just the `mcq-four-card` template enough, or do you want all four templates wired from day one?
-2. Should the uploaded image and scene state persist across reloads (localStorage), or is in-memory fine for now?
+- Replicate connector must be linked to the project before running (`standard_connectors--connect` with `replicate`).
+- Server fn uses direct `fetch` to `https://connector-gateway.lovable.dev/replicate/v1/...` per the Replicate knowledge (path must contain `/v1/`, poll our own gateway URL, don't use `urls.get`).
+- SAM 2 model on Replicate: `meta/sam-2` — accepts `image` + `points` or `box_prompts`. We feed box_prompts from Grounding-DINO.
+- Inpaint model: `cjwbw/lama` (fast, no prompt needed, just mask).
+- Long-running (~30–90s total per image); UI streams progress via server-sent updates OR just polls a status field in the response. First cut: single blocking call with a spinner + per-step console logs.
+- No new npm deps. Image processing (mask-as-alpha, IoU) done in-browser via Canvas 2D — same pattern as existing `crop-composite.ts`.
+- Auth: gated behind `_authenticated/` so `requireSupabaseAuth` middleware works.
