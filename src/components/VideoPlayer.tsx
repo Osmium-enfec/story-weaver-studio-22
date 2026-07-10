@@ -144,7 +144,15 @@ function ImageScene({
           }
           const layout = layoutFor(els.length);
           return els.map((el, i) => {
-            const pos = layout[i] ?? { x: el.x, y: el.y, w: el.w };
+            // Prefer bbox from segmentation; fall back to grid layout.
+            const pos = el.bbox
+              ? {
+                  x: el.bbox.x + el.bbox.w / 2,
+                  y: el.bbox.y + el.bbox.h / 2,
+                  w: el.bbox.w,
+                  h: el.bbox.h,
+                }
+              : { ...(layout[i] ?? { x: el.x, y: el.y, w: el.w }), h: undefined as number | undefined };
             const shown = t >= el.appearAt;
             const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
             const p = shown ? Math.min(1, (t - el.appearAt) / revealWindow) : 0;
