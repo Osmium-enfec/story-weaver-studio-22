@@ -72,6 +72,7 @@ function SegmentLab() {
     if (!f) return;
     setError(null);
     setParts([]);
+    setComposed(null);
     try {
       const url = await fileToDataUrl(f);
       setImageDataUrl(url);
