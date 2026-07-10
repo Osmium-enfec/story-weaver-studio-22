@@ -745,45 +745,279 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
   });
 
 
-// ---------- Debug: segment an ARBITRARY uploaded image ----------
+// ---------- Debug: multi-detector segmentation of an ARBITRARY uploaded image ----------
+// Pipeline:
+//   1) Upload once to Replicate
+//   2) In parallel: Gemini vision bboxes, Florence-2 DENSE_REGION_CAPTION, Florence-2 OCR_WITH_REGION
+//   3) Reconcile (IoU-merge, dedupe, drop garbage) on the client
+//   4) For each surviving detection, either:
+//        type=text        → skip SAM, use plain rectangle crop
+//        type=object/etc  → run grounded_sam by label for a pixel-precise mask
+//
 const SegmentImageInput = z.object({
   imageDataUrl: z.string().min(1),
-  labels: z.array(z.string().min(1).max(120)).max(24).optional().default([]),
+  granularity: z.enum(["fine", "coarse"]).optional().default("fine"),
 });
 
-async function autoListElements(imageUrlOrDataUrl: string): Promise<string[]> {
+type DetType = "text" | "object" | "icon" | "arrow" | "frame";
+type DetSource = "gemini" | "florence" | "ocr";
+type RawDet = {
+  label: string;
+  bbox: { x: number; y: number; w: number; h: number };
+  confidence: number;
+  type: DetType;
+  source: DetSource;
+};
+
+function classifyLabel(label: string): DetType {
+  const l = label.toLowerCase();
+  if (/(arrow|line pointing|pointer)/.test(l)) return "arrow";
+  if (/(icon|symbol|emoji)/.test(l)) return "icon";
+  if (/(box|frame|panel|container|border|rectangle|card)/.test(l)) return "frame";
+  return "object";
+}
+
+// ---- Detector 1: Gemini 2.5 vision → structured bboxes ----
+async function detectWithGemini(
+  imageDataUrl: string,
+  granularity: "fine" | "coarse",
+): Promise<RawDet[]> {
   const key = process.env.LOVABLE_API_KEY;
   if (!key) throw new Error("LOVABLE_API_KEY missing");
-  const sys = `You are labeling every distinct visual element in an image for open-vocabulary object detection (Grounding-DINO).
-Return ONLY strict JSON: { "labels": ["...", "..."] }.
+
+  const granRule =
+    granularity === "fine"
+      ? `List EVERY distinct visible element separately — icons, arrows, small text labels, frames, characters, objects. Aim for 8–20 elements.`
+      : `Group the image into 3–8 semantic UNITS (e.g. "hearing panel with icon and label", not the icon + label separately).`;
+
+  const sys = `You are an expert vision annotator. Look at the image and return a JSON list of every distinct element with its bounding box.
+
+${granRule}
+
+Return ONLY strict JSON with this exact shape:
+{ "elements": [ { "label": "...", "type": "text|object|icon|arrow|frame", "bbox": [x0, y0, x1, y1], "confidence": 0.0-1.0 } ] }
+
 Rules:
-- Include EVERY visible element: people, objects, animals, UI parts, arrows, icons, text boxes, decorative shapes.
-- Each label = a short concrete noun phrase (2-5 words), e.g. "red arrow pointing right", "laptop on desk", "yellow speech bubble".
-- No duplicates. If two similar items exist, disambiguate ("left dog", "right dog").
-- Max 20 labels. Prefer the most visually distinct ones if more exist.`;
+- bbox = [x0, y0, x1, y1] with values NORMALIZED to 0..1 (fractions of image width/height, top-left origin).
+- label = a short concrete noun phrase (2-6 words), e.g. "golden retriever illustration", "hearing icon", "text saying powerful jaws", "green arrow pointing right".
+- type: "text" for pure written words/sentences, "arrow" for connectors, "icon" for small pictograms, "frame" for containers/boxes/panels, "object" for everything else (illustrations, characters).
+- confidence: your certainty this is a real distinct element, 0.4–1.0.
+- Do NOT return the whole image as one element. Do NOT return duplicates.`;
+
   const res = await fetch(`${AI_URL}/chat/completions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-2.5-pro",
       messages: [
         { role: "system", content: sys },
-        { role: "user", content: [
-          { type: "text", text: "List every distinct visual element in this image." },
-          { type: "image_url", image_url: { url: imageUrlOrDataUrl } },
-        ] },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Annotate every element in this image." },
+            { type: "image_url", image_url: { url: imageDataUrl } },
+          ],
+        },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 800,
+      max_tokens: 4000,
     }),
   });
-  if (!res.ok) throw new Error(`auto-list failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`gemini-detect: ${res.status} ${await res.text()}`);
   const j = await res.json();
   const raw = j.choices?.[0]?.message?.content ?? "{}";
   let parsed: any = {};
   try { parsed = JSON.parse(raw); } catch {}
-  const arr = Array.isArray(parsed.labels) ? parsed.labels : [];
-  return arr.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 20);
+  const arr = Array.isArray(parsed.elements) ? parsed.elements : [];
+  const out: RawDet[] = [];
+  for (const e of arr) {
+    const bb = Array.isArray(e?.bbox) ? e.bbox.map(Number) : null;
+    if (!bb || bb.length < 4 || bb.some((n: any) => !isFinite(n))) continue;
+    let [x1, y1, x2, y2] = bb;
+    // If model returned pixel-space (0..1000 or larger), normalize.
+    const maxV = Math.max(Math.abs(x1), Math.abs(y1), Math.abs(x2), Math.abs(y2));
+    if (maxV > 1.5) {
+      const div = maxV > 100 ? 1000 : maxV > 1.5 ? maxV : 1;
+      x1 /= div; y1 /= div; x2 /= div; y2 /= div;
+    }
+    const x = Math.max(0, Math.min(x1, x2));
+    const y = Math.max(0, Math.min(y1, y2));
+    const w = Math.max(0, Math.min(1 - x, Math.abs(x2 - x1)));
+    const h = Math.max(0, Math.min(1 - y, Math.abs(y2 - y1)));
+    if (w < 0.01 || h < 0.01) continue;
+    const type: DetType = ["text", "object", "icon", "arrow", "frame"].includes(e?.type)
+      ? e.type
+      : classifyLabel(String(e?.label ?? ""));
+    out.push({
+      label: String(e?.label ?? "element").slice(0, 80),
+      bbox: { x, y, w, h },
+      confidence: Math.max(0, Math.min(1, Number(e?.confidence ?? 0.7))),
+      type,
+      source: "gemini",
+    });
+  }
+  return out;
+}
+
+// ---- Detector 2 & 3: Florence-2 (dense region caption + OCR with region) ----
+async function runFlorence(
+  imageUrl: string,
+  task: "<DENSE_REGION_CAPTION>" | "<OCR_WITH_REGION>",
+): Promise<any> {
+  const lovableKey = process.env.LOVABLE_API_KEY!;
+  const replicateKey = process.env.REPLICATE_API_KEY!;
+  const version = await getModelVersion("lucataco", "florence-2-large");
+
+  let createRes: Response | null = null;
+  let lastBody = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    createRes = await fetch(`${REPLICATE_GATEWAY}/predictions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": replicateKey,
+        "Content-Type": "application/json",
+        Prefer: "wait=60",
+      },
+      body: JSON.stringify({
+        version,
+        input: { image: imageUrl, task_input: task },
+      }),
+    });
+    if (createRes.ok || (createRes.status < 500 && createRes.status !== 429)) break;
+    lastBody = await createRes.text();
+    let waitMs = 2000 * Math.pow(2, attempt);
+    try { const jj = JSON.parse(lastBody); if (jj?.retry_after) waitMs = Number(jj.retry_after) * 1000 + 500; } catch {}
+    await new Promise((r) => setTimeout(r, Math.min(15000, waitMs)));
+  }
+  if (!createRes || !createRes.ok) {
+    throw new Error(`florence ${task}: ${createRes?.status} ${lastBody.slice(0, 200)}`);
+  }
+  let pred = await createRes.json();
+  for (let i = 0; i < 40 && (pred.status === "starting" || pred.status === "processing"); i++) {
+    await new Promise((r) => setTimeout(r, i < 5 ? 1500 : 3000));
+    const pollRes = await fetch(`${REPLICATE_GATEWAY}/predictions/${pred.id}`, {
+      headers: { Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": replicateKey },
+    });
+    if (!pollRes.ok) throw new Error(`florence poll: ${pollRes.status}`);
+    pred = await pollRes.json();
+  }
+  if (pred.status !== "succeeded") {
+    throw new Error(`florence ${task} ${pred.status}: ${JSON.stringify(pred.error || "").slice(0, 200)}`);
+  }
+  return pred.output;
+}
+
+// Florence's DENSE_REGION_CAPTION output shape is roughly:
+//   { text: "<DENSE_REGION_CAPTION>{'bboxes': [[x1,y1,x2,y2], ...], 'labels': [...]}" }
+// or already a parsed object depending on version. We handle both.
+function parseFlorenceRegions(output: any, source: DetSource, defaultType: DetType): RawDet[] {
+  if (!output) return [];
+  let payload: any = output;
+  if (typeof payload === "string") {
+    // strip task tag prefix
+    const cleaned = payload.replace(/^<[^>]+>/, "").trim();
+    // Florence returns Python-style dicts sometimes — swap single→double quotes.
+    try { payload = JSON.parse(cleaned); } catch {
+      try { payload = JSON.parse(cleaned.replace(/'/g, '"')); } catch { return []; }
+    }
+  }
+  // Common wrappers.
+  if (payload && typeof payload === "object") {
+    const tag = defaultType === "text" ? "<OCR_WITH_REGION>" : "<DENSE_REGION_CAPTION>";
+    if (payload[tag]) payload = payload[tag];
+  }
+  const bboxes: any[] = payload?.bboxes || payload?.quad_boxes || [];
+  const labels: any[] = payload?.labels || [];
+  // Assume Florence returns pixel coords in original image space. We normalize
+  // using the fact we requested against the source image — the actual dims
+  // aren't returned. Fallback: divide by 1000 (Florence's normalized space).
+  // Since we can't know image size here, we assume 1000-scale (Florence default)
+  // and clamp to [0,1]. If pixels exceed 1500, fall back to /1500.
+  const out: RawDet[] = [];
+  for (let i = 0; i < bboxes.length; i++) {
+    const box = bboxes[i];
+    if (!Array.isArray(box) || box.length < 4) continue;
+    let [x1, y1, x2, y2]: number[] = [Number(box[0]), Number(box[1]), Number(box[2]), Number(box[3])];
+    const maxV = Math.max(x1, y1, x2, y2);
+    const divisor = maxV > 1500 ? maxV : 1000;
+    x1 /= divisor; y1 /= divisor; x2 /= divisor; y2 /= divisor;
+    const x = Math.max(0, Math.min(x1, x2));
+    const y = Math.max(0, Math.min(y1, y2));
+    const w = Math.max(0, Math.min(1 - x, Math.abs(x2 - x1)));
+    const h = Math.max(0, Math.min(1 - y, Math.abs(y2 - y1)));
+    if (w < 0.01 || h < 0.01) continue;
+    const rawLabel = String(labels[i] ?? (defaultType === "text" ? "text" : "element")).trim();
+    const type: DetType = defaultType === "text" ? "text" : classifyLabel(rawLabel);
+    out.push({
+      label: rawLabel.slice(0, 80),
+      bbox: { x, y, w, h },
+      confidence: 0.7, // Florence doesn't return per-box confidence for these tasks
+      type,
+      source,
+    });
+  }
+  return out;
+}
+
+async function detectWithFlorenceRegions(imageUrl: string): Promise<RawDet[]> {
+  const out = await runFlorence(imageUrl, "<DENSE_REGION_CAPTION>");
+  return parseFlorenceRegions(out, "florence", "object");
+}
+async function detectWithFlorenceOCR(imageUrl: string): Promise<RawDet[]> {
+  const out = await runFlorence(imageUrl, "<OCR_WITH_REGION>");
+  return parseFlorenceRegions(out, "ocr", "text");
+}
+
+// Reconciliation (server-side, mirrors client util so we can filter before sending).
+function reconcileServer(inputs: RawDet[]): { kept: RawDet[]; rejected: Array<RawDet & { reason: string }> } {
+  const rejected: Array<RawDet & { reason: string }> = [];
+  const gated: RawDet[] = [];
+  for (const d of inputs) {
+    const area = d.bbox.w * d.bbox.h;
+    if (area < 0.001) { rejected.push({ ...d, reason: "bbox too small" }); continue; }
+    if (area > 0.95) { rejected.push({ ...d, reason: "bbox covers whole image" }); continue; }
+    gated.push(d);
+  }
+  const iouAB = (a: RawDet["bbox"], b: RawDet["bbox"]) => {
+    const ax2 = a.x + a.w, ay2 = a.y + a.h, bx2 = b.x + b.w, by2 = b.y + b.h;
+    const ix = Math.max(0, Math.min(ax2, bx2) - Math.max(a.x, b.x));
+    const iy = Math.max(0, Math.min(ay2, by2) - Math.max(a.y, b.y));
+    const inter = ix * iy, union = a.w * a.h + b.w * b.h - inter;
+    return union > 0 ? inter / union : 0;
+  };
+  const pri = (d: RawDet) => (d.type === "text" && d.source === "ocr" ? 100 : d.source === "florence" ? 60 : d.source === "gemini" ? 50 : 40);
+  gated.sort((a, b) => pri(b) + b.confidence * 10 - (pri(a) + a.confidence * 10));
+  const used = new Array(gated.length).fill(false);
+  const kept: RawDet[] = [];
+  for (let i = 0; i < gated.length; i++) {
+    if (used[i]) continue;
+    const cur = gated[i];
+    used[i] = true;
+    for (let j = i + 1; j < gated.length; j++) {
+      if (used[j]) continue;
+      const ov = iouAB(cur.bbox, gated[j].bbox);
+      if (ov >= 0.55) used[j] = true;
+    }
+    kept.push(cur);
+    if (kept.length >= 30) break;
+  }
+  return { kept, rejected };
+}
+
+// Concurrency-limited parallel map.
+async function pMap<T, R>(items: T[], concurrency: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let idx = 0;
+  const workers = new Array(Math.min(concurrency, items.length)).fill(0).map(async () => {
+    while (true) {
+      const i = idx++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 export const segmentUploadedImage = createServerFn({ method: "POST" })
@@ -791,6 +1025,7 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const steps: CompositeStep[] = [];
 
+    // 1) Upload once.
     let uploadUrl: string;
     try {
       uploadUrl = await uploadToReplicate(data.imageDataUrl);
@@ -800,70 +1035,110 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
       throw new Error(`upload: ${e?.message || "failed"}`);
     }
 
-    let labels: string[] = data.labels ?? [];
-    if (labels.length === 0) {
-      try {
-        labels = await autoListElements(data.imageDataUrl);
-        steps.push({ name: "auto-list", status: labels.length ? "ok" : "warn", message: `${labels.length} labels` });
-      } catch (e: any) {
-        steps.push({ name: "auto-list", status: "error", message: e?.message || "auto-list failed" });
-        throw new Error(`auto-list: ${e?.message || "failed"}`);
-      }
-      if (!labels.length) throw new Error("auto-list returned no labels");
-    }
+    // 2) Run 3 detectors in parallel.
+    const [geminiRes, florenceRes, ocrRes] = await Promise.allSettled([
+      detectWithGemini(data.imageDataUrl, data.granularity),
+      detectWithFlorenceRegions(uploadUrl),
+      detectWithFlorenceOCR(uploadUrl),
+    ]);
 
-    let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
-    try {
-      detections = await detectWithGroundingDino(uploadUrl, labels);
-      steps.push({ name: "segment", status: "ok", message: `${detections.length} boxes` });
-    } catch (e: any) {
-      steps.push({ name: "segment", status: "warn", message: e?.message || "segmentation failed" });
-    }
+    const gemini = geminiRes.status === "fulfilled" ? geminiRes.value : [];
+    const florence = florenceRes.status === "fulfilled" ? florenceRes.value : [];
+    const ocr = ocrRes.status === "fulfilled" ? ocrRes.value : [];
 
-    const used = new Set<number>();
-    const matched = labels.map((label) => {
-      const idx = matchDetection(label, detections, used);
-      if (idx < 0) return { label, bbox: null as any, confidence: 0 };
-      used.add(idx);
-      return { label, bbox: detections[idx].bbox, confidence: detections[idx].confidence };
-    });
-    const matchCount = matched.filter((r) => r.bbox).length;
     steps.push({
-      name: "match",
-      status: matchCount === 0 ? "warn" : "ok",
-      message: `${matchCount}/${labels.length} matched`,
+      name: "gemini",
+      status: geminiRes.status === "fulfilled" ? (gemini.length ? "ok" : "warn") : "error",
+      message:
+        geminiRes.status === "fulfilled"
+          ? `${gemini.length} elements`
+          : (geminiRes as any).reason?.message?.slice(0, 200) ?? "failed",
+    });
+    steps.push({
+      name: "florence",
+      status: florenceRes.status === "fulfilled" ? (florence.length ? "ok" : "warn") : "error",
+      message:
+        florenceRes.status === "fulfilled"
+          ? `${florence.length} regions`
+          : (florenceRes as any).reason?.message?.slice(0, 200) ?? "failed",
+    });
+    steps.push({
+      name: "ocr",
+      status: ocrRes.status === "fulfilled" ? (ocr.length ? "ok" : "warn") : "error",
+      message:
+        ocrRes.status === "fulfilled"
+          ? `${ocr.length} text runs`
+          : (ocrRes as any).reason?.message?.slice(0, 200) ?? "failed",
     });
 
+    // 3) Reconcile.
+    const allDets = [...gemini, ...florence, ...ocr];
+    const { kept, rejected } = reconcileServer(allDets);
+    steps.push({
+      name: "reconcile",
+      status: kept.length ? "ok" : "warn",
+      message: `${kept.length} kept, ${rejected.length} rejected`,
+    });
+
+    // 4) Extract per-element: text → rect (no SAM), object/icon/arrow/frame → SAM by label.
+    const samTargets = kept.filter((d) => d.type !== "text");
     let maskCount = 0;
-    const masks = await Promise.all(
-      matched.map(async (el) => {
-        if (!el.bbox) return null;
+    const masksByIdx = new Map<number, string | null>();
+    if (samTargets.length) {
+      const masks = await pMap(samTargets, 4, async (d) => {
         try {
-          const m = await segmentOneWithGroundedSam(uploadUrl, el.label);
+          const m = await segmentOneWithGroundedSam(uploadUrl, d.label);
           if (m) maskCount++;
           return m;
         } catch (e: any) {
-          console.warn(`[sam] "${el.label}" failed:`, e?.message);
+          console.warn(`[sam] "${d.label}" failed:`, e?.message);
           return null;
         }
-      }),
-    );
+      });
+      // Map back to indices in `kept`.
+      let si = 0;
+      for (let i = 0; i < kept.length; i++) {
+        if (kept[i].type === "text") continue;
+        masksByIdx.set(i, masks[si] ?? null);
+        si++;
+      }
+    }
     steps.push({
       name: "sam",
-      status: maskCount === 0 && matchCount > 0 ? "warn" : "ok",
-      message: `${maskCount}/${matchCount} masks`,
+      status: samTargets.length === 0 ? "ok" : maskCount === 0 ? "warn" : "ok",
+      message: `${maskCount}/${samTargets.length} masks`,
     });
 
-    const elements = matched.map((el, i) => ({
-      label: el.label,
-      bbox: el.bbox,
-      confidence: el.confidence,
-      maskUrl: masks[i] ?? null,
+    const elements = kept.map((d, i) => ({
+      label: d.label,
+      bbox: d.bbox,
+      confidence: d.confidence,
+      type: d.type,
+      source: d.source,
+      maskUrl: masksByIdx.get(i) ?? null,
+      cropMode: (d.type === "text" ? "rect" : "mask") as "rect" | "mask" | "white",
     }));
 
-    // Also return all raw detections so user can see everything the model saw.
-    return { uploadUrl, elements, detections, steps };
+    return {
+      uploadUrl,
+      elements,
+      rejected: rejected.map((r) => ({
+        label: r.label,
+        bbox: r.bbox,
+        confidence: r.confidence,
+        type: r.type,
+        source: r.source,
+        reason: r.reason,
+      })),
+      raw: {
+        gemini: gemini.length,
+        florence: florence.length,
+        ocr: ocr.length,
+      },
+      steps,
+    };
   });
+
 
 // ---------- TTS (ElevenLabs v3, Liam voice) ----------
 const TtsInput = z.object({ text: z.string().min(1).max(4000) });
