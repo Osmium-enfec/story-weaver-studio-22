@@ -225,12 +225,19 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       return s.trim();
     };
 
+    const CODE_HINT_RE = /`|\bfunction\b|\bconst\b|\bimport\b|\bclass\b|\breturn\b|\bAPI\b|\bfile\b|\bcommand\b|\bsyntax\b|\bfunction\(|=>|;|\{|\}|\(\)/;
     const scenes: ScenePlan[] = arr.slice(0, 40).map((meta: any, i: number) => {
       const rawKind = meta?.kind;
-      // Only "image" and "code" now — legacy "stock" plans fall back to image.
-      const kind: SceneKind = rawKind === "code" ? "code" : "image";
       const sentence = String(meta?.sentence ?? "").trim() || `Scene ${i + 1}`;
       const narrationText = String(meta?.narrationText ?? "").trim() || sentence;
+      // Safety: only allow "code" when the sentence actually reads like code
+      // or the model provided a non-trivial code snippet. Otherwise fall back
+      // to "image" so marketing sentences don't render as an empty editor.
+      const providedCode = normalizeCode(meta?.code);
+      const looksLikeCode =
+        CODE_HINT_RE.test(sentence) ||
+        (providedCode.length > 20 && /[{};=()]/.test(providedCode));
+      const kind: SceneKind = rawKind === "code" && looksLikeCode ? "code" : "image";
       const codeVariant: CodeVariant = ["typing", "morph", "scroll", "flight"].includes(
         meta?.codeVariant,
       )
