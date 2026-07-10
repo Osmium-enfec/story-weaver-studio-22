@@ -216,29 +216,44 @@ function Index() {
 
             const { compositeUrl, elements: seg } = result;
             const bySeg = new Map(seg.map((s) => [s.id, s]));
-            emit({ name: "crop", status: "running" });
+            emit({ name: "generate-elements", status: "running" });
+            let genCached = 0;
+            let genNew = 0;
             const els = await Promise.all(
               compElements.map(async (el) => {
-                const info = bySeg.get(el.id) as { bbox?: any; maskUrl?: string | null } | undefined;
+                const info = bySeg.get(el.id) as { bbox?: any } | undefined;
                 const bbox = info?.bbox;
-                const maskUrl = info?.maskUrl || undefined;
-                const mediaUrl = bbox
-                  ? await cropAndClear(compositeUrl, bbox, 0.06, maskUrl)
-                  : compositeUrl;
-                return {
-                  id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
-                  appearAt: el.appearAt, anim: el.anim, mediaUrl,
-                  bbox: bbox ?? undefined,
-                };
+                try {
+                  const promptText =
+                    (el as any).prompt || el.segmentPrompt || el.label || el.id;
+                  const gen = await findOrGenerateImage({
+                    data: { prompt: promptText, kind: "element" },
+                  });
+                  if (gen.cached) genCached++; else genNew++;
+                  return {
+                    id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
+                    appearAt: el.appearAt, anim: el.anim, mediaUrl: gen.dataUrl,
+                    bbox: bbox ?? undefined,
+                  };
+                } catch (e: any) {
+                  console.warn(`[element] "${el.id}" gen failed:`, e?.message);
+                  return {
+                    id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
+                    appearAt: el.appearAt, anim: el.anim, mediaUrl: compositeUrl,
+                    bbox: bbox ?? undefined,
+                  };
+                }
               }),
             );
-            const cropped = els.filter((e) => e.bbox).length;
+            cachedHits = genCached;
+            totalImgs = genCached + genNew;
             emit({
-              name: "crop",
-              status: cropped === 0 && els.length > 0 ? "warn" : "ok",
-              message: `${cropped}/${els.length} cropped`,
+              name: "generate-elements",
+              status: "ok",
+              message: `${genNew} new, ${genCached} reused`,
             });
             return { kind: "image" as const, title: comp.title, elements: els };
+
           })();
 
 
