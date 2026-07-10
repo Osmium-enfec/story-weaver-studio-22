@@ -53,12 +53,15 @@ export const Route = createFileRoute("/")({
 });
 
 type SceneStatus = "pending" | "planning" | "ready" | "error";
+type StepStatus = "running" | "ok" | "warn" | "error";
+interface SceneStep { name: string; status: StepStatus; message?: string }
 interface SceneProgress extends ScenePlan {
   status: SceneStatus;
   error?: string;
   mediaUrl?: string;
   audioUrl?: string;
   cached?: boolean;
+  steps?: SceneStep[];
 }
 
 const SAMPLE = `Every day, billions of people search the web for answers. But search hasn't changed much in decades. Now, AI can understand what you actually mean. It reads across millions of pages in seconds. And gives you a clear, direct answer instead of a list of links. The future of search is finally here.`;
@@ -141,10 +144,25 @@ function Index() {
     setStats(statsRef.current);
   }
 
+  function pushStep(i: number, step: SceneStep) {
+    setProgress((prev) => {
+      const next = [...prev];
+      const cur = next[i];
+      if (!cur) return prev;
+      const steps = [...(cur.steps ?? [])];
+      // Update existing "running" step of the same name, else append.
+      const idx = steps.findIndex((s) => s.name === step.name && s.status === "running");
+      if (idx >= 0) steps[idx] = step; else steps.push(step);
+      next[i] = { ...cur, steps };
+      return next;
+    });
+  }
+
   // ---------- Build one scene ----------
   async function buildScene(
     plan: ScenePlan,
     precomputedAudio?: { audioUrl: string; durationMs: number },
+    onStep?: (s: SceneStep) => void,
   ): Promise<Scene & { _cached?: boolean }> {
     let cachedHits = 0;
     let totalImgs = 0;
@@ -159,6 +177,8 @@ function Index() {
       }[];
     };
 
+    const emit = (s: SceneStep) => { try { onStep?.(s); } catch {} };
+
     const visualPromise: Promise<ImageComp | null> =
       plan.kind === "code"
         ? Promise.resolve(null)
@@ -166,52 +186,55 @@ function Index() {
             const comp = plan.composition;
             if (!comp) return null;
             const compElements = Array.isArray(comp.elements) ? comp.elements : [];
-            totalImgs = 1; // one composite call per scene
+            totalImgs = 1;
             if (compElements.length === 0) {
               return { kind: "image" as const, title: comp.title, elements: [] };
             }
 
-            const { compositeUrl, elements: seg } = await generateSceneComposite({
-              data: {
-                compositePrompt:
-                  comp.compositePrompt ??
-                  comp.backgroundPrompt ??
-                  plan.sentence,
-                title: comp.title,
-                elements: compElements.map((el) => ({
-                  id: el.id,
-                  segmentPrompt: el.segmentPrompt || el.label || el.id,
-                })),
-              },
-            });
+            emit({ name: "composite", status: "running" });
+            let result: Awaited<ReturnType<typeof generateSceneComposite>>;
+            try {
+              result = await generateSceneComposite({
+                data: {
+                  compositePrompt:
+                    comp.compositePrompt ?? comp.backgroundPrompt ?? plan.sentence,
+                  title: comp.title,
+                  elements: compElements.map((el) => ({
+                    id: el.id,
+                    segmentPrompt: el.segmentPrompt || el.label || el.id,
+                  })),
+                },
+              });
+            } catch (e: any) {
+              emit({ name: "composite", status: "error", message: e?.message || "failed" });
+              throw e;
+            }
+            // Replay server-side sub-steps so the UI shows exactly what happened.
+            const serverSteps = (result as any).steps as SceneStep[] | undefined;
+            if (serverSteps?.length) serverSteps.forEach((s) => emit(s));
+            else emit({ name: "composite", status: "ok" });
 
+            const { compositeUrl, elements: seg } = result;
             const byId = new Map(seg.map((s) => [s.id, s.bbox]));
+            emit({ name: "crop", status: "running" });
             const els = await Promise.all(
               compElements.map(async (el) => {
                 const bbox = byId.get(el.id);
-                const mediaUrl = bbox
-                  ? await cropAndClear(compositeUrl, bbox)
-                  : compositeUrl;
+                const mediaUrl = bbox ? await cropAndClear(compositeUrl, bbox) : compositeUrl;
                 return {
-                  id: el.id,
-                  label: el.label,
-                  x: el.x,
-                  y: el.y,
-                  w: el.w,
-                  appearAt: el.appearAt,
-                  anim: el.anim,
-                  mediaUrl,
+                  id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
+                  appearAt: el.appearAt, anim: el.anim, mediaUrl,
                   bbox: bbox ?? undefined,
                 };
               }),
             );
-            return {
-              kind: "image" as const,
-              // Keep composite as backgroundUrl only when user picked
-              // whiteboard bg — otherwise the elements alone read cleaner.
-              title: comp.title,
-              elements: els,
-            };
+            const cropped = els.filter((e) => e.bbox).length;
+            emit({
+              name: "crop",
+              status: cropped === 0 && els.length > 0 ? "warn" : "ok",
+              message: `${cropped}/${els.length} cropped`,
+            });
+            return { kind: "image" as const, title: comp.title, elements: els };
           })();
 
 
@@ -219,6 +242,7 @@ function Index() {
     if (precomputedAudio) {
       audioPromise = Promise.resolve(precomputedAudio);
     } else {
+      emit({ name: "tts", status: "running" });
       audioPromise = generateNarration({ data: { text: plan.narrationText || plan.sentence } }).then(
         async (r) => {
           const dur = await new Promise<number>((resolve) => {
@@ -228,7 +252,12 @@ function Index() {
             );
             a.addEventListener("error", () => resolve(4000));
           });
+          emit({ name: "tts", status: "ok", message: `${Math.round(dur)}ms` });
           return { audioUrl: r.audioUrl, durationMs: dur };
+        },
+        (e) => {
+          emit({ name: "tts", status: "error", message: e?.message || "tts failed" });
+          throw e;
         },
       );
     }
@@ -365,7 +394,7 @@ function Index() {
                     durationMs: audioWindows[i].endMs - audioWindows[i].startMs,
                   }
                 : undefined;
-            const s = await buildScene(p, precomputed);
+            const s = await buildScene(p, precomputed, (step) => pushStep(i, step));
             const { _cached, ...scene } = s as any;
             resultsArr[i] = scene;
             resultsRef.current = resultsArr;
@@ -438,7 +467,7 @@ function Index() {
     if (!plan) return;
     setProgress((prev) => {
       const next = [...prev];
-      next[i] = { ...plan, status: "planning", error: undefined };
+      next[i] = { ...plan, status: "planning", error: undefined, steps: [] };
       return next;
     });
     try {
@@ -447,7 +476,7 @@ function Index() {
       const precomputed = existing?.masterAudioUrl
         ? { audioUrl: existing.masterAudioUrl, durationMs: (existing.endMs ?? 0) - (existing.startMs ?? 0) }
         : undefined;
-      const s = await buildScene(plan, precomputed);
+      const s = await buildScene(plan, precomputed, (step) => pushStep(i, step));
       const { _cached, ...scene } = s as any;
       setResults((prev) => { const n = [...prev]; n[i] = scene; resultsRef.current = n; return n; });
       scheduleAutoSave();
@@ -753,6 +782,38 @@ function Index() {
                               className="h-16 w-16 rounded border bg-white object-contain p-1"
                             />
                           ))}
+                        </div>
+                      )}
+                      {(p.steps?.length ?? 0) > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {p.steps!.map((s, k) => {
+                            const color =
+                              s.status === "ok"
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : s.status === "warn"
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : s.status === "error"
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : "bg-muted text-muted-foreground border-border";
+                            const icon =
+                              s.status === "ok" ? "✓"
+                              : s.status === "warn" ? "!"
+                              : s.status === "error" ? "✕"
+                              : "…";
+                            return (
+                              <span
+                                key={k}
+                                title={s.message || ""}
+                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${color}`}
+                              >
+                                <span className="font-mono">{icon}</span>
+                                <span>{s.name}</span>
+                                {s.message && (
+                                  <span className="max-w-[220px] truncate opacity-75">· {s.message}</span>
+                                )}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

@@ -593,36 +593,50 @@ function matchDetection(
   return bestScore > 0 ? best : -1;
 }
 
+export type CompositeStep = { name: string; status: "ok" | "warn" | "error"; message?: string };
+
 export const generateSceneComposite = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => CompositeInput.parse(d))
   .handler(async ({ data }) => {
-    // 1) Generate composite image
-    const compositeUrl = await generateCompositeImage(data.compositePrompt, data.title);
+    const steps: CompositeStep[] = [];
 
-    // 2) Upload to Replicate so the segmenter can read it
+    // 1) Generate composite image (OpenAI)
+    let compositeUrl: string;
+    try {
+      compositeUrl = await generateCompositeImage(data.compositePrompt, data.title);
+      steps.push({ name: "composite", status: "ok" });
+    } catch (e: any) {
+      steps.push({ name: "composite", status: "error", message: e?.message || "failed" });
+      throw new Error(`composite: ${e?.message || "failed"}`);
+    }
+
+    // 2) Upload to Replicate for segmentation
     let uploadUrl: string;
     try {
       uploadUrl = await uploadToReplicate(compositeUrl);
+      steps.push({ name: "upload", status: "ok" });
     } catch (e: any) {
-      console.warn("[composite] Replicate upload failed, returning composite w/o segmentation:", e?.message);
+      steps.push({ name: "upload", status: "warn", message: e?.message || "upload failed" });
       return {
         compositeUrl,
         elements: data.elements.map((el) => ({ id: el.id, bbox: null as any })),
+        steps,
       };
     }
 
-    // 3) Detect all labels in one call
+    // 3) Detect all labels (Grounding-DINO)
     let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
     try {
       detections = await detectWithGroundingDino(
         uploadUrl,
         data.elements.map((el) => el.segmentPrompt),
       );
+      steps.push({ name: "segment", status: "ok", message: `${detections.length} boxes` });
     } catch (e: any) {
-      console.warn("[composite] Grounding-DINO failed:", e?.message);
+      steps.push({ name: "segment", status: "warn", message: e?.message || "segmentation failed" });
     }
 
-    // 4) Match detections back to elements
+    // 4) Match detections → elements
     const used = new Set<number>();
     const resolved = data.elements.map((el) => {
       const idx = matchDetection(el.segmentPrompt, detections, used);
@@ -630,8 +644,14 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       used.add(idx);
       return { id: el.id, bbox: detections[idx].bbox };
     });
+    const matched = resolved.filter((r) => r.bbox).length;
+    steps.push({
+      name: "match",
+      status: matched === 0 && data.elements.length > 0 ? "warn" : "ok",
+      message: `${matched}/${data.elements.length} elements matched`,
+    });
 
-    return { compositeUrl, elements: resolved };
+    return { compositeUrl, elements: resolved, steps };
   });
 
 // ---------- TTS (ElevenLabs v3, Liam voice) ----------
