@@ -99,49 +99,18 @@ function ImageScene({
           boxShadow: customBg ? "0 10px 40px -12px rgba(0,0,0,0.25)" : "none",
         }}
       >
-        {!customBg && scene.backgroundUrl && (
+        {scene.backgroundUrl && (
           <img
             src={scene.backgroundUrl}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-100 ease-linear"
-            style={bgStyle}
+            className="absolute inset-0 h-full w-full object-contain transition-transform duration-100 ease-linear"
+            style={{ ...bgStyle, background: "#ffffff" }}
           />
-        )}
-        {scene.title && (
-          <div
-            className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
-            style={{
-              top: "3%",
-              fontFamily: '"Caveat", "Kalam", cursive',
-              fontWeight: 700,
-              fontSize: "clamp(28px, 6.5%, 84px)",
-              color: "#1a1a1a",
-              lineHeight: 1,
-              textShadow: "0 1px 0 rgba(255,255,255,0.9)",
-            }}
-          >
-            {scene.title}
-          </div>
         )}
         {(() => {
           const els = scene.elements ?? [];
-          if (els.length === 0) {
-            // Empty scene → show the sentence text so the card is never blank.
-            return (
-              <div
-                className="absolute inset-0 flex items-center justify-center p-10 text-center"
-                style={{
-                  fontFamily: '"Caveat", "Kalam", cursive',
-                  fontWeight: 700,
-                  fontSize: "clamp(24px, 5%, 56px)",
-                  color: "#1a1a1a",
-                  lineHeight: 1.2,
-                }}
-              >
-                {scene.subtitle}
-              </div>
-            );
-          }
+          if (els.length === 0) return null;
+
           const layout = layoutFor(els.length);
           return els.map((el, i) => {
             // Prefer bbox from segmentation; fall back to grid layout.
