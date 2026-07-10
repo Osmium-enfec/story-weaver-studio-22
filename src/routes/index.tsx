@@ -227,12 +227,14 @@ function Index() {
 
     let scene: Scene;
     if (plan.kind === "code") scene = { ...base, kind: "code" };
-    else if (visual && "backgroundUrl" in visual)
-      scene = { ...base, kind: "image", backgroundUrl: visual.backgroundUrl, elements: visual.elements };
-    else if (visual && visual.kind === "stock")
-      scene = { ...base, kind: "stock", mediaUrl: visual.videoUrl };
-    else if (visual && visual.kind === "image-fallback")
-      scene = { ...base, kind: "image", backgroundUrl: visual.imageUrl, elements: [] };
+    else if (visual)
+      scene = {
+        ...base,
+        kind: "image",
+        backgroundUrl: visual.backgroundUrl,
+        title: visual.title,
+        elements: visual.elements,
+      };
     else scene = { ...base, kind: "image", backgroundUrl: undefined, elements: [] };
 
     return { ...scene, _cached: allCached };
