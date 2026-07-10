@@ -127,15 +127,20 @@ ${narrationRule}
       in the composite that should FADE IN one-by-one as narration reaches it.
       Each element:
         id: short slug ("dog","arrow-1","box-input").
-        segmentPrompt: 1–4 word noun phrase that describes THIS element as it
-          appears in the composite — this is fed to a text-prompted segmenter
-          to cut it out. Examples: "the dog", "the laptop", "the red arrow",
-          "the box labeled input". Be concrete and visually distinctive.
+        segmentPrompt: 1–4 word noun phrase describing THIS element as it
+          appears in the composite — fed to a text-prompted object detector
+          to locate it. Examples: "the dog", "the red arrow", "the laptop".
+        prompt: 8–25 word rich description of THIS element as a standalone
+          hand-drawn illustration to be regenerated fresh in the same
+          Excalidraw/watercolor style. Include the object, its pose, colors,
+          and any small details. Example: "a small golden retriever sitting,
+          wagging tail, warm honey-brown watercolor with ink outlines".
         label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the
           element by the player (e.g. "input", "search", "answer").
         appearAt: 0..1 fraction of the scene duration when this element
           appears. First element ~0.05, last element <= 0.80. Spread evenly.
         anim: one of "pop","fade","slide-up","slide-left","slide-right".
+
 - If kind = "code":
     code: short realistic snippet (5–15 lines, real syntax, no backticks).
     codeLanguage: "ts" | "js" | "tsx" | "py" | "sh" | "json" | "html".
@@ -265,18 +270,24 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         ];
         const elements: CompositionElement[] = rawEls
           .slice(0, 6)
-          .map((el: any, ei: number) => ({
-            id: String(el?.id ?? `el${ei}`).slice(0, 24),
-            segmentPrompt: String(
+          .map((el: any, ei: number) => {
+            const segmentPrompt = String(
               el?.segmentPrompt ?? el?.prompt ?? el?.label ?? `element ${ei + 1}`,
-            ).slice(0, 120),
-            label: el?.label ? String(el.label).slice(0, 40) : undefined,
-            x: 0.5,
-            y: 0.55,
-            w: 0.22,
-            appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
-            anim: validAnims.includes(el?.anim) ? el.anim : "pop",
-          }));
+            ).slice(0, 120);
+            const prompt = String(el?.prompt ?? el?.segmentPrompt ?? el?.label ?? `hand-drawn illustration of ${segmentPrompt}`).slice(0, 400);
+            return {
+              id: String(el?.id ?? `el${ei}`).slice(0, 24),
+              segmentPrompt,
+              prompt,
+              label: el?.label ? String(el.label).slice(0, 40) : undefined,
+              x: 0.5,
+              y: 0.55,
+              w: 0.22,
+              appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
+              anim: validAnims.includes(el?.anim) ? el.anim : "pop",
+            };
+          });
+
         composition = {
           compositePrompt: String(
             meta?.composition?.compositePrompt ??
@@ -713,36 +724,17 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       message: `${matched}/${data.elements.length} elements matched`,
     });
 
-    // 5) SAM: per-element pixel mask (Grounding-DINO + SAM via schananas/grounded_sam).
-    // Run in parallel, but only for matched elements (skip failed ones to save credits).
-    let maskCount = 0;
-    const masks = await Promise.all(
-      withBbox.map(async (el) => {
-        if (!el.bbox) return null;
-        try {
-          const m = await segmentOneWithGroundedSam(uploadUrl, el.segmentPrompt);
-          if (m) maskCount++;
-          return m;
-        } catch (e: any) {
-          console.warn(`[sam] "${el.segmentPrompt}" failed:`, e?.message);
-          return null;
-        }
-      }),
-    );
-    steps.push({
-      name: "sam",
-      status: maskCount === 0 && matched > 0 ? "warn" : "ok",
-      message: `${maskCount}/${matched} masks`,
-    });
-
-    const resolved = withBbox.map((el, i) => ({
+    // (SAM step removed — elements are regenerated individually by the client
+    // using the bbox as placement metadata only.)
+    const resolved = withBbox.map((el) => ({
       id: el.id,
       bbox: el.bbox,
-      maskUrl: masks[i] ?? null,
+      maskUrl: null as string | null,
     }));
 
     return { compositeUrl, elements: resolved, steps };
   });
+
 
 
 // ---------- Debug: multi-detector segmentation of an ARBITRARY uploaded image ----------
