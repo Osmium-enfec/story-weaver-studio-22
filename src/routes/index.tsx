@@ -119,6 +119,8 @@ function Index() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [projectTitle, setProjectTitle] = useState<string>("");
+  const [background, setBackground] = useState<SceneBackground>({ kind: "whiteboard" });
+
 
   // Approx credit-usage counters (client-side estimate, not a bill)
   const [stats, setStats] = useState({
