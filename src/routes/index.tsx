@@ -467,7 +467,7 @@ function Index() {
     if (!plan) return;
     setProgress((prev) => {
       const next = [...prev];
-      next[i] = { ...plan, status: "planning", error: undefined };
+      next[i] = { ...plan, status: "planning", error: undefined, steps: [] };
       return next;
     });
     try {
@@ -476,7 +476,7 @@ function Index() {
       const precomputed = existing?.masterAudioUrl
         ? { audioUrl: existing.masterAudioUrl, durationMs: (existing.endMs ?? 0) - (existing.startMs ?? 0) }
         : undefined;
-      const s = await buildScene(plan, precomputed);
+      const s = await buildScene(plan, precomputed, (step) => pushStep(i, step));
       const { _cached, ...scene } = s as any;
       setResults((prev) => { const n = [...prev]; n[i] = scene; resultsRef.current = n; return n; });
       scheduleAutoSave();
