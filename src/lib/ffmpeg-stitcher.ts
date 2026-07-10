@@ -150,7 +150,7 @@ export async function exportToMp4(
     segments.push(segName);
     segDurSec.push(frames / fps);
     tick(1);
-    onProgress(`encoded scene ${i + 1}/${scenes.length}`, unitsDone / totalUnits);
+    onProgress(`encoded scene ${i + 1}/${scenes.length}`, frac());
 
     for (let f = 0; f < frames; f++) {
       try { await ffmpeg.deleteFile(`s${i}_f${String(f).padStart(5, "0")}.png`); } catch {}
