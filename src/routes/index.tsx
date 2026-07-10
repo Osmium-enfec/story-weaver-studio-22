@@ -758,7 +758,6 @@ function Index() {
                 </button>
               </div>
             </div>
-            <BackgroundPicker value={background} onChange={setBackground} />
             <VideoPlayer scenes={scenes} background={background} />
           </section>
         )}
