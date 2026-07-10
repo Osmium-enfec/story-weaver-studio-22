@@ -821,7 +821,7 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
     }
 
     const used = new Set<number>();
-    const matched = data.labels.map((label) => {
+    const matched = labels.map((label) => {
       const idx = matchDetection(label, detections, used);
       if (idx < 0) return { label, bbox: null as any, confidence: 0 };
       used.add(idx);
@@ -831,7 +831,7 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
     steps.push({
       name: "match",
       status: matchCount === 0 ? "warn" : "ok",
-      message: `${matchCount}/${data.labels.length} matched`,
+      message: `${matchCount}/${labels.length} matched`,
     });
 
     let maskCount = 0;
