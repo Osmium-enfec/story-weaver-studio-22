@@ -748,8 +748,43 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
 // ---------- Debug: segment an ARBITRARY uploaded image ----------
 const SegmentImageInput = z.object({
   imageDataUrl: z.string().min(1),
-  labels: z.array(z.string().min(1).max(120)).min(1).max(8),
+  labels: z.array(z.string().min(1).max(120)).max(24).optional().default([]),
 });
+
+async function autoListElements(imageUrl: string): Promise<string[]> {
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key) throw new Error("LOVABLE_API_KEY missing");
+  const sys = `You are labeling every distinct visual element in an image for open-vocabulary object detection (Grounding-DINO).
+Return ONLY strict JSON: { "labels": ["...", "..."] }.
+Rules:
+- Include EVERY visible element: people, objects, animals, UI parts, arrows, icons, text boxes, decorative shapes.
+- Each label = a short concrete noun phrase (2-5 words), e.g. "red arrow pointing right", "laptop on desk", "yellow speech bubble".
+- No duplicates. If two similar items exist, disambiguate ("left dog", "right dog").
+- Max 20 labels. Prefer the most visually distinct ones if more exist.`;
+  const res = await fetch(`${AI_URL}/chat/completions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: sys },
+        { role: "user", content: [
+          { type: "text", text: "List every distinct visual element in this image." },
+          { type: "image_url", image_url: { url: imageUrl } },
+        ] },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 800,
+    }),
+  });
+  if (!res.ok) throw new Error(`auto-list failed: ${res.status} ${await res.text()}`);
+  const j = await res.json();
+  const raw = j.choices?.[0]?.message?.content ?? "{}";
+  let parsed: any = {};
+  try { parsed = JSON.parse(raw); } catch {}
+  const arr = Array.isArray(parsed.labels) ? parsed.labels : [];
+  return arr.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 20);
+}
 
 export const segmentUploadedImage = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => SegmentImageInput.parse(d))
@@ -765,9 +800,21 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
       throw new Error(`upload: ${e?.message || "failed"}`);
     }
 
+    let labels: string[] = data.labels ?? [];
+    if (labels.length === 0) {
+      try {
+        labels = await autoListElements(uploadUrl);
+        steps.push({ name: "auto-list", status: labels.length ? "ok" : "warn", message: `${labels.length} labels` });
+      } catch (e: any) {
+        steps.push({ name: "auto-list", status: "error", message: e?.message || "auto-list failed" });
+        throw new Error(`auto-list: ${e?.message || "failed"}`);
+      }
+      if (!labels.length) throw new Error("auto-list returned no labels");
+    }
+
     let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
     try {
-      detections = await detectWithGroundingDino(uploadUrl, data.labels);
+      detections = await detectWithGroundingDino(uploadUrl, labels);
       steps.push({ name: "segment", status: "ok", message: `${detections.length} boxes` });
     } catch (e: any) {
       steps.push({ name: "segment", status: "warn", message: e?.message || "segmentation failed" });
