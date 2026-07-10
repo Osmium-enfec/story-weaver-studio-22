@@ -8,6 +8,8 @@ import {
   type TemplateRegion,
 } from "@/lib/mask-templates";
 import { computeMaskStyle, totalDuration, type TimelineItem } from "@/lib/mask-reveal";
+import { generateMcqImage } from "@/lib/mcq-image.functions";
+import { useServerFn } from "@tanstack/react-start";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
@@ -44,6 +46,16 @@ function buildDefaultScene(tpl: MaskTemplate): SceneState {
   return { templateId: tpl.id, regions, timeline };
 }
 
+function buildFadeInSequence(tpl: MaskTemplate, durationMs = 1000, gapMs = 200): TimelineItem[] {
+  return tpl.regions.map((r, i) => ({
+    regionId: r.id,
+    startMs: i * (durationMs + gapMs),
+    durationMs,
+    animation: "fade" as RevealAnimation,
+    ease: "ease-in-out" as const,
+  }));
+}
+
 function SegmentLab() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
@@ -52,6 +64,10 @@ function SegmentLab() {
   const [showOutlines, setShowOutlines] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [timeMs, setTimeMs] = useState(0);
+  const [topic, setTopic] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const genFn = useServerFn(generateMcqImage);
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number>(0);
   const offsetRef = useRef<number>(0);
@@ -166,13 +182,58 @@ function SegmentLab() {
     URL.revokeObjectURL(url);
   };
 
+  const generateAndPlay = async () => {
+    if (!topic.trim() || generating) return;
+    setGenError(null);
+    setGenerating(true);
+    try {
+      // Force MCQ template for generation flow.
+      const tpl = getTemplate("mcq-four-card");
+      const result = await genFn({ data: { topic: topic.trim() } });
+      const timeline = buildFadeInSequence(tpl, 1000, 200);
+      setScene({ templateId: tpl.id, regions: tpl.regions.map((r) => ({ ...r })), timeline });
+      setImageDataUrl(result.dataUrl);
+      setSelectedId(tpl.regions[0]?.id ?? null);
+      setShowOutlines(false);
+      offsetRef.current = 0;
+      setTimeMs(0);
+      // Kick off playback on next tick so state settles.
+      setTimeout(() => setPlaying(true), 50);
+    } catch (e: any) {
+      setGenError(e?.message ?? String(e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col bg-slate-50">
       {/* Top bar */}
-      <div className="flex items-center gap-3 border-b bg-white px-4 py-2">
+      <div className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-2">
         <h1 className="text-lg font-semibold">Segment Lab</h1>
         <span className="text-xs text-slate-500">Mask Reveal Studio</span>
-        <div className="ml-auto flex items-center gap-2">
+
+        <div className="flex flex-1 items-center gap-2 min-w-[320px]">
+          <input
+            type="text"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") generateAndPlay(); }}
+            placeholder='Topic for the MCQ (e.g. "Valid Python variable names")'
+            className="flex-1 rounded-md border px-3 py-1.5 text-sm"
+            disabled={generating}
+          />
+          <button
+            onClick={generateAndPlay}
+            disabled={generating || !topic.trim()}
+            className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            {generating ? "Generating…" : "Generate & Play"}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
           <select
             value={scene.templateId}
             onChange={(e) => changeTemplate(e.target.value)}
@@ -191,6 +252,10 @@ function SegmentLab() {
           </button>
         </div>
       </div>
+      {genError && (
+        <div className="border-b bg-red-50 px-4 py-1.5 text-xs text-red-700">{genError}</div>
+      )}
+
 
       <div className="flex flex-1 min-h-0">
         {/* Left panel */}
