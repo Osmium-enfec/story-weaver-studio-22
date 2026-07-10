@@ -209,9 +209,13 @@ export function drawImageSceneFrame(
     const p = Math.min(1, (progress - el.appearAt) / revealWindow);
     const eased = easeOutCubic(p);
 
-    const targetW = innerW * pos.w;
-    const naturalRatio = img.naturalHeight / Math.max(1, img.naturalWidth);
-    const targetH = targetW * naturalRatio;
+    const boxW = innerW * pos.w;
+    const boxH = boxW; // square box (object-contain)
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
+    const ratio = ih / iw;
+    const targetW = ratio > 1 ? boxW / ratio : boxW;
+    const targetH = ratio > 1 ? boxH : boxW * ratio;
     const cx = innerX + pos.x * innerW;
     const cy = innerY + pos.y * innerH;
 

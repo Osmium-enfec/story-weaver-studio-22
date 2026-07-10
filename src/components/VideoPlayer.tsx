@@ -181,6 +181,7 @@ function ImageScene({
                   left: `${pos.x * 100}%`,
                   top: `${pos.y * 100}%`,
                   width: `${pos.w * 100}%`,
+                  aspectRatio: "1 / 1",
                   transform: `translate(-50%, -50%) ${transform}`,
                   transformOrigin: "center center",
                   opacity,
@@ -190,8 +191,11 @@ function ImageScene({
                 <img
                   src={src}
                   alt=""
-                  className="block w-full"
-                  style={useTransparent ? undefined : { mixBlendMode: "multiply" }}
+                  className="block h-full w-full"
+                  style={{
+                    objectFit: "contain",
+                    ...(useTransparent ? {} : { mixBlendMode: "multiply" as const }),
+                  }}
                   draggable={false}
                   onError={() =>
                     console.error("[ImageScene] element image failed to load", {
@@ -205,10 +209,10 @@ function ImageScene({
                   <div
                     className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
                     style={{
-                      top: "calc(100% - 6px)",
+                      top: "calc(100% + 2px)",
                       fontFamily: '"Caveat", "Kalam", cursive',
                       fontWeight: 700,
-                      fontSize: `${Math.max(14, pos.w * 60)}px`,
+                      fontSize: `${Math.max(12, pos.w * 50)}px`,
                       color: "#1a1a1a",
                       textShadow: "0 1px 0 rgba(255,255,255,0.9)",
                     }}
