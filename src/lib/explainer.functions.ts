@@ -808,7 +808,10 @@ Rules:
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      // gemini-2.5-flash: non-reasoning, follows JSON schema reliably.
+      // 2.5-pro burns most of the token budget on hidden reasoning tokens and
+      // routinely returns an empty content string here.
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: sys },
         {
@@ -820,15 +823,20 @@ Rules:
         },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 4000,
+      max_tokens: 8000,
     }),
   });
   if (!res.ok) throw new Error(`gemini-detect: ${res.status} ${await res.text()}`);
   const j = await res.json();
   const raw = j.choices?.[0]?.message?.content ?? "{}";
   let parsed: any = {};
-  try { parsed = JSON.parse(raw); } catch {}
+  try { parsed = JSON.parse(raw); } catch (e) {
+    console.warn("[gemini-detect] JSON parse failed:", raw.slice(0, 300));
+  }
   const arr = Array.isArray(parsed.elements) ? parsed.elements : [];
+  if (arr.length === 0) {
+    console.warn("[gemini-detect] 0 elements. Raw content:", raw.slice(0, 500), "finish:", j.choices?.[0]?.finish_reason);
+  }
   const out: RawDet[] = [];
   for (const e of arr) {
     const bb = Array.isArray(e?.bbox) ? e.bbox.map(Number) : null;
