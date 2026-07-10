@@ -841,7 +841,7 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const steps: CompositeStep[] = [];
 
-    // 1) Generate composite image (OpenAI)
+    // 1) Generate ONE composite image (OpenAI gpt-image-1)
     let compositeUrl: string;
     try {
       compositeUrl = await generateCompositeImage(data.compositePrompt, data.title);
@@ -851,56 +851,29 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       throw new Error(`composite: ${e?.message || "failed"}`);
     }
 
-    // 2) Upload to Replicate for segmentation
-    let uploadUrl: string;
+    // 2) Ask GPT-4o vision to inspect the composite and return each element's
+    //    bbox + a redraw prompt. Replaces upload+Grounding-DINO+match.
+    let visionElements: Awaited<ReturnType<typeof analyzeCompositeWithVision>> = [];
     try {
-      uploadUrl = await uploadToReplicate(compositeUrl);
-      steps.push({ name: "upload", status: "ok" });
+      visionElements = await analyzeCompositeWithVision(compositeUrl, data.compositePrompt);
+      steps.push({
+        name: "analyze",
+        status: visionElements.length ? "ok" : "warn",
+        message: `${visionElements.length} elements`,
+      });
     } catch (e: any) {
-      steps.push({ name: "upload", status: "warn", message: e?.message || "upload failed" });
-      return {
-        compositeUrl,
-        elements: data.elements.map((el) => ({ id: el.id, bbox: null as any, maskUrl: null as any })),
-        steps,
-      };
+      steps.push({ name: "analyze", status: "warn", message: e?.message || "vision failed" });
     }
 
-    // 3) Detect bboxes (Grounding-DINO) — used for placement.
-    let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
-    try {
-      detections = await detectWithGroundingDino(
-        uploadUrl,
-        data.elements.map((el) => el.segmentPrompt),
-      );
-      steps.push({ name: "segment", status: "ok", message: `${detections.length} boxes` });
-    } catch (e: any) {
-      steps.push({ name: "segment", status: "warn", message: e?.message || "segmentation failed" });
-    }
-
-    // 4) Match detections → elements (bbox for placement)
-    const used = new Set<number>();
-    const withBbox = data.elements.map((el) => {
-      const idx = matchDetection(el.segmentPrompt, detections, used);
-      if (idx < 0) return { id: el.id, segmentPrompt: el.segmentPrompt, bbox: null as any };
-      used.add(idx);
-      return { id: el.id, segmentPrompt: el.segmentPrompt, bbox: detections[idx].bbox };
-    });
-    const matched = withBbox.filter((r) => r.bbox).length;
-    steps.push({
-      name: "match",
-      status: matched === 0 && data.elements.length > 0 ? "warn" : "ok",
-      message: `${matched}/${data.elements.length} elements matched`,
-    });
-
-    // (SAM step removed — elements are regenerated individually by the client
-    // using the bbox as placement metadata only.)
-    const resolved = withBbox.map((el) => ({
+    const elements = visionElements.map((el) => ({
       id: el.id,
+      label: el.label,
+      prompt: el.prompt,
       bbox: el.bbox,
       maskUrl: null as string | null,
     }));
 
-    return { compositeUrl, elements: resolved, steps };
+    return { compositeUrl, elements, steps };
   });
 
 
