@@ -46,6 +46,16 @@ function buildDefaultScene(tpl: MaskTemplate): SceneState {
   return { templateId: tpl.id, regions, timeline };
 }
 
+function buildFadeInSequence(tpl: MaskTemplate, durationMs = 1000, gapMs = 200): TimelineItem[] {
+  return tpl.regions.map((r, i) => ({
+    regionId: r.id,
+    startMs: i * (durationMs + gapMs),
+    durationMs,
+    animation: "fade" as RevealAnimation,
+    ease: "ease-in-out" as const,
+  }));
+}
+
 function SegmentLab() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
@@ -54,6 +64,10 @@ function SegmentLab() {
   const [showOutlines, setShowOutlines] = useState(true);
   const [playing, setPlaying] = useState(false);
   const [timeMs, setTimeMs] = useState(0);
+  const [topic, setTopic] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const genFn = useServerFn(generateMcqImage);
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number>(0);
   const offsetRef = useRef<number>(0);
