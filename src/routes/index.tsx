@@ -148,6 +148,7 @@ function Index() {
   async function buildScene(
     plan: ScenePlan,
     precomputedAudio?: { audioUrl: string; durationMs: number },
+    onStep?: (s: SceneStep) => void,
   ): Promise<Scene & { _cached?: boolean }> {
     let cachedHits = 0;
     let totalImgs = 0;
@@ -162,6 +163,8 @@ function Index() {
       }[];
     };
 
+    const emit = (s: SceneStep) => { try { onStep?.(s); } catch {} };
+
     const visualPromise: Promise<ImageComp | null> =
       plan.kind === "code"
         ? Promise.resolve(null)
@@ -169,52 +172,55 @@ function Index() {
             const comp = plan.composition;
             if (!comp) return null;
             const compElements = Array.isArray(comp.elements) ? comp.elements : [];
-            totalImgs = 1; // one composite call per scene
+            totalImgs = 1;
             if (compElements.length === 0) {
               return { kind: "image" as const, title: comp.title, elements: [] };
             }
 
-            const { compositeUrl, elements: seg } = await generateSceneComposite({
-              data: {
-                compositePrompt:
-                  comp.compositePrompt ??
-                  comp.backgroundPrompt ??
-                  plan.sentence,
-                title: comp.title,
-                elements: compElements.map((el) => ({
-                  id: el.id,
-                  segmentPrompt: el.segmentPrompt || el.label || el.id,
-                })),
-              },
-            });
+            emit({ name: "composite", status: "running" });
+            let result: Awaited<ReturnType<typeof generateSceneComposite>>;
+            try {
+              result = await generateSceneComposite({
+                data: {
+                  compositePrompt:
+                    comp.compositePrompt ?? comp.backgroundPrompt ?? plan.sentence,
+                  title: comp.title,
+                  elements: compElements.map((el) => ({
+                    id: el.id,
+                    segmentPrompt: el.segmentPrompt || el.label || el.id,
+                  })),
+                },
+              });
+            } catch (e: any) {
+              emit({ name: "composite", status: "error", message: e?.message || "failed" });
+              throw e;
+            }
+            // Replay server-side sub-steps so the UI shows exactly what happened.
+            const serverSteps = (result as any).steps as SceneStep[] | undefined;
+            if (serverSteps?.length) serverSteps.forEach((s) => emit(s));
+            else emit({ name: "composite", status: "ok" });
 
+            const { compositeUrl, elements: seg } = result;
             const byId = new Map(seg.map((s) => [s.id, s.bbox]));
+            emit({ name: "crop", status: "running" });
             const els = await Promise.all(
               compElements.map(async (el) => {
                 const bbox = byId.get(el.id);
-                const mediaUrl = bbox
-                  ? await cropAndClear(compositeUrl, bbox)
-                  : compositeUrl;
+                const mediaUrl = bbox ? await cropAndClear(compositeUrl, bbox) : compositeUrl;
                 return {
-                  id: el.id,
-                  label: el.label,
-                  x: el.x,
-                  y: el.y,
-                  w: el.w,
-                  appearAt: el.appearAt,
-                  anim: el.anim,
-                  mediaUrl,
+                  id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
+                  appearAt: el.appearAt, anim: el.anim, mediaUrl,
                   bbox: bbox ?? undefined,
                 };
               }),
             );
-            return {
-              kind: "image" as const,
-              // Keep composite as backgroundUrl only when user picked
-              // whiteboard bg — otherwise the elements alone read cleaner.
-              title: comp.title,
-              elements: els,
-            };
+            const cropped = els.filter((e) => e.bbox).length;
+            emit({
+              name: "crop",
+              status: cropped === 0 && els.length > 0 ? "warn" : "ok",
+              message: `${cropped}/${els.length} cropped`,
+            });
+            return { kind: "image" as const, title: comp.title, elements: els };
           })();
 
 
@@ -222,6 +228,7 @@ function Index() {
     if (precomputedAudio) {
       audioPromise = Promise.resolve(precomputedAudio);
     } else {
+      emit({ name: "tts", status: "running" });
       audioPromise = generateNarration({ data: { text: plan.narrationText || plan.sentence } }).then(
         async (r) => {
           const dur = await new Promise<number>((resolve) => {
@@ -231,7 +238,12 @@ function Index() {
             );
             a.addEventListener("error", () => resolve(4000));
           });
+          emit({ name: "tts", status: "ok", message: `${Math.round(dur)}ms` });
           return { audioUrl: r.audioUrl, durationMs: dur };
+        },
+        (e) => {
+          emit({ name: "tts", status: "error", message: e?.message || "tts failed" });
+          throw e;
         },
       );
     }
