@@ -84,7 +84,7 @@ function Highlighted({ text }: { text: string }) {
     <>
       {lines.map((line, i) => (
         <div key={i} className="flex whitespace-pre">
-          <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-600">
+          <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-400">
             {i + 1}
           </span>
           <span>
@@ -111,7 +111,7 @@ function TypingCode({ code, progress }: { code: string; progress: number }) {
     <div className="font-mono text-sm leading-6">
       <Highlighted text={visible} />
       {showCaret && (
-        <span className="ml-1 inline-block h-4 w-2 -translate-y-0.5 animate-pulse bg-sky-400 align-middle" />
+        <span className="ml-1 inline-block h-4 w-2 -translate-y-0.5 animate-pulse bg-slate-700 align-middle" />
       )}
     </div>
   );
@@ -131,7 +131,7 @@ function MorphCode({ from, to, progress }: { from: string; to: string; progress:
         const same = f === to_;
         return (
           <div key={i} className="relative flex whitespace-pre">
-            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-600">
+            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-400">
               {i + 1}
             </span>
             <span className="relative block">
@@ -210,7 +210,7 @@ function FlightCode({ code, progress }: { code: string; progress: number }) {
               transition: "opacity 80ms linear, transform 80ms linear",
             }}
           >
-            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-600">
+            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-400">
               {i + 1}
             </span>
             <span>
