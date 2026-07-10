@@ -161,14 +161,16 @@ function Index() {
       plan.kind === "code"
         ? Promise.resolve(null)
         : (async () => {
-            const comp = plan.composition!;
-            totalImgs = 1 + comp.elements.length;
+            const comp = plan.composition;
+            if (!comp) return null;
+            const compElements = Array.isArray(comp.elements) ? comp.elements : [];
+            totalImgs = 1 + compElements.length;
             // Background prompt stays a plain mood description — the title is
             // rendered as text by the player, not baked into the AI image.
             const bgPrompt = comp.backgroundPrompt;
             const [bg, ...els] = await Promise.all([
               findOrGenerateImage({ data: { prompt: bgPrompt, kind: "background" } }),
-              ...comp.elements.map((el) =>
+              ...compElements.map((el) =>
                 findOrGenerateImage({ data: { prompt: el.prompt, kind: "element" } }).then((r) => ({
                   ...el,
                   mediaUrl: r.dataUrl,

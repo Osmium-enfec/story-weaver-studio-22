@@ -258,12 +258,14 @@ export function drawCodeSceneFrame(
   progress: number,
   W: number, H: number,
 ) {
-  ctx.fillStyle = "#0f172a";
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, W, H);
   const pad = Math.round(W * 0.06);
   const boxX = pad, boxY = pad;
   const boxW = W - pad * 2, boxH = H - pad * 2;
-  ctx.fillStyle = "#1e293b";
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 2;
   const r = 16;
   ctx.beginPath();
   ctx.moveTo(boxX + r, boxY);
@@ -273,13 +275,14 @@ export function drawCodeSceneFrame(
   ctx.arcTo(boxX, boxY, boxX + boxW, boxY, r);
   ctx.closePath();
   ctx.fill();
+  ctx.stroke();
 
   const code = scene.code ?? "";
   const chars = Math.floor(code.length * Math.min(1, progress * 1.4));
   const shown = code.slice(0, chars);
   const fontSize = Math.round(H * 0.028);
   ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
-  ctx.fillStyle = "#e2e8f0";
+  ctx.fillStyle = "#1e293b";
   ctx.textBaseline = "top";
   shown.split("\n").forEach((line, i) => {
     ctx.fillText(line, boxX + 24, boxY + 24 + i * (fontSize * 1.5));

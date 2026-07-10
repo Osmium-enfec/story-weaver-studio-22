@@ -68,13 +68,13 @@ function tokenize(line: string): Tok[] {
 
 function tokenClass(kind: Tok["kind"]): string {
   switch (kind) {
-    case "kw": return "text-fuchsia-400";
-    case "str": return "text-emerald-400";
-    case "num": return "text-amber-400";
-    case "com": return "text-slate-500 italic";
-    case "fn": return "text-sky-400";
-    case "pun": return "text-slate-400";
-    default: return "text-slate-200";
+    case "kw": return "text-purple-600";
+    case "str": return "text-emerald-600";
+    case "num": return "text-amber-600";
+    case "com": return "text-slate-400 italic";
+    case "fn": return "text-sky-600";
+    case "pun": return "text-slate-500";
+    default: return "text-slate-800";
   }
 }
 
@@ -84,7 +84,7 @@ function Highlighted({ text }: { text: string }) {
     <>
       {lines.map((line, i) => (
         <div key={i} className="flex whitespace-pre">
-          <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-600">
+          <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-400">
             {i + 1}
           </span>
           <span>
@@ -111,7 +111,7 @@ function TypingCode({ code, progress }: { code: string; progress: number }) {
     <div className="font-mono text-sm leading-6">
       <Highlighted text={visible} />
       {showCaret && (
-        <span className="ml-1 inline-block h-4 w-2 -translate-y-0.5 animate-pulse bg-sky-400 align-middle" />
+        <span className="ml-1 inline-block h-4 w-2 -translate-y-0.5 animate-pulse bg-slate-700 align-middle" />
       )}
     </div>
   );
@@ -131,7 +131,7 @@ function MorphCode({ from, to, progress }: { from: string; to: string; progress:
         const same = f === to_;
         return (
           <div key={i} className="relative flex whitespace-pre">
-            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-600">
+            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-400">
               {i + 1}
             </span>
             <span className="relative block">
@@ -210,7 +210,7 @@ function FlightCode({ code, progress }: { code: string; progress: number }) {
               transition: "opacity 80ms linear, transform 80ms linear",
             }}
           >
-            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-600">
+            <span className="mr-4 w-8 shrink-0 select-none text-right text-slate-400">
               {i + 1}
             </span>
             <span>
@@ -239,13 +239,13 @@ export function CodeScene({
 }: CodeSceneProps) {
   return (
     <div className="flex h-full w-full items-center justify-center bg-white p-6">
-      <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl">
+      <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         {/* window chrome */}
-        <div className="flex items-center gap-2 border-b border-slate-800 bg-slate-900 px-4 py-2.5">
-          <span className="h-3 w-3 rounded-full bg-red-500/80" />
-          <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
-          <span className="h-3 w-3 rounded-full bg-green-500/80" />
-          <span className="ml-3 text-xs text-slate-400">
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+          <span className="h-3 w-3 rounded-full bg-red-400" />
+          <span className="h-3 w-3 rounded-full bg-yellow-400" />
+          <span className="h-3 w-3 rounded-full bg-green-400" />
+          <span className="ml-3 text-xs text-slate-600">
             {title ?? `example.${language}`}
           </span>
         </div>
