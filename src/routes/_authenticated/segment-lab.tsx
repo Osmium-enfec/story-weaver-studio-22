@@ -210,10 +210,30 @@ function SegmentLab() {
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col bg-slate-50">
       {/* Top bar */}
-      <div className="flex items-center gap-3 border-b bg-white px-4 py-2">
+      <div className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-2">
         <h1 className="text-lg font-semibold">Segment Lab</h1>
         <span className="text-xs text-slate-500">Mask Reveal Studio</span>
-        <div className="ml-auto flex items-center gap-2">
+
+        <div className="flex flex-1 items-center gap-2 min-w-[320px]">
+          <input
+            type="text"
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") generateAndPlay(); }}
+            placeholder='Topic for the MCQ (e.g. "Valid Python variable names")'
+            className="flex-1 rounded-md border px-3 py-1.5 text-sm"
+            disabled={generating}
+          />
+          <button
+            onClick={generateAndPlay}
+            disabled={generating || !topic.trim()}
+            className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+          >
+            {generating ? "Generating…" : "Generate & Play"}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
           <select
             value={scene.templateId}
             onChange={(e) => changeTemplate(e.target.value)}
@@ -232,6 +252,10 @@ function SegmentLab() {
           </button>
         </div>
       </div>
+      {genError && (
+        <div className="border-b bg-red-50 px-4 py-1.5 text-xs text-red-700">{genError}</div>
+      )}
+
 
       <div className="flex flex-1 min-h-0">
         {/* Left panel */}
