@@ -174,6 +174,10 @@ export async function exportToMp4(
       }
     }
 
+    // Advance absolute time by the REAL scene duration (not the extended one),
+    // so the background video loop stays in sync with the master audio.
+    absTimeSec += durSec;
+
     onProgress(`encoding scene ${i + 1}/${scenes.length}`, frac());
 
     const segName = `seg${i}.mp4`;
