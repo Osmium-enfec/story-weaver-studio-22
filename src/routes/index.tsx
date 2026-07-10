@@ -718,9 +718,7 @@ function Index() {
                     <div className="text-xs text-muted-foreground">
                       {p.kind === "image"
                         ? "🎨 AI image"
-                        : p.kind === "stock"
-                          ? "🎬 Pexels footage"
-                          : `⌨️ Code (${p.codeVariant ?? "typing"})`}
+                        : `⌨️ Code (${p.codeVariant ?? "typing"})`}
                       {p.cached ? " · ♻ reused from library" : ""}
                       {p.error ? ` · ${p.error}` : ""}
                     </div>
