@@ -6,22 +6,20 @@ const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
 const ELEVEN_MODEL = "eleven_v3";
 
 // ---------- Types shared with client ----------
-export type SceneKind = "image" | "stock" | "code";
+export type SceneKind = "image" | "code";
 export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
 export type ElementAnim = "pop" | "fade" | "slide-up" | "slide-left" | "slide-right";
-
-export type PillColor = "green" | "blue" | "yellow" | "purple" | "orange" | "pink";
 
 export interface CompositionElement {
   id: string;
   prompt: string;
   /** Optional short hand-drawn label rendered UNDER the element by the player. */
   label?: string;
-  /** center X, 0..1 across 16:9 canvas */
+  /** center X, 0..1 across 16:9 canvas — assigned by layout grid, not the LLM. */
   x: number;
-  /** center Y, 0..1 */
+  /** center Y, 0..1 — assigned by layout grid, not the LLM. */
   y: number;
-  /** width as fraction of canvas width, 0..1 */
+  /** width as fraction of canvas width, 0..1 — assigned by layout grid. */
   w: number;
   /** fraction of scene duration when element appears, 0..1 */
   appearAt: number;
@@ -30,13 +28,8 @@ export interface CompositionElement {
 
 export interface SceneComposition {
   backgroundPrompt: string;
-  /** Baked-in title (colored pill at the top of the background). */
+  /** Hand-drawn topic title shown at the top of the scene (Excalidraw font). */
   title?: string;
-  titleColor?: PillColor;
-  /** Baked-in "A → B → C" arrow flow under the title. */
-  flowSteps?: string[];
-  /** Baked-in purple robot mascot pill message at the bottom. */
-  footerMessage?: string;
   elements: CompositionElement[];
 }
 
@@ -47,7 +40,6 @@ export interface ScenePlan {
   subtitle: string;
   kind: SceneKind;
   composition?: SceneComposition; // for kind = "image"
-  pexelsQuery?: string;
   code?: string;
   codeTo?: string;
   codeLanguage?: string;
