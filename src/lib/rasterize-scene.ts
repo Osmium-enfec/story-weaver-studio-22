@@ -115,11 +115,42 @@ export function drawImageSceneFrame(
   progress: number,
   W: number, H: number,
   assets: SceneAssets,
+  opts: DrawOptions = {},
 ) {
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, W, H);
+  const background = opts.background ?? DEFAULT_BACKGROUND;
+  const customBg = background.kind !== "whiteboard";
 
-  const bg = scene.backgroundUrl ? assets.bg.get(scene.backgroundUrl) ?? null : null;
+  // Outer canvas: user-picked color / gradient, or plain white for whiteboard mode.
+  if (customBg) {
+    backgroundToCanvasFill(ctx, background, W, H);
+  } else {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
+  const padY = customBg ? Math.round(H * CARD_PADDING_FRAC) : 0;
+  const innerX = padX;
+  const innerY = padY;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+
+  // Inner card (white with rounded corners + soft shadow) hosts elements.
+  ctx.save();
+  if (customBg) {
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = Math.round(H * 0.03);
+    ctx.shadowOffsetY = Math.round(H * 0.012);
+    ctx.fillStyle = "#ffffff";
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    // Clip subsequent drawing to the card.
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.clip();
+  }
+
+  const bg = !customBg && scene.backgroundUrl ? assets.bg.get(scene.backgroundUrl) ?? null : null;
   if (bg) {
     const t = progress;
     let scale = 1.02;
@@ -134,23 +165,30 @@ export function drawImageSceneFrame(
     ctx.restore();
   }
 
-  const elements = (scene.elements ?? [])
-    .map((e) => { const img = assets.el.get(e.mediaUrl); return img ? { img, el: e } : null; })
-    .filter((x): x is { img: HTMLImageElement; el: NonNullable<Scene["elements"]>[number] } => !!x);
-  const single = elements.length === 1;
+  const rawElements = (scene.elements ?? [])
+    .map((e) => {
+      const img =
+        (opts.transparent && opts.transparent.get(e.mediaUrl)) ??
+        assets.el.get(e.mediaUrl);
+      return img ? { img, el: e, transparent: !!opts.transparent?.get(e.mediaUrl) } : null;
+    })
+    .filter(
+      (x): x is { img: HTMLImageElement; el: NonNullable<Scene["elements"]>[number]; transparent: boolean } => !!x,
+    );
+  const single = rawElements.length === 1;
 
-  for (const { img, el } of elements) {
+  for (const { img, el, transparent } of rawElements) {
     if (progress < el.appearAt) continue;
     const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
     const p = Math.min(1, (progress - el.appearAt) / revealWindow);
     const eased = easeOutCubic(p);
 
     const wFrac = single ? Math.max(0.6, el.w * 2.2) : el.w;
-    const targetW = W * wFrac;
+    const targetW = innerW * wFrac;
     const naturalRatio = img.naturalHeight / Math.max(1, img.naturalWidth);
     const targetH = targetW * naturalRatio;
-    const cx = single ? W / 2 : el.x * W;
-    const cy = single ? H / 2 : el.y * H;
+    const cx = innerX + (single ? innerW / 2 : el.x * innerW);
+    const cy = innerY + (single ? innerH / 2 : el.y * innerH);
 
     let scale = 1, dx = 0, dy = 0;
     switch (el.anim) {
@@ -162,7 +200,7 @@ export function drawImageSceneFrame(
 
     ctx.save();
     ctx.globalAlpha = eased;
-    ctx.globalCompositeOperation = "multiply";
+    if (!transparent) ctx.globalCompositeOperation = "multiply";
     ctx.translate(cx + dx, cy + dy);
     ctx.scale(scale, scale);
     ctx.drawImage(img, -targetW / 2, -targetH / 2, targetW, targetH);
@@ -176,7 +214,6 @@ export function drawImageSceneFrame(
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const labelY = cy + dy + targetH / 2 - 4;
-      // subtle white halo for legibility over pastel backgrounds
       ctx.lineWidth = Math.max(3, labelSize * 0.18);
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.strokeText(el.label, cx + dx, labelY);
@@ -185,7 +222,10 @@ export function drawImageSceneFrame(
       ctx.restore();
     }
   }
+
+  ctx.restore();
 }
+
 
 export function drawCodeSceneFrame(
   ctx: CanvasRenderingContext2D,
