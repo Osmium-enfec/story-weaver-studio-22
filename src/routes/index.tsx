@@ -147,13 +147,31 @@ function Index() {
       kind: "image";
       backgroundUrl: string;
       elements: {
-        id: string; prompt: string; x: number; y: number; w: number;
+        id: string; prompt: string; label?: string; x: number; y: number; w: number;
         appearAt: number; anim: any; mediaUrl: string;
       }[];
     };
     type StockOrFallback =
       | { kind: "stock"; videoUrl: string }
       | { kind: "image-fallback"; imageUrl: string };
+
+    // Build a composite background prompt that bakes in the pill title,
+    // optional arrow flow, and optional robot mascot footer.
+    function buildBgPrompt(comp: NonNullable<ScenePlan["composition"]>): string {
+      const parts: string[] = [comp.backgroundPrompt];
+      if (comp.title) {
+        parts.push(
+          `TITLE_PILL:{color:${comp.titleColor ?? "blue"};text:"${comp.title.replace(/"/g, "'")}"}`,
+        );
+      }
+      if (comp.flowSteps && comp.flowSteps.length >= 2) {
+        parts.push(`FLOW:${comp.flowSteps.map((s) => s.replace(/[|→]/g, "")).join(" -> ")}`);
+      }
+      if (comp.footerMessage) {
+        parts.push(`FOOTER_ROBOT:"${comp.footerMessage.replace(/"/g, "'")}"`);
+      }
+      return parts.join(" | ");
+    }
 
     const visualPromise: Promise<ImageComp | StockOrFallback | null> =
       plan.kind === "code"
@@ -162,8 +180,9 @@ function Index() {
           ? (async () => {
               const comp = plan.composition!;
               totalImgs = 1 + comp.elements.length;
+              const bgPrompt = buildBgPrompt(comp);
               const [bg, ...els] = await Promise.all([
-                findOrGenerateImage({ data: { prompt: comp.backgroundPrompt, kind: "background" } }),
+                findOrGenerateImage({ data: { prompt: bgPrompt, kind: "background" } }),
                 ...comp.elements.map((el) =>
                   findOrGenerateImage({ data: { prompt: el.prompt, kind: "element" } }).then((r) => ({
                     ...el,
