@@ -96,6 +96,9 @@ export async function exportToMp4(
     }),
   );
 
+  // Preload the looping background video (if any) so we can seek per frame.
+  const videoBgEl =
+    background.kind === "video" ? await loadVideo(background.url).catch(() => null) : null;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
