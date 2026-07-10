@@ -21,27 +21,27 @@ export const generateMcqImage = createServerFn({ method: "POST" })
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("OPENAI_API_KEY not configured");
 
-    const prompt = `Hand-drawn Excalidraw-style educational infographic on a PURE WHITE (#FFFFFF) background, 16:9 landscape. Playful sketchy black marker outlines (slightly wobbly), warm pastel fills, small hand-drawn doodles/sparkles as accents. NO photorealism, NO borders around the whole canvas, NO frame.
+    const prompt = `Hand-drawn Excalidraw-style educational infographic on a PURE WHITE (#FFFFFF) background, landscape 3:2 (1536x1024). Playful sketchy black marker outlines (slightly wobbly), warm pastel fills, small hand-drawn doodles/sparkles as accents. NO photorealism, NO borders around the whole canvas, NO frame.
 
-Compose a MULTIPLE-CHOICE QUESTION laid out TOP-TO-BOTTOM with EXACTLY these 7 elements. Coordinates are fractions of the canvas from the top-left (canvas = 100% wide × 100% tall). Follow the positions strictly — masks will cover each element by position.
+Compose a MULTIPLE-CHOICE QUESTION laid out TOP-TO-BOTTOM with EXACTLY these 7 elements, arranged in NON-OVERLAPPING horizontal bands. Coordinates are fractions of the canvas from the top-left (canvas = 100% wide × 100% tall). Follow the positions strictly — masks will cover each element by position. Leave clean white gaps between every element; nothing must cross into a neighbouring band.
 
-1) MAIN TITLE BANNER (the question) — wide rounded rectangle "pill" filled with soft pastel BLUE, thick black sketchy outline, hand-drawn black marker text inside. Position: x=8%, y=6%, width=84%, height=14%.
+1) MAIN TITLE BANNER (the question) — wide rounded rectangle "pill" filled with soft pastel BLUE, thick black sketchy outline, hand-drawn black marker text inside. Position: x=4%, y=3%, width=92%, height=12%.
 
-2) SUBTITLE — small hand-drawn text label centered under the title, gray-black marker, NO pill/background. Position: x=15%, y=22%, width=70%, height=6%.
+2) SUBTITLE — small hand-drawn text label centered under the title, gray-black marker, NO pill/background. Position: x=10%, y=18%, width=80%, height=7%.
 
-3) OPTION A CARD — tall rounded rectangle, soft pastel YELLOW fill, thick black sketchy outline. Big letter "A" at the top, then the option text, plus a small hand-drawn doodle. Position: x=5%, y=32%, width=21%, height=50%.
+3) OPTION A CARD — tall rounded rectangle, soft pastel YELLOW fill, thick black sketchy outline. Big letter "A" at the top, then the option text, plus a small hand-drawn doodle. Position: x=3%, y=29%, width=21%, height=52%.
 
-4) OPTION B CARD — same style, soft pastel PEACH fill. Position: x=28%, y=32%, width=21%, height=50%.
+4) OPTION B CARD — same style, soft pastel PEACH fill. Position: x=26%, y=29%, width=21%, height=52%.
 
-5) OPTION C CARD — same style, soft pastel GREEN fill. Position: x=51%, y=32%, width=21%, height=50%.
+5) OPTION C CARD — same style, soft pastel GREEN fill. Position: x=49%, y=29%, width=21%, height=52%.
 
-6) OPTION D CARD — same style, soft pastel LAVENDER fill. Position: x=74%, y=32%, width=21%, height=50%.
+6) OPTION D CARD — same style, soft pastel LAVENDER fill. Position: x=72%, y=29%, width=21%, height=52%.
 
-7) CORRECT ANSWER BANNER — wide rounded rectangle pill, soft pastel MINT fill, thick black outline. "Correct answer: <letter>" in hand-drawn marker + small check-mark doodle. Position: x=10%, y=85%, width=80%, height=11%.
+7) CORRECT ANSWER BANNER — wide rounded rectangle pill, soft pastel MINT fill, thick black outline. "Correct answer: <letter>" in hand-drawn marker + small check-mark doodle. Position: x=4%, y=84%, width=92%, height=13%.
 
 TOPIC / CONTENT to fill in the question, four options, and correct answer: ${data.topic}
 
-Rules: keep the white space between elements clean (no random doodles outside these 7 shapes). Do NOT rearrange the layout. All 4 option cards must be the same height and top-aligned in a single row. Use the exact fractional positions above.`;
+Rules: keep the white space between elements clean (no random doodles outside these 7 shapes). Do NOT rearrange the layout. All 4 option cards must be the same height and top-aligned in a single row. Bands MUST NOT overlap — title (3–15%), subtitle (18–25%), cards row (29–81%), answer (84–97%). Use the exact fractional positions above.`;
 
     const res = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
