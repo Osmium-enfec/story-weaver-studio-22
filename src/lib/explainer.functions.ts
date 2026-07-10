@@ -61,6 +61,46 @@ const PlanInput = z.object({
   preserveWords: z.boolean().optional(),
 });
 
+// Parse manual scene markers like:
+//   [scene 1 - AI Image] Every day, billions...
+//   [scene2 - Code Typing] const x = 1;
+// Type tokens supported (case-insensitive):
+//   "ai image" | "image" -> kind=image
+//   "code typing" | "code morph" | "code scroll" | "code flight" | "code" -> kind=code + variant
+type ManualScene = {
+  kind: SceneKind;
+  codeVariant?: CodeVariant;
+  text: string;
+};
+function parseManualScenes(script: string): ManualScene[] | null {
+  const re = /\[\s*scene\s*\d+\s*[-–—:]\s*([^\]]+?)\s*\]/gi;
+  const matches: { idx: number; len: number; typeRaw: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(script)) !== null) {
+    matches.push({ idx: m.index, len: m[0].length, typeRaw: m[1] });
+  }
+  if (matches.length === 0) return null;
+  const scenes: ManualScene[] = [];
+  for (let i = 0; i < matches.length; i++) {
+    const cur = matches[i];
+    const next = matches[i + 1];
+    const text = script.slice(cur.idx + cur.len, next ? next.idx : script.length).trim();
+    if (!text) continue;
+    const t = cur.typeRaw.toLowerCase().replace(/\s+/g, " ").trim();
+    let kind: SceneKind = "image";
+    let codeVariant: CodeVariant | undefined;
+    if (t.startsWith("code")) {
+      kind = "code";
+      if (t.includes("morph")) codeVariant = "morph";
+      else if (t.includes("scroll")) codeVariant = "scroll";
+      else if (t.includes("flight")) codeVariant = "flight";
+      else codeVariant = "typing";
+    }
+    scenes.push({ kind, codeVariant, text });
+  }
+  return scenes.length ? scenes : null;
+}
+
 export const planScript = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => PlanInput.parse(d))
   .handler(async ({ data }) => {
@@ -68,8 +108,18 @@ export const planScript = createServerFn({ method: "POST" })
     if (!key) throw new Error("LOVABLE_API_KEY missing");
 
     const preserveWords = !!data.preserveWords;
+    const manual = parseManualScenes(data.script);
 
-    const intro = preserveWords
+    const intro = manual
+      ? `You are a video director. The user has ALREADY split the script into fixed
+scenes and tagged each scene's TYPE. You MUST NOT re-chunk, merge, split, add,
+or remove scenes. You MUST NOT change the sentence text of any scene (only add
+punctuation / fix casing). You MUST use the tagged kind for each scene.
+
+You will receive a JSON array \`inputScenes\`, one entry per scene, in order.
+Return exactly the same number of scenes, in the same order, enriched with
+composition/code metadata as described below.`
+      : preserveWords
       ? `You are a video director editing a TRANSCRIBED voiceover into scenes.
 The user gives you a raw transcript. Your job:
 
@@ -92,26 +142,31 @@ STEP 1 — Enhance and CHUNK the script:
   scene per sentence — think in terms of "what fits on one whiteboard".
 - Each scene should be roughly 6–20 seconds of narration.`;
 
-    const narrationRule = preserveWords
-      ? `- narrationText: set equal to sentence (unused — audio is provided).`
+    const narrationRule = manual || preserveWords
+      ? `- narrationText: set equal to sentence (unused when audio is provided).`
       : `- narrationText: same as sentence but enhanced for ElevenLabs v3 expressive TTS.
   Add inline audio tags in square brackets to shape delivery.
   Valid tags: [excited], [curious], [whispers], [laughs], [sighs],
   [thoughtful], [confident], [warm], [pauses], [emphasizes], [softly].
   Use 1–3 tags per scene. Use ellipses (…) and commas for pacing. Do NOT invent new tags.`;
 
-    const sys = `${intro}
-
-STEP 2 — For each SCENE, produce a scene object:
-- sentence: the full text of the scene (all grouped sentences joined by a space).
-${narrationRule}
-- kind: one of
+    const kindRule = manual
+      ? `- kind: MUST equal the "kind" value provided in the matching inputScenes entry.
+- For code scenes, MUST use the provided "codeVariant" if present.`
+      : `- kind: one of
     "code"  — ONLY when the scene explicitly discusses source code, syntax,
       a specific function/file/command, or a code snippet the viewer should read.
     "image" — the default for narrative, marketing, explanatory content.
       Use ONE Excalidraw-style whiteboard drawing that captures the WHOLE scene
       (multiple sentences), with characters, boxes, arrows, and hand-lettered
-      labels all drawn together — like a teacher sketching on a whiteboard.
+      labels all drawn together — like a teacher sketching on a whiteboard.`;
+
+    const sys = `${intro}
+
+STEP 2 — For each SCENE, produce a scene object:
+- sentence: the full text of the scene (all grouped sentences joined by a space).
+${narrationRule}
+${kindRule}
 - If kind = "image": composition object with:
     compositePrompt: ONE rich prompt (60–200 words) describing the ENTIRE
       whiteboard illustration for this scene. Include:
@@ -133,8 +188,7 @@ ${narrationRule}
         prompt: 8–25 word rich description of THIS element as a standalone
           hand-drawn illustration to be regenerated fresh in the same
           Excalidraw/watercolor style. Include the object, its pose, colors,
-          and any small details. Example: "a small golden retriever sitting,
-          wagging tail, warm honey-brown watercolor with ink outlines".
+          and any small details.
         label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the
           element by the player (e.g. "input", "search", "answer").
         appearAt: 0..1 fraction of the scene duration when this element
@@ -150,6 +204,17 @@ ${narrationRule}
 
 Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
 
+    const userMessage = manual
+      ? `inputScenes = ${JSON.stringify(
+          manual.map((s, i) => ({
+            index: i,
+            kind: s.kind,
+            codeVariant: s.codeVariant,
+            sentence: s.text,
+          })),
+        )}`
+      : data.script;
+
     const res = await fetch(`${AI_URL}/chat/completions`, {
       method: "POST",
       headers: {
@@ -160,13 +225,14 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: sys },
-          { role: "user", content: data.script },
+          { role: "user", content: userMessage },
         ],
         response_format: { type: "json_object" },
         max_tokens: 16000,
       }),
     });
     if (!res.ok) throw new Error(`Planner failed: ${res.status} ${await res.text()}`);
+
     const json = await res.json();
     const raw: string = json.choices?.[0]?.message?.content ?? "";
     const finishReason = json.choices?.[0]?.finish_reason;
