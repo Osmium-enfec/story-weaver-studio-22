@@ -803,7 +803,7 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
     let labels: string[] = data.labels ?? [];
     if (labels.length === 0) {
       try {
-        labels = await autoListElements(uploadUrl);
+        labels = await autoListElements(data.imageDataUrl);
         steps.push({ name: "auto-list", status: labels.length ? "ok" : "warn", message: `${labels.length} labels` });
       } catch (e: any) {
         steps.push({ name: "auto-list", status: "error", message: e?.message || "auto-list failed" });
