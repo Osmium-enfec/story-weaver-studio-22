@@ -81,10 +81,7 @@ function SegmentLab() {
       .split(/[,\n]/)
       .map((s) => s.trim())
       .filter(Boolean);
-    if (!labels.length) {
-      setError("Enter at least one label (comma-separated)");
-      return;
-    }
+    // Empty labels → server auto-detects every element via vision LLM.
     setBusy(true);
     setError(null);
     setResult(null);
@@ -153,17 +150,18 @@ function SegmentLab() {
 
         <div>
           <label className="mb-1 block text-sm font-medium">
-            Labels (comma-separated)
+            Labels (comma-separated) — leave empty to auto-detect everything
           </label>
           <input
             type="text"
             value={labelsText}
             onChange={(e) => setLabelsText(e.target.value)}
-            placeholder="the dog, the laptop, the magnifying glass"
+            placeholder="(leave blank for auto-detect) or: the dog, the laptop, the magnifying glass"
             className="w-full rounded-md border px-3 py-2 text-sm"
           />
           <p className="mt-1 text-xs text-slate-500">
-            Short concrete noun phrases work best (e.g. "the red arrow", "person on the left").
+            Empty = Gemini vision lists every visible element (up to 20), then Grounding-DINO + SAM segment them.
+            Fill in for targeted extraction.
           </p>
         </div>
 
