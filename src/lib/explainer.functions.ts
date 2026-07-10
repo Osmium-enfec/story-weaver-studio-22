@@ -346,7 +346,7 @@ async function generateCompositeImage(prompt: string, title?: string): Promise<s
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  const styled = `A 16:9 widescreen hand-drawn Excalidraw-style whiteboard illustration on off-white paper.
+  const styled = `A 16:9 widescreen hand-drawn Excalidraw-style whiteboard illustration on a PURE WHITE (#FFFFFF) background.
 STYLE (must match exactly):
 - Thick slightly wobbly hand-drawn black marker outlines, confident but sketchy (occasional double strokes, small gaps).
 - Warm, rich color fills: honey-yellow, tan/brown, peach, sage green, dusty blue, terracotta. Soft watercolor shading with subtle cross-hatching.
@@ -359,8 +359,9 @@ ${title ? `At the very top-center, leave space for a title (do NOT draw the titl
 
 CRITICAL RULES:
 - ALL elements in a SINGLE composed illustration, laid out spatially like the scene description says.
-- Each distinct object/character should be VISUALLY SEPARATED from the others (some whitespace between them) so it can be segmented out later.
-- Off-white paper background, NO photorealism, NO background scenery beyond what the scene calls for.
+- Each distinct object/character MUST be clearly VISUALLY SEPARATED from the others with generous whitespace between them (no overlapping shapes, no shared backgrounds, no beige/cream paper texture behind any element) so each one can be cleanly segmented out later.
+- Background must be PURE WHITE (#FFFFFF) EVERYWHERE — no cream, no off-white, no paper texture, no colored panels, no boxes/rectangles behind elements. Just pure white empty space between the drawings.
+- NO photorealism, NO background scenery beyond what the scene calls for.
 - Widescreen 16:9 composition, generous margins around the edges.`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
