@@ -149,68 +149,42 @@ function Index() {
     type ImageComp = {
       kind: "image";
       backgroundUrl: string;
+      title?: string;
       elements: {
         id: string; prompt: string; label?: string; x: number; y: number; w: number;
         appearAt: number; anim: any; mediaUrl: string;
       }[];
     };
-    type StockOrFallback =
-      | { kind: "stock"; videoUrl: string }
-      | { kind: "image-fallback"; imageUrl: string };
 
-    // Build a composite background prompt that bakes in the pill title,
-    // optional arrow flow, and optional robot mascot footer.
-    function buildBgPrompt(comp: NonNullable<ScenePlan["composition"]>): string {
-      const parts: string[] = [comp.backgroundPrompt];
-      if (comp.title) {
-        parts.push(
-          `TITLE_PILL:{color:${comp.titleColor ?? "blue"};text:"${comp.title.replace(/"/g, "'")}"}`,
-        );
-      }
-      if (comp.flowSteps && comp.flowSteps.length >= 2) {
-        parts.push(`FLOW:${comp.flowSteps.map((s) => s.replace(/[|→]/g, "")).join(" -> ")}`);
-      }
-      if (comp.footerMessage) {
-        parts.push(`FOOTER_ROBOT:"${comp.footerMessage.replace(/"/g, "'")}"`);
-      }
-      return parts.join(" | ");
-    }
-
-    const visualPromise: Promise<ImageComp | StockOrFallback | null> =
+    const visualPromise: Promise<ImageComp | null> =
       plan.kind === "code"
         ? Promise.resolve(null)
-        : plan.kind === "image"
-          ? (async () => {
-              const comp = plan.composition!;
-              totalImgs = 1 + comp.elements.length;
-              const bgPrompt = buildBgPrompt(comp);
-              const [bg, ...els] = await Promise.all([
-                findOrGenerateImage({ data: { prompt: bgPrompt, kind: "background" } }),
-                ...comp.elements.map((el) =>
-                  findOrGenerateImage({ data: { prompt: el.prompt, kind: "element" } }).then((r) => ({
-                    ...el,
-                    mediaUrl: r.dataUrl,
-                    _c: r.cached,
-                  })),
-                ),
-              ]);
-              if (bg.cached) cachedHits++;
-              cachedHits += els.filter((e) => e._c).length;
-              return {
-                kind: "image" as const,
-                backgroundUrl: bg.dataUrl,
-                elements: els.map(({ _c, ...rest }) => rest),
-              };
-            })()
-          : searchStockClip({ data: { query: plan.pexelsQuery || plan.sentence } }).then(
-              async (r): Promise<StockOrFallback> => {
-                if (r.videoUrl) return { kind: "stock", videoUrl: r.videoUrl };
-                totalImgs = 1;
-                const bg = await findOrGenerateImage({ data: { prompt: plan.sentence, kind: "background" } });
-                if (bg.cached) cachedHits++;
-                return { kind: "image-fallback", imageUrl: bg.dataUrl };
-              },
-            );
+        : (async () => {
+            const comp = plan.composition!;
+            totalImgs = 1 + comp.elements.length;
+            // Background prompt stays a plain mood description — the title is
+            // rendered as text by the player, not baked into the AI image.
+            const bgPrompt = comp.backgroundPrompt;
+            const [bg, ...els] = await Promise.all([
+              findOrGenerateImage({ data: { prompt: bgPrompt, kind: "background" } }),
+              ...comp.elements.map((el) =>
+                findOrGenerateImage({ data: { prompt: el.prompt, kind: "element" } }).then((r) => ({
+                  ...el,
+                  mediaUrl: r.dataUrl,
+                  _c: r.cached,
+                })),
+              ),
+            ]);
+            if (bg.cached) cachedHits++;
+            cachedHits += els.filter((e) => e._c).length;
+            return {
+              kind: "image" as const,
+              backgroundUrl: bg.dataUrl,
+              title: comp.title,
+              elements: els.map(({ _c, ...rest }) => rest),
+            };
+          })();
+
 
     let audioPromise: Promise<{ audioUrl: string; durationMs: number }>;
     if (precomputedAudio) {
