@@ -10,6 +10,9 @@ import {
   drawSceneFrame,
   seekVideo,
 } from "./rasterize-scene";
+import { DEFAULT_BACKGROUND, type SceneBackground } from "./scene-background";
+import { preloadTransparent } from "./remove-white-bg";
+
 
 export type ExportQuality = "preview" | "hd";
 export type StageProgress = (stage: string, ratio: number) => void;
