@@ -270,18 +270,24 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         ];
         const elements: CompositionElement[] = rawEls
           .slice(0, 6)
-          .map((el: any, ei: number) => ({
-            id: String(el?.id ?? `el${ei}`).slice(0, 24),
-            segmentPrompt: String(
+          .map((el: any, ei: number) => {
+            const segmentPrompt = String(
               el?.segmentPrompt ?? el?.prompt ?? el?.label ?? `element ${ei + 1}`,
-            ).slice(0, 120),
-            label: el?.label ? String(el.label).slice(0, 40) : undefined,
-            x: 0.5,
-            y: 0.55,
-            w: 0.22,
-            appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
-            anim: validAnims.includes(el?.anim) ? el.anim : "pop",
-          }));
+            ).slice(0, 120);
+            const prompt = String(el?.prompt ?? el?.segmentPrompt ?? el?.label ?? `hand-drawn illustration of ${segmentPrompt}`).slice(0, 400);
+            return {
+              id: String(el?.id ?? `el${ei}`).slice(0, 24),
+              segmentPrompt,
+              prompt,
+              label: el?.label ? String(el.label).slice(0, 40) : undefined,
+              x: 0.5,
+              y: 0.55,
+              w: 0.22,
+              appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
+              anim: validAnims.includes(el?.anim) ? el.anim : "pop",
+            };
+          });
+
         composition = {
           compositePrompt: String(
             meta?.composition?.compositePrompt ??
