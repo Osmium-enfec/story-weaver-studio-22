@@ -242,8 +242,35 @@ export function VideoPlayer({
   const [exportQuality, setExportQuality] = useState<ExportQuality | null>(null);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStage, setExportStage] = useState("");
+  const [transparentMap, setTransparentMap] = useState<Map<string, string>>(new Map());
+
+  // Only process element images when a custom background is chosen; the
+  // whiteboard theme already sits on white, so multiply-blend handles it.
+  useEffect(() => {
+    if (background.kind === "whiteboard") {
+      setTransparentMap(new Map());
+      return;
+    }
+    let cancelled = false;
+    const urls = new Set<string>();
+    for (const s of scenes) {
+      if (s.kind === "image") for (const e of s.elements ?? []) urls.add(e.mediaUrl);
+    }
+    (async () => {
+      const next = new Map<string, string>();
+      await Promise.all(
+        Array.from(urls).map(async (u) => {
+          const t = await getTransparentUrl(u);
+          next.set(u, t);
+        }),
+      );
+      if (!cancelled) setTransparentMap(next);
+    })();
+    return () => { cancelled = true; };
+  }, [scenes, background.kind]);
 
   const scene = scenes[index];
+
 
   // Precompute scene time windows for master mode.
   const windows = useMemo(() => {
