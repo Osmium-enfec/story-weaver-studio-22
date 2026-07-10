@@ -9,6 +9,7 @@ import {
   backgroundToCanvasFill,
   type SceneBackground,
 } from "./scene-background";
+import { layoutFor } from "./scene-layouts";
 
 export interface DrawOptions {
   background?: SceneBackground;
