@@ -3,6 +3,14 @@ import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
 import { exportToMp4, downloadBlob, type ExportQuality } from "@/lib/ffmpeg-stitcher";
+import {
+  backgroundToCss,
+  CARD_PADDING_FRAC,
+  DEFAULT_BACKGROUND,
+  type SceneBackground,
+} from "@/lib/scene-background";
+import { getTransparentUrl } from "@/lib/remove-white-bg";
+
 
 
 export interface ResolvedElement extends CompositionElement {
@@ -39,11 +47,16 @@ export interface Scene {
 function ImageScene({
   scene,
   progress,
+  background,
+  transparentMap,
 }: {
   scene: Scene;
   progress: number;
+  background: SceneBackground;
+  transparentMap: Map<string, string>;
 }) {
   const t = progress;
+  const customBg = background.kind !== "whiteboard";
   const bgStyle: React.CSSProperties =
     scene.animation === "kenburns-in"
       ? { transform: `scale(${1 + 0.08 * t})` }
@@ -53,98 +66,122 @@ function ImageScene({
           ? { transform: `translateX(${(0.5 - t) * 20}px) scale(1.04)` }
           : { transform: "scale(1.02)" };
 
+  const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
+
   return (
-    <div className="relative h-full w-full overflow-hidden bg-white">
-      {scene.backgroundUrl && (
-        <img
-          src={scene.backgroundUrl}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-100 ease-linear"
-          style={bgStyle}
-        />
-      )}
-      {scene.elements?.map((el) => {
-        const single = (scene.elements?.length ?? 0) === 1;
-        const shown = t >= el.appearAt;
-        const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
-        const p = shown ? Math.min(1, (t - el.appearAt) / revealWindow) : 0;
-        const eased = 1 - Math.pow(1 - p, 3);
+    <div
+      className="relative h-full w-full overflow-hidden"
+      style={{ background: backgroundToCss(background) }}
+    >
+      {/* Inner card: on custom bg we inset a white rounded card (like the reference).
+          On whiteboard, we let the AI background fill edge-to-edge. */}
+      <div
+        className="absolute overflow-hidden"
+        style={{
+          inset: customBg ? `${padPct}%` : 0,
+          borderRadius: customBg ? "1.25rem" : 0,
+          background: customBg ? "#ffffff" : "transparent",
+          boxShadow: customBg ? "0 10px 40px -12px rgba(0,0,0,0.25)" : "none",
+        }}
+      >
+        {!customBg && scene.backgroundUrl && (
+          <img
+            src={scene.backgroundUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-100 ease-linear"
+            style={bgStyle}
+          />
+        )}
+        {scene.elements?.map((el) => {
+          const single = (scene.elements?.length ?? 0) === 1;
+          const shown = t >= el.appearAt;
+          const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
+          const p = shown ? Math.min(1, (t - el.appearAt) / revealWindow) : 0;
+          const eased = 1 - Math.pow(1 - p, 3);
 
-        let transform = "";
-        const opacity = eased;
-        switch (el.anim) {
-          case "pop":
-            transform = `scale(${0.6 + 0.4 * eased})`;
-            break;
-          case "fade":
-            transform = "scale(1)";
-            break;
-          case "slide-up":
-            transform = `translateY(${(1 - eased) * 40}px)`;
-            break;
-          case "slide-left":
-            transform = `translateX(${(1 - eased) * -60}px)`;
-            break;
-          case "slide-right":
-            transform = `translateX(${(1 - eased) * 60}px)`;
-            break;
-        }
+          let transform = "";
+          const opacity = eased;
+          switch (el.anim) {
+            case "pop":
+              transform = `scale(${0.6 + 0.4 * eased})`;
+              break;
+            case "fade":
+              transform = "scale(1)";
+              break;
+            case "slide-up":
+              transform = `translateY(${(1 - eased) * 40}px)`;
+              break;
+            case "slide-left":
+              transform = `translateX(${(1 - eased) * -60}px)`;
+              break;
+            case "slide-right":
+              transform = `translateX(${(1 - eased) * 60}px)`;
+              break;
+          }
 
-        const width = single ? Math.max(0.6, el.w * 2.2) : el.w;
-        const leftPct = single ? 50 : el.x * 100;
-        const topPct = single ? 50 : el.y * 100;
+          const width = single ? Math.max(0.6, el.w * 2.2) : el.w;
+          const leftPct = single ? 50 : el.x * 100;
+          const topPct = single ? 50 : el.y * 100;
+          const src = transparentMap.get(el.mediaUrl) ?? el.mediaUrl;
+          const useTransparent = transparentMap.has(el.mediaUrl);
 
-        return (
-          <div
-            key={el.id}
-            className="absolute select-none"
-            style={{
-              left: `${leftPct}%`,
-              top: `${topPct}%`,
-              width: `${width * 100}%`,
-              transform: `translate(-50%, -50%) ${transform}`,
-              transformOrigin: "center center",
-              opacity,
-              pointerEvents: "none",
-            }}
-          >
-            <img
-              src={el.mediaUrl}
-              alt=""
-              className="block w-full"
-              style={{ mixBlendMode: "multiply" }}
-              draggable={false}
-            />
-            {el.label && (
-              <div
-                className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
-                style={{
-                  top: "calc(100% - 6px)",
-                  fontFamily: '"Caveat", "Kalam", cursive',
-                  fontWeight: 700,
-                  fontSize: `${Math.max(14, width * 60)}px`,
-                  color: "#1a1a1a",
-                  textShadow: "0 1px 0 rgba(255,255,255,0.9)",
-                }}
-              >
-                {el.label}
-              </div>
-            )}
-          </div>
-        );
-      })}
+          return (
+            <div
+              key={el.id}
+              className="absolute select-none"
+              style={{
+                left: `${leftPct}%`,
+                top: `${topPct}%`,
+                width: `${width * 100}%`,
+                transform: `translate(-50%, -50%) ${transform}`,
+                transformOrigin: "center center",
+                opacity,
+                pointerEvents: "none",
+              }}
+            >
+              <img
+                src={src}
+                alt=""
+                className="block w-full"
+                style={useTransparent ? undefined : { mixBlendMode: "multiply" }}
+                draggable={false}
+              />
+              {el.label && (
+                <div
+                  className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
+                  style={{
+                    top: "calc(100% - 6px)",
+                    fontFamily: '"Caveat", "Kalam", cursive',
+                    fontWeight: 700,
+                    fontSize: `${Math.max(14, width * 60)}px`,
+                    color: "#1a1a1a",
+                    textShadow: "0 1px 0 rgba(255,255,255,0.9)",
+                  }}
+                >
+                  {el.label}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
+
 
 function SceneStage({
   scene,
   progress,
   videoRef,
+  background,
+  transparentMap,
 }: {
   scene: Scene;
   progress: number;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
+  background: SceneBackground;
+  transparentMap: Map<string, string>;
 }) {
   if (scene.kind === "code") {
     return (
@@ -158,7 +195,14 @@ function SceneStage({
     );
   }
   if (scene.kind === "image") {
-    return <ImageScene scene={scene} progress={progress} />;
+    return (
+      <ImageScene
+        scene={scene}
+        progress={progress}
+        background={background}
+        transparentMap={transparentMap}
+      />
+    );
   }
   return (
     <video
@@ -175,7 +219,14 @@ function SceneStage({
 // crossfade just softens the visual cut — no silence, no clipped words.
 const CROSSFADE_MS = 700;
 
-export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
+export function VideoPlayer({
+  scenes,
+  background = DEFAULT_BACKGROUND,
+}: {
+  scenes: Scene[];
+  background?: SceneBackground;
+}) {
+
   const masterAudioUrl = scenes[0]?.masterAudioUrl;
   const masterMode = !!masterAudioUrl;
 
@@ -191,8 +242,35 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
   const [exportQuality, setExportQuality] = useState<ExportQuality | null>(null);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStage, setExportStage] = useState("");
+  const [transparentMap, setTransparentMap] = useState<Map<string, string>>(new Map());
+
+  // Only process element images when a custom background is chosen; the
+  // whiteboard theme already sits on white, so multiply-blend handles it.
+  useEffect(() => {
+    if (background.kind === "whiteboard") {
+      setTransparentMap(new Map());
+      return;
+    }
+    let cancelled = false;
+    const urls = new Set<string>();
+    for (const s of scenes) {
+      if (s.kind === "image") for (const e of s.elements ?? []) urls.add(e.mediaUrl);
+    }
+    (async () => {
+      const next = new Map<string, string>();
+      await Promise.all(
+        Array.from(urls).map(async (u) => {
+          const t = await getTransparentUrl(u);
+          next.set(u, t);
+        }),
+      );
+      if (!cancelled) setTransparentMap(next);
+    })();
+    return () => { cancelled = true; };
+  }, [scenes, background.kind]);
 
   const scene = scenes[index];
+
 
   // Precompute scene time windows for master mode.
   const windows = useMemo(() => {
@@ -212,7 +290,8 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
       const blob = await exportToMp4(scenes, masterAudioUrl, quality, (stage, ratio) => {
         setExportStage(stage);
         setExportProgress(ratio);
-      });
+      }, background);
+
       const label = quality === "hd" ? "1080p60" : "720p30";
       downloadBlob(blob, `explainer-${label}-${Date.now()}.mp4`);
     } catch (e) {
@@ -423,7 +502,12 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
               willChange: "opacity, transform",
             }}
           >
-            <SceneStage scene={prevScene} progress={1} />
+            <SceneStage
+              scene={prevScene}
+              progress={1}
+              background={background}
+              transparentMap={transparentMap}
+            />
           </div>
         )}
         <div
@@ -431,8 +515,15 @@ export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
           className="absolute inset-0"
           style={{ animation: `sceneIn ${CROSSFADE_MS}ms ease-out both` }}
         >
-          <SceneStage scene={scene} progress={progress} videoRef={videoRef} />
+          <SceneStage
+            scene={scene}
+            progress={progress}
+            videoRef={videoRef}
+            background={background}
+            transparentMap={transparentMap}
+          />
         </div>
+
 
         <audio ref={audioRef} src={audioSrc} preload="auto" />
       </div>

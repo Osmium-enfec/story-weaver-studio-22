@@ -10,6 +10,9 @@ import {
   drawSceneFrame,
   seekVideo,
 } from "./rasterize-scene";
+import { DEFAULT_BACKGROUND, type SceneBackground } from "./scene-background";
+import { preloadTransparent } from "./remove-white-bg";
+
 
 export type ExportQuality = "preview" | "hd";
 export type StageProgress = (stage: string, ratio: number) => void;
@@ -61,6 +64,7 @@ export async function exportToMp4(
   masterAudioUrl: string | undefined,
   quality: ExportQuality,
   onProgress: StageProgress,
+  background: SceneBackground = DEFAULT_BACKGROUND,
 ): Promise<Blob> {
   const { w: W, h: H, fps, preset, crf } = PRESETS[quality];
 
@@ -69,6 +73,28 @@ export async function exportToMp4(
 
   onProgress("loading assets…", 0.02);
   const assets = await preloadSceneAssets(scenes);
+  const transparentMap = background.kind === "whiteboard"
+    ? new Map<string, string>()
+    : await preloadTransparent(
+        Array.from(new Set(scenes.flatMap((s) => (s.elements ?? []).map((e) => e.mediaUrl)))),
+      );
+  // Re-preload transparent versions as HTMLImageElements so the rasterizer
+  // can draw them directly.
+  const transparentImgs = new Map<string, HTMLImageElement>();
+  await Promise.all(
+    Array.from(transparentMap.entries()).map(async ([orig, url]) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const done = new Promise<void>((res) => {
+        img.onload = () => res();
+        img.onerror = () => res();
+      });
+      img.src = url;
+      await done;
+      transparentImgs.set(orig, img);
+    }),
+  );
+
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -117,7 +143,7 @@ export async function exportToMp4(
         try { await seekVideo(video, tSec); } catch { /* ignore */ }
       }
 
-      drawSceneFrame(ctx, scene, progress, W, H, assets);
+      drawSceneFrame(ctx, scene, progress, W, H, assets, { background, transparent: transparentImgs });
 
       const bytes = await canvasToPngBytes(canvas);
       const name = `s${i}_f${String(f).padStart(5, "0")}.png`;

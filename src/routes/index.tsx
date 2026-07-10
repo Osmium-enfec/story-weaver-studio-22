@@ -18,6 +18,8 @@ import {
 import { findOrGenerateImage } from "@/lib/image-library.functions";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
+import type { SceneBackground } from "@/lib/scene-background";
+
 import {
   alignSentences,
   computeSnappedRangesMs,
@@ -119,6 +121,8 @@ function Index() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [projectTitle, setProjectTitle] = useState<string>("");
+  const [background, setBackground] = useState<SceneBackground>({ kind: "whiteboard" });
+
 
   // Approx credit-usage counters (client-side estimate, not a bill)
   const [stats, setStats] = useState({
@@ -778,10 +782,58 @@ function Index() {
                 </button>
               </div>
             </div>
-            <VideoPlayer scenes={scenes} />
+            <BackgroundPicker value={background} onChange={setBackground} />
+            <VideoPlayer scenes={scenes} background={background} />
           </section>
         )}
       </div>
     </div>
   );
 }
+
+const BG_PRESETS: { label: string; bg: SceneBackground }[] = [
+  { label: "Whiteboard", bg: { kind: "whiteboard" } },
+  { label: "Sky", bg: { kind: "solid", color: "#e0f2fe" } },
+  { label: "Mint", bg: { kind: "solid", color: "#dcfce7" } },
+  { label: "Blush", bg: { kind: "solid", color: "#ffe4e6" } },
+  { label: "Slate", bg: { kind: "solid", color: "#1e293b" } },
+  { label: "Purple → Pink", bg: { kind: "gradient", from: "#a78bfa", to: "#f472b6" } },
+  { label: "Teal → Blue", bg: { kind: "gradient", from: "#5eead4", to: "#3b82f6" } },
+  { label: "Sunset", bg: { kind: "gradient", from: "#fb923c", to: "#ec4899" } },
+];
+
+function BackgroundPicker({
+  value,
+  onChange,
+}: {
+  value: SceneBackground;
+  onChange: (bg: SceneBackground) => void;
+}) {
+  const isActive = (bg: SceneBackground) => JSON.stringify(bg) === JSON.stringify(value);
+  const preview = (bg: SceneBackground) => {
+    if (bg.kind === "solid") return bg.color;
+    if (bg.kind === "gradient") return `linear-gradient(${bg.angle ?? 135}deg, ${bg.from}, ${bg.to})`;
+    return "repeating-linear-gradient(45deg, #f8fafc 0 8px, #eef2f7 8px 16px)";
+  };
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      <span className="text-xs font-medium text-muted-foreground">Background:</span>
+      {BG_PRESETS.map((p) => (
+        <button
+          key={p.label}
+          onClick={() => onChange(p.bg)}
+          className={`flex items-center gap-2 rounded-full border px-2 py-1 text-xs transition ${
+            isActive(p.bg) ? "border-primary ring-2 ring-primary/30" : "border-input hover:bg-accent"
+          }`}
+        >
+          <span
+            className="inline-block h-4 w-4 rounded-full border"
+            style={{ background: preview(p.bg) }}
+          />
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
