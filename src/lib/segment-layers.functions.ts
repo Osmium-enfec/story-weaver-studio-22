@@ -77,7 +77,7 @@ Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-part
         layers: [],
         fallback: true,
         error:
-          error instanceof DOMException && error.name === "AbortError"
+          error instanceof Error && error.name === "AbortError"
             ? "Gemini segmentation timed out. Try a smaller image or retry in a moment."
             : "Could not reach Lovable AI for segmentation. Please retry in a moment.",
       };
@@ -119,7 +119,15 @@ Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-part
           error: `Could not parse Gemini output: ${text.slice(0, 300)}`,
         };
       }
-      parsed = JSON.parse(m[0]);
+      try {
+        parsed = JSON.parse(m[0]);
+      } catch {
+        return {
+          layers: [],
+          fallback: true,
+          error: `Could not parse Gemini output: ${text.slice(0, 300)}`,
+        };
+      }
     }
 
     if (!Array.isArray(parsed)) {
