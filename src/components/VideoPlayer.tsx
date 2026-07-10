@@ -174,10 +174,14 @@ function SceneStage({
   scene,
   progress,
   videoRef,
+  background,
+  transparentMap,
 }: {
   scene: Scene;
   progress: number;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
+  background: SceneBackground;
+  transparentMap: Map<string, string>;
 }) {
   if (scene.kind === "code") {
     return (
@@ -191,7 +195,14 @@ function SceneStage({
     );
   }
   if (scene.kind === "image") {
-    return <ImageScene scene={scene} progress={progress} />;
+    return (
+      <ImageScene
+        scene={scene}
+        progress={progress}
+        background={background}
+        transparentMap={transparentMap}
+      />
+    );
   }
   return (
     <video
@@ -208,7 +219,14 @@ function SceneStage({
 // crossfade just softens the visual cut — no silence, no clipped words.
 const CROSSFADE_MS = 700;
 
-export function VideoPlayer({ scenes }: { scenes: Scene[] }) {
+export function VideoPlayer({
+  scenes,
+  background = DEFAULT_BACKGROUND,
+}: {
+  scenes: Scene[];
+  background?: SceneBackground;
+}) {
+
   const masterAudioUrl = scenes[0]?.masterAudioUrl;
   const masterMode = !!masterAudioUrl;
 
