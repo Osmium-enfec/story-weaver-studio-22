@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import {
   planScript,
-  searchStockClip,
   generateNarration,
   type ScenePlan,
 } from "@/lib/explainer.functions";
