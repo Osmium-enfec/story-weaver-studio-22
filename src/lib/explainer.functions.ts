@@ -127,15 +127,20 @@ ${narrationRule}
       in the composite that should FADE IN one-by-one as narration reaches it.
       Each element:
         id: short slug ("dog","arrow-1","box-input").
-        segmentPrompt: 1–4 word noun phrase that describes THIS element as it
-          appears in the composite — this is fed to a text-prompted segmenter
-          to cut it out. Examples: "the dog", "the laptop", "the red arrow",
-          "the box labeled input". Be concrete and visually distinctive.
+        segmentPrompt: 1–4 word noun phrase describing THIS element as it
+          appears in the composite — fed to a text-prompted object detector
+          to locate it. Examples: "the dog", "the red arrow", "the laptop".
+        prompt: 8–25 word rich description of THIS element as a standalone
+          hand-drawn illustration to be regenerated fresh in the same
+          Excalidraw/watercolor style. Include the object, its pose, colors,
+          and any small details. Example: "a small golden retriever sitting,
+          wagging tail, warm honey-brown watercolor with ink outlines".
         label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the
           element by the player (e.g. "input", "search", "answer").
         appearAt: 0..1 fraction of the scene duration when this element
           appears. First element ~0.05, last element <= 0.80. Spread evenly.
         anim: one of "pop","fade","slide-up","slide-left","slide-right".
+
 - If kind = "code":
     code: short realistic snippet (5–15 lines, real syntax, no backticks).
     codeLanguage: "ts" | "js" | "tsx" | "py" | "sh" | "json" | "html".
