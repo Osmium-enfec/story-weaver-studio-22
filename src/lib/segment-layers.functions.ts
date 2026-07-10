@@ -35,7 +35,7 @@ async function pollPrediction(id: string, maxSec = 300): Promise<any> {
   throw new Error("Prediction timed out");
 }
 
-async function runReplicate(model: string, input: Record<string, unknown>): Promise<any> {
+async function runReplicate(model: string, input: Record<string, unknown>, attempt = 0): Promise<any> {
   const headers = replicateHeaders();
   // Try official model endpoint first; fall back to community (version) endpoint on 404.
   let res = await fetch(`${GATEWAY}/models/${model}/predictions`, {
@@ -44,7 +44,6 @@ async function runReplicate(model: string, input: Record<string, unknown>): Prom
     body: JSON.stringify({ input }),
   });
   if (res.status === 404) {
-    // Community model: fetch latest version, then POST to /predictions with version.
     const mres = await fetch(`${GATEWAY}/models/${model}`, { headers });
     if (!mres.ok) {
       throw new Error(`Replicate model lookup failed [${mres.status}]: ${await mres.text()}`);
@@ -57,6 +56,14 @@ async function runReplicate(model: string, input: Record<string, unknown>): Prom
       headers,
       body: JSON.stringify({ version, input }),
     });
+  }
+  if (res.status === 429 && attempt < 4) {
+    const body = await res.text();
+    let retryAfter = 10;
+    try { retryAfter = JSON.parse(body)?.retry_after ?? 10; } catch {}
+    const wait = Math.min(retryAfter, 30) * 1000 + 500;
+    await new Promise((r) => setTimeout(r, wait));
+    return runReplicate(model, input, attempt + 1);
   }
   if (res.status === 402) {
     throw new Error("Replicate account has no credit. Enable billing at https://replicate.com/account/billing.");
