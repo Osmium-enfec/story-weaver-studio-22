@@ -380,7 +380,7 @@ function Index() {
                     durationMs: audioWindows[i].endMs - audioWindows[i].startMs,
                   }
                 : undefined;
-            const s = await buildScene(p, precomputed);
+            const s = await buildScene(p, precomputed, (step) => pushStep(i, step));
             const { _cached, ...scene } = s as any;
             resultsArr[i] = scene;
             resultsRef.current = resultsArr;
