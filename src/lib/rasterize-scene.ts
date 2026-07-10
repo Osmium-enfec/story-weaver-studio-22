@@ -286,11 +286,12 @@ export function drawSceneFrame(
   progress: number,
   W: number, H: number,
   assets: SceneAssets,
+  opts: DrawOptions = {},
 ) {
   if (scene.kind === "code") {
     drawCodeSceneFrame(ctx, scene, progress, W, H);
   } else if (scene.kind === "image") {
-    drawImageSceneFrame(ctx, scene, progress, W, H, assets);
+    drawImageSceneFrame(ctx, scene, progress, W, H, assets, opts);
   } else if (scene.kind === "stock" && scene.mediaUrl) {
     const v = assets.vid.get(scene.mediaUrl);
     if (v) drawStockFrame(ctx, v, W, H);
@@ -300,3 +301,4 @@ export function drawSceneFrame(
     ctx.fillRect(0, 0, W, H);
   }
 }
+
