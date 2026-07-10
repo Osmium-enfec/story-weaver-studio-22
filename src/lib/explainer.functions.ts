@@ -368,35 +368,9 @@ CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous pa
     return { dataUrl: `data:image/png;base64,${b64}` };
   });
 
-// ---------- Pexels stock video search ----------
-const PexInput = z.object({ query: z.string().min(1) });
+// Pexels stock video search removed — the app now uses only AI-generated
+// images for every scene.
 
-export const searchStockClip = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => PexInput.parse(d))
-  .handler(async ({ data }) => {
-    const key = process.env.PEXELS_API_KEY;
-    if (!key) throw new Error("PEXELS_API_KEY missing");
-
-    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(
-      data.query,
-    )}&per_page=5&orientation=landscape`;
-    const res = await fetch(url, { headers: { Authorization: key } });
-    if (!res.ok) throw new Error(`Pexels failed: ${res.status}`);
-    const json = await res.json();
-    const video = json.videos?.[0];
-    if (!video) return { videoUrl: null, posterUrl: null };
-    const files: any[] = video.video_files ?? [];
-    const preferred =
-      files.find(
-        (f) => f.file_type === "video/mp4" && f.width && f.width >= 960 && f.width <= 1600,
-      ) ||
-      files.find((f) => f.file_type === "video/mp4") ||
-      files[0];
-    return {
-      videoUrl: preferred?.link ?? null,
-      posterUrl: video.image ?? null,
-    };
-  });
 
 // ---------- TTS (ElevenLabs v3, Liam voice) ----------
 const TtsInput = z.object({ text: z.string().min(1).max(2000) });
