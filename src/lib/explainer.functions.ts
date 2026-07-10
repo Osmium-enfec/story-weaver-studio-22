@@ -1035,11 +1035,25 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
       throw new Error(`upload: ${e?.message || "failed"}`);
     }
 
-    // 2) Run 3 detectors in parallel.
+    // 2) Detectors. Gemini runs in parallel with Replicate, but the two
+    //    Replicate/Florence calls MUST be sequential — Replicate's free-tier
+    //    burst limit is 1 concurrent prediction and firing both at once
+    //    guarantees a 422 "throttled" on the second.
+    const geminiPromise = detectWithGemini(data.imageDataUrl, data.granularity);
+    const florencePromise = detectWithFlorenceRegions(uploadUrl)
+      .then(async (regions) => {
+        // Small spacer so the OCR call doesn't collide with the region call.
+        await new Promise((r) => setTimeout(r, 1200));
+        return regions;
+      });
+    const ocrPromise = florencePromise
+      .catch(() => [])
+      .then(() => detectWithFlorenceOCR(uploadUrl));
+
     const [geminiRes, florenceRes, ocrRes] = await Promise.allSettled([
-      detectWithGemini(data.imageDataUrl, data.granularity),
-      detectWithFlorenceRegions(uploadUrl),
-      detectWithFlorenceOCR(uploadUrl),
+      geminiPromise,
+      florencePromise,
+      ocrPromise,
     ]);
 
     const gemini = geminiRes.status === "fulfilled" ? geminiRes.value : [];
