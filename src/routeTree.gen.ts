@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
+import { Route as AuthenticatedSegmentLabRouteImport } from './routes/_authenticated/segment-lab'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 
@@ -35,6 +36,11 @@ const ApiTranscribeRoute = ApiTranscribeRouteImport.update({
   path: '/api/transcribe',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedSegmentLabRoute = AuthenticatedSegmentLabRouteImport.update({
+  id: '/segment-lab',
+  path: '/segment-lab',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -50,6 +56,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
 }
@@ -57,6 +64,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
 }
@@ -66,20 +74,34 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
+  '/_authenticated/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/_authenticated/project/$id': typeof AuthenticatedProjectIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/projects' | '/api/transcribe' | '/project/$id'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/projects'
+    | '/segment-lab'
+    | '/api/transcribe'
+    | '/project/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/projects' | '/api/transcribe' | '/project/$id'
+  to:
+    | '/'
+    | '/auth'
+    | '/projects'
+    | '/segment-lab'
+    | '/api/transcribe'
+    | '/project/$id'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/projects'
+    | '/_authenticated/segment-lab'
     | '/api/transcribe'
     | '/_authenticated/project/$id'
   fileRoutesById: FileRoutesById
@@ -121,6 +143,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTranscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/segment-lab': {
+      id: '/_authenticated/segment-lab'
+      path: '/segment-lab'
+      fullPath: '/segment-lab'
+      preLoaderRoute: typeof AuthenticatedSegmentLabRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/projects': {
       id: '/_authenticated/projects'
       path: '/projects'
@@ -140,11 +169,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
+  AuthenticatedSegmentLabRoute: typeof AuthenticatedSegmentLabRoute
   AuthenticatedProjectIdRoute: typeof AuthenticatedProjectIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
+  AuthenticatedSegmentLabRoute: AuthenticatedSegmentLabRoute,
   AuthenticatedProjectIdRoute: AuthenticatedProjectIdRoute,
 }
 
