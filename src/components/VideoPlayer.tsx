@@ -3,6 +3,14 @@ import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
 import { exportToMp4, downloadBlob, type ExportQuality } from "@/lib/ffmpeg-stitcher";
+import {
+  backgroundToCss,
+  CARD_PADDING_FRAC,
+  DEFAULT_BACKGROUND,
+  type SceneBackground,
+} from "@/lib/scene-background";
+import { getTransparentUrl } from "@/lib/remove-white-bg";
+
 
 
 export interface ResolvedElement extends CompositionElement {
