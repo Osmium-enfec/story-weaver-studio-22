@@ -25,9 +25,18 @@ async function generateImage(prompt: string, kind: "background" | "element"): Pr
 
   let styled: string;
   if (kind === "element") {
-    styled = `A SINGLE isolated hand-drawn Excalidraw-style illustration of: ${prompt}.
-Thick black sketchy outlines (slightly wobbly, hand-drawn feel), pastel color fills (soft blues, greens, yellows, pinks, purples), subtle cross-hatch shading, gentle drop shadow. Friendly, cheerful, educational infographic character.
-CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous padding on all sides. Absolutely no other elements, no background scenery, no text, no labels, no borders, no frame. Square framing. Just the subject on white.`;
+    styled = `A SINGLE isolated hand-drawn illustration of: ${prompt}.
+
+STYLE (must match exactly):
+- Hand-drawn sketch/doodle look, like a high-quality illustrated children's book or a polished Notability/Procreate sketch.
+- Confident but slightly wobbly INK outlines in near-black (#1a1a1a), medium-thin weight, with visible sketchy quality (occasional double lines, small gaps at corners).
+- WARM, RICH color fills: golden-honey yellows, warm browns/tans, soft peach, muted sage green, dusty blue, warm terracotta. NOT flat pastel — use gentle color variation within each shape.
+- Soft watercolor-like shading with visible pencil/marker texture, subtle cross-hatching in shadow areas, a hint of highlight on rounded surfaces.
+- Small subtle ground shadow beneath the subject (short horizontal pencil scribbles or a soft gray smudge), not a hard drop shadow.
+- Expressive, friendly character with clear personality — detailed facial features (eyes with tiny highlight, defined nose, subtle mouth), fur/texture hinted with short directional strokes.
+- Reference vibe: warm, cozy, illustrated infographic character (like a modern educational sketchbook), NOT flat corporate cartoon and NOT thick-outline emoji.
+
+CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous padding on all sides. Absolutely no other elements, no background scenery, no text, no labels, no borders, no frame, no color swatches. Square framing. Just the subject on clean white.`;
   } else {
     const titleMatch = prompt.match(/TITLE_PILL:\{color:([a-z]+);text:"([^"]+)"\}/);
     const flowMatch = prompt.match(/FLOW:([^|]+)/);
