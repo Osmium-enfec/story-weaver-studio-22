@@ -144,6 +144,20 @@ function Index() {
     setStats(statsRef.current);
   }
 
+  function pushStep(i: number, step: SceneStep) {
+    setProgress((prev) => {
+      const next = [...prev];
+      const cur = next[i];
+      if (!cur) return prev;
+      const steps = [...(cur.steps ?? [])];
+      // Update existing "running" step of the same name, else append.
+      const idx = steps.findIndex((s) => s.name === step.name && s.status === "running");
+      if (idx >= 0) steps[idx] = step; else steps.push(step);
+      next[i] = { ...cur, steps };
+      return next;
+    });
+  }
+
   // ---------- Build one scene ----------
   async function buildScene(
     plan: ScenePlan,
