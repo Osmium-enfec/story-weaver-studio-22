@@ -2,8 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1";
-
 const Input = z.object({
   imageDataUrl: z.string().min(20),
 });
@@ -19,11 +17,6 @@ export interface GeminiSegment {
   maskDataUrl: string; // bbox-sized white-on-black PNG
 }
 
-function stripCodeFence(t: string): string {
-  const m = t.match(/```(?:json)?\s*([\s\S]*?)```/);
-  return (m ? m[1] : t).trim();
-}
-
 type SegmentImageLayersResult =
   | { layers: GeminiSegment[]; error?: never; fallback?: never }
   | { layers: GeminiSegment[]; error: string; fallback: true };
@@ -32,6 +25,11 @@ export const segmentImageLayers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }): Promise<SegmentImageLayersResult> => {
+    const aiGateway = "https://ai.gateway.lovable.dev/v1";
+    const stripCodeFence = (text: string): string => {
+      const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      return (match ? match[1] : text).trim();
+    };
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("LOVABLE_API_KEY missing");
 
@@ -47,7 +45,7 @@ Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-part
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60_000);
       try {
-        res = await fetch(`${AI_GATEWAY}/chat/completions`, {
+        res = await fetch(`${aiGateway}/chat/completions`, {
           method: "POST",
           signal: controller.signal,
           headers: {
