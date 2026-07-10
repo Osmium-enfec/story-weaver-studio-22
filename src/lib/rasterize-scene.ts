@@ -9,6 +9,7 @@ import {
   backgroundToCanvasFill,
   type SceneBackground,
 } from "./scene-background";
+import { layoutFor } from "./scene-layouts";
 
 export interface DrawOptions {
   background?: SceneBackground;
@@ -165,6 +166,23 @@ export function drawImageSceneFrame(
     ctx.restore();
   }
 
+  // Title (hand-drawn Excalidraw-style text) at the top of the card.
+  if (scene.title) {
+    const titleSize = Math.max(28, Math.round(innerH * 0.09));
+    ctx.save();
+    ctx.font = `700 ${titleSize}px Caveat, Kalam, cursive`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    const tx = innerX + innerW / 2;
+    const ty = innerY + innerH * 0.03;
+    ctx.lineWidth = Math.max(4, titleSize * 0.12);
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.strokeText(scene.title, tx, ty);
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillText(scene.title, tx, ty);
+    ctx.restore();
+  }
+
   const rawElements = (scene.elements ?? [])
     .map((e) => {
       const img =
@@ -175,20 +193,20 @@ export function drawImageSceneFrame(
     .filter(
       (x): x is { img: HTMLImageElement; el: NonNullable<Scene["elements"]>[number]; transparent: boolean } => !!x,
     );
-  const single = rawElements.length === 1;
+  const layout = layoutFor(rawElements.length);
 
-  for (const { img, el, transparent } of rawElements) {
-    if (progress < el.appearAt) continue;
+  rawElements.forEach(({ img, el, transparent }, i) => {
+    if (progress < el.appearAt) return;
+    const pos = layout[i] ?? { x: el.x, y: el.y, w: el.w };
     const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
     const p = Math.min(1, (progress - el.appearAt) / revealWindow);
     const eased = easeOutCubic(p);
 
-    const wFrac = single ? Math.max(0.6, el.w * 2.2) : el.w;
-    const targetW = innerW * wFrac;
+    const targetW = innerW * pos.w;
     const naturalRatio = img.naturalHeight / Math.max(1, img.naturalWidth);
     const targetH = targetW * naturalRatio;
-    const cx = innerX + (single ? innerW / 2 : el.x * innerW);
-    const cy = innerY + (single ? innerH / 2 : el.y * innerH);
+    const cx = innerX + pos.x * innerW;
+    const cy = innerY + pos.y * innerH;
 
     let scale = 1, dx = 0, dy = 0;
     switch (el.anim) {
@@ -221,7 +239,7 @@ export function drawImageSceneFrame(
       ctx.fillText(el.label, cx + dx, labelY);
       ctx.restore();
     }
-  }
+  });
 
   ctx.restore();
 }

@@ -6,22 +6,20 @@ const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
 const ELEVEN_MODEL = "eleven_v3";
 
 // ---------- Types shared with client ----------
-export type SceneKind = "image" | "stock" | "code";
+export type SceneKind = "image" | "code";
 export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
 export type ElementAnim = "pop" | "fade" | "slide-up" | "slide-left" | "slide-right";
-
-export type PillColor = "green" | "blue" | "yellow" | "purple" | "orange" | "pink";
 
 export interface CompositionElement {
   id: string;
   prompt: string;
   /** Optional short hand-drawn label rendered UNDER the element by the player. */
   label?: string;
-  /** center X, 0..1 across 16:9 canvas */
+  /** center X, 0..1 across 16:9 canvas — assigned by layout grid, not the LLM. */
   x: number;
-  /** center Y, 0..1 */
+  /** center Y, 0..1 — assigned by layout grid, not the LLM. */
   y: number;
-  /** width as fraction of canvas width, 0..1 */
+  /** width as fraction of canvas width, 0..1 — assigned by layout grid. */
   w: number;
   /** fraction of scene duration when element appears, 0..1 */
   appearAt: number;
@@ -30,13 +28,8 @@ export interface CompositionElement {
 
 export interface SceneComposition {
   backgroundPrompt: string;
-  /** Baked-in title (colored pill at the top of the background). */
+  /** Hand-drawn topic title shown at the top of the scene (Excalidraw font). */
   title?: string;
-  titleColor?: PillColor;
-  /** Baked-in "A → B → C" arrow flow under the title. */
-  flowSteps?: string[];
-  /** Baked-in purple robot mascot pill message at the bottom. */
-  footerMessage?: string;
   elements: CompositionElement[];
 }
 
@@ -47,7 +40,6 @@ export interface ScenePlan {
   subtitle: string;
   kind: SceneKind;
   composition?: SceneComposition; // for kind = "image"
-  pexelsQuery?: string;
   code?: string;
   codeTo?: string;
   codeLanguage?: string;
@@ -101,38 +93,27 @@ STEP 2 — For each sentence, produce a scene object:
 ${narrationRule}
 - kind: one of
     "code"  — sentence is about code, syntax, an API, a function, a file.
-    "image" — abstract concepts, ideas, metaphors, workflows.
-    "stock" — concrete real-world things (people, nature, cities, products).
+    "image" — everything else. Use AI-generated illustrations, never stock footage.
 - If kind = "image": composition object with:
-    backgroundPrompt: describe the SETTING/mood of the scene (e.g. "workflow diagram
-      about data processing"). Used by the image model along with the baked title.
-    title: short hand-drawn TITLE (2-5 words) shown as a colored pill at the TOP of the
-      background image. Required for image scenes.
-    titleColor: one of "green","blue","yellow","purple","orange","pink" — pick a color
-      that fits the sentence's mood.
-    flowSteps: OPTIONAL array of 2-5 very short words shown as a hand-drawn
-      "A → B → C" arrow flow directly under the title. Use ONLY when the sentence
-      literally describes a pipeline / sequence / progression. Otherwise omit.
-    footerMessage: OPTIONAL short takeaway sentence (<= 10 words) shown in a purple
-      pill with a cute robot mascot at the BOTTOM of the background. Use for
-      summary / punch-line scenes; omit for mid-flow scenes.
-    elements: array of 2–5 items appearing one-by-one. Each element:
-      id: short slug ("rocket","chart","user").
-      prompt: single subject description (e.g. "a smiling cartoon rocket
-        with flames"), NO style words — style is added later. NO text/labels.
-      label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the element
-        by the player (e.g. "read", "chunk", "embed"). Use for diagram/pipeline
-        elements that benefit from a name; omit for purely decorative subjects.
-      x: 0..1 center X on the canvas (0=left, 1=right).
-      y: 0..1 center Y (0=top, 1=bottom). Keep 0.30–0.75 — top ~0-0.22 is
-        reserved for the title pill and bottom ~0.82-1.0 for the footer pill.
-      w: 0..1 width fraction (typical 0.14–0.28).
-      appearAt: 0..1 fraction of the scene duration when this element
-        appears. First element ~0.05, last element <= 0.75. Spread evenly.
-      anim: one of "pop","fade","slide-up","slide-left","slide-right".
-    IMPORTANT: distribute elements across the canvas — don't overlap.
-    Use a mental grid: left/center/right, top/middle/bottom.
-- If kind = "stock": pexelsQuery (2–4 keywords).
+    backgroundPrompt: short mood/setting description of the scene
+      (e.g. "workflow diagram about data processing"). Used only to steer
+      the background style — do NOT include text here.
+    title: short hand-drawn TITLE (2-5 words) rendered by the player at the
+      TOP of the scene in an Excalidraw-style handwritten font. REQUIRED for
+      image scenes. Keep it a plain topic label, no punctuation.
+    elements: array of 1–6 distinct visual items appearing one-by-one. Element
+      positions are chosen automatically by a fixed grid layout — do NOT
+      include x/y/w. Each element:
+        id: short slug ("rocket","chart","user").
+        prompt: single subject description (e.g. "a smiling cartoon rocket
+          with flames"), NO style words — style is added later. NO text/labels.
+        label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the
+          element by the player (e.g. "read", "chunk", "embed").
+        appearAt: 0..1 fraction of the scene duration when this element
+          appears. First element ~0.05, last element <= 0.75. Spread evenly.
+        anim: one of "pop","fade","slide-up","slide-left","slide-right".
+    Prefer 2, 3, 4 or 6 elements — these map to the cleanest grid layouts
+    (50/50, thirds, 2x2, 3x2). Use 1 only for a single hero illustration.
 - If kind = "code":
     code: short realistic snippet (5–15 lines, real syntax, no backticks).
     codeLanguage: "ts" | "js" | "tsx" | "py" | "sh" | "json" | "html".
@@ -240,8 +221,8 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
 
     const scenes: ScenePlan[] = arr.slice(0, 40).map((meta: any, i: number) => {
       const rawKind = meta?.kind;
-      const kind: SceneKind =
-        rawKind === "code" ? "code" : rawKind === "stock" ? "stock" : "image";
+      // Only "image" and "code" now — legacy "stock" plans fall back to image.
+      const kind: SceneKind = rawKind === "code" ? "code" : "image";
       const sentence = String(meta?.sentence ?? "").trim() || `Scene ${i + 1}`;
       const narrationText = String(meta?.narrationText ?? "").trim() || sentence;
       const codeVariant: CodeVariant = ["typing", "morph", "scroll", "flight"].includes(
@@ -262,21 +243,20 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           "slide-left",
           "slide-right",
         ];
+        // x/y/w are overridden by the grid layout on the client, but we still
+        // fill them so the type stays satisfied and legacy consumers work.
         const elements: CompositionElement[] = rawEls
           .slice(0, 6)
           .map((el: any, ei: number) => ({
             id: String(el?.id ?? `el${ei}`).slice(0, 24),
             prompt: String(el?.prompt ?? sentence).slice(0, 200),
             label: el?.label ? String(el.label).slice(0, 40) : undefined,
-            x: clamp(el?.x, 0.05, 0.95, 0.2 + (ei * 0.6) / Math.max(1, rawEls.length - 1)),
-            y: clamp(el?.y, 0.3, 0.75, 0.5),
-            w: clamp(el?.w, 0.1, 0.5, 0.22),
+            x: 0.5,
+            y: 0.55,
+            w: 0.22,
             appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
             anim: validAnims.includes(el?.anim) ? el.anim : "pop",
           }));
-        const validColors: PillColor[] = ["green", "blue", "yellow", "purple", "orange", "pink"];
-        const rawTitleColor = meta?.composition?.titleColor;
-        const rawFlow = meta?.composition?.flowSteps;
         composition = {
           backgroundPrompt: String(
             meta?.composition?.backgroundPrompt ??
@@ -284,14 +264,7 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           ).slice(0, 300),
           title: meta?.composition?.title
             ? String(meta.composition.title).slice(0, 60)
-            : undefined,
-          titleColor: validColors.includes(rawTitleColor) ? rawTitleColor : "blue",
-          flowSteps: Array.isArray(rawFlow)
-            ? rawFlow.slice(0, 5).map((s: any) => String(s).slice(0, 24)).filter(Boolean)
-            : undefined,
-          footerMessage: meta?.composition?.footerMessage
-            ? String(meta.composition.footerMessage).slice(0, 120)
-            : undefined,
+            : sentence.split(/\s+/).slice(0, 4).join(" "),
           elements: elements.length
             ? elements
             : [
@@ -315,10 +288,6 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         subtitle: String(meta?.subtitle ?? "").trim() || sentence.slice(0, 60),
         kind,
         composition,
-        pexelsQuery:
-          kind === "stock"
-            ? String(meta?.pexelsQuery ?? sentence.split(" ").slice(0, 3).join(" "))
-            : undefined,
         code:
           kind === "code"
             ? normalizeCode(meta?.code) ||
@@ -399,35 +368,9 @@ CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous pa
     return { dataUrl: `data:image/png;base64,${b64}` };
   });
 
-// ---------- Pexels stock video search ----------
-const PexInput = z.object({ query: z.string().min(1) });
+// Pexels stock video search removed — the app now uses only AI-generated
+// images for every scene.
 
-export const searchStockClip = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => PexInput.parse(d))
-  .handler(async ({ data }) => {
-    const key = process.env.PEXELS_API_KEY;
-    if (!key) throw new Error("PEXELS_API_KEY missing");
-
-    const url = `https://api.pexels.com/videos/search?query=${encodeURIComponent(
-      data.query,
-    )}&per_page=5&orientation=landscape`;
-    const res = await fetch(url, { headers: { Authorization: key } });
-    if (!res.ok) throw new Error(`Pexels failed: ${res.status}`);
-    const json = await res.json();
-    const video = json.videos?.[0];
-    if (!video) return { videoUrl: null, posterUrl: null };
-    const files: any[] = video.video_files ?? [];
-    const preferred =
-      files.find(
-        (f) => f.file_type === "video/mp4" && f.width && f.width >= 960 && f.width <= 1600,
-      ) ||
-      files.find((f) => f.file_type === "video/mp4") ||
-      files[0];
-    return {
-      videoUrl: preferred?.link ?? null,
-      posterUrl: video.image ?? null,
-    };
-  });
 
 // ---------- TTS (ElevenLabs v3, Liam voice) ----------
 const TtsInput = z.object({ text: z.string().min(1).max(2000) });
