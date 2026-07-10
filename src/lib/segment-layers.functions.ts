@@ -7,9 +7,9 @@ const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1";
 
 function replicateHeaders() {
   const lov = process.env.LOVABLE_API_KEY;
-  const rep = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
+  const rep = process.env.REPLICATE_API_KEY ?? process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
   if (!lov) throw new Error("LOVABLE_API_KEY missing");
-  if (!rep) throw new Error("Replicate connector not linked (LOVABLE_CONNECTOR_REPLICATE_API_KEY missing)");
+  if (!rep) throw new Error("Replicate connector not linked (REPLICATE_API_KEY missing)");
   return {
     Authorization: `Bearer ${lov}`,
     "X-Connection-Api-Key": rep,
