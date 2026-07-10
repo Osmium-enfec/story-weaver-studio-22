@@ -63,6 +63,8 @@ function SegmentLab() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [parts, setParts] = useState<string[]>([]);
+  const [composed, setComposed] = useState<string | null>(null);
+  const composeCanvasRef = useRef<HTMLCanvasElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
