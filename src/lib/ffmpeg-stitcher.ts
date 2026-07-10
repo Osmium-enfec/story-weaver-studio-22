@@ -143,7 +143,7 @@ export async function exportToMp4(
         try { await seekVideo(video, tSec); } catch { /* ignore */ }
       }
 
-      drawSceneFrame(ctx, scene, progress, W, H, assets);
+      drawSceneFrame(ctx, scene, progress, W, H, assets, { background, transparent: transparentImgs });
 
       const bytes = await canvasToPngBytes(canvas);
       const name = `s${i}_f${String(f).padStart(5, "0")}.png`;
