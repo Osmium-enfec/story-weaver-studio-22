@@ -81,10 +81,7 @@ function SegmentLab() {
       .split(/[,\n]/)
       .map((s) => s.trim())
       .filter(Boolean);
-    if (!labels.length) {
-      setError("Enter at least one label (comma-separated)");
-      return;
-    }
+    // Empty labels → server auto-detects every element via vision LLM.
     setBusy(true);
     setError(null);
     setResult(null);
