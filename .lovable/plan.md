@@ -1,115 +1,59 @@
-# Hybrid Export: Canvas Rasterizer + ffmpeg.wasm Stitcher
+## Goal
 
-Keep our current canvas animation code as the "renderer" (it already knows how to draw image comps, code scenes, stock video, Ken Burns, element reveals). Add ffmpeg.wasm as the "encoder + muxer + stitcher" so the final output is a real MP4 with continuous audio.
+Cut image-generation credits by generating **one Excalidraw-style composite image per scene** (with arrows, boxes, characters, labels drawn in), then using **Grounded-SAM 2** (text-prompted segmentation on Replicate) to cut each element (character, box, arrow, label) out as a transparent PNG. Elements are then revealed in sequence, timed to narration, on top of the user's background.
 
-## Pipeline
+Also: stop over-fragmenting scripts. Let Gemini group 1–3 related sentences into a single scene when they visually belong together.
 
-```text
-per scene:
-  canvas draw loop  ─►  PNG frame sequence (in ffmpeg wasm FS)
-                          │
-                          ▼
-                  ffmpeg encode → segN.mp4 (H.264, silent, exact duration)
+## Changes
 
-all scenes done:
-  segments + master audio ─► ffmpeg concat + mux ─► final.mp4 (H.264 + AAC)
-```
+### 1. Planner — chunk smarter, output "composite" scenes
+`src/lib/explainer.functions.ts` → `planScript`
+- New system prompt: "Group 1–3 consecutive sentences into one scene when they describe the same idea. Aim for scenes of 6–18 seconds of narration. Never split a single explanatory beat across scenes."
+- Scene output shape for image scenes changes to:
+  - `narrationText`: full text for the whole scene (concatenation of grouped sentences).
+  - `composition.compositePrompt`: ONE detailed Excalidraw whiteboard prompt describing the whole infographic — layout, arrows, boxes, characters, hand-lettered labels — all drawn together.
+  - `composition.elements[]`: each element is now `{ id, label, segmentPrompt, appearAt, anim }`. `segmentPrompt` is the text prompt passed to Grounded-SAM (e.g. `"the dog"`, `"the arrow between box A and box B"`, `"the label 'chunk'"`). No more separate `prompt` per element; no more grid layout — positions come from the segmentation mask.
 
-Result: real MP4, seekable, correct duration, real AAC audio, no MediaRecorder / no `fix-webm-duration` hack.
+### 2. Replicate connector
+- User links **Replicate** via `standard_connectors--connect` (gateway-backed). Injects `LOVABLE_CONNECTOR_REPLICATE_API_KEY`.
+- No custom secret prompt needed.
 
-## Steps
+### 3. New server function: composite + segment
+`src/lib/explainer.functions.ts` → new `generateSceneComposite`
+- Input: `{ compositePrompt, segmentPrompts: string[] }`.
+- Step A: one call to OpenAI `gpt-image-1` (existing pipeline) at 1536×1024 with the full Excalidraw composite prompt (arrows, boxes, characters, labels all baked in).
+- Step B: upload the composite to Replicate `/v1/files`, then call Grounded-SAM 2 (e.g. `schananas/grounded_sam` or `meta/sam-2` with text prompts via Grounding DINO) once per `segmentPrompt` OR once with all prompts if the model supports batched labels.
+- Step C: for each returned mask, crop the composite to the mask's bounding box and apply the mask as alpha → transparent PNG. Store to `project-assets` bucket. Cache by `sha256(compositePrompt + segmentPrompt)` in `image_assets`.
+- Returns `{ compositeUrl, elements: [{ id, mediaUrl, bbox: {x,y,w,h} }] }`. The bbox (normalized 0–1) tells the player exactly where the piece sat in the original composite, so revealing it in place recreates the drawing.
 
-### 1. Add ffmpeg.wasm
-- `bun add @ffmpeg/ffmpeg @ffmpeg/util @ffmpeg/core`
-- Singleton loader `getFFmpeg()` (load once per session, ~25MB), progress + log handlers, same pattern as Frame Animator Magic.
+### 4. Player + rasterizer — position by bbox, not grid
+`src/components/VideoPlayer.tsx` (`ImageScene`) and `src/lib/rasterize-scene.ts`
+- Drop `LAYOUTS` grid lookup for composite scenes.
+- Position each element at its returned bbox inside the inset white card. Element image is already a transparent crop; render at natural aspect ratio (no forced 1:1 box).
+- Reveal order = `appearAt` from planner; label rendered underneath in Caveat font as today.
+- `scene-layouts.ts` stays for backward compat / 1-element fallback only.
 
-### 2. New file `src/lib/rasterize-scene.ts`
-Extract the pure "draw one frame of scene X at time T" logic out of `render-video.ts`:
-- `drawImageSceneFrame(ctx, scene, progress, W, H, bgImg, elementImgs)`
-- `drawCodeSceneFrame(ctx, scene, progress, W, H)`
-- `drawStockFrame(ctx, videoEl, W, H)`
-- Asset preloader (image cache, video element cache) — reused by both live player export and rasterizer.
+### 5. Build/render pipeline
+- `src/lib/rasterize-scene.ts` uses the same bbox positioning so exported MP4 matches preview.
+- `ffmpeg-stitcher.ts` unchanged.
 
-This makes the drawing code testable and decouples it from `MediaRecorder`.
+### 6. UI
+`src/routes/index.tsx`
+- Progress row shows: 1 composite thumbnail + N element crops (same layout as today).
+- No new user-facing controls; segmentation runs automatically after composite generation.
+- Fallback: if Grounded-SAM returns 0 masks for a prompt, log it and show the whole composite as a single element for that scene (no crash).
 
-### 3. New file `src/lib/ffmpeg-stitcher.ts`
-Core exporter, replaces the MediaRecorder path in `render-video.ts`:
+## Credits impact
 
-```ts
-export async function exportToMp4(
-  scenes: Scene[],
-  masterAudioUrl: string | undefined,
-  quality: "preview" | "hd",
-  onProgress: (stage: string, ratio: number) => void,
-): Promise<Blob>
-```
+Per image scene, before: 1 background + N element gens = **N+1 OpenAI image calls**.
+After: 1 composite gen + 1 Replicate Grounded-SAM run (all labels batched, ~$0.005–0.02) = **1 OpenAI call + 1 cheap Replicate call**. On a 6-scene video with 4 elements each, that's ~30 → ~6 image calls.
 
-Flow:
-1. Preload all scene assets (images, stock videos, master audio bytes).
-2. For each scene:
-   - Compute duration frames = `round(durationMs / 1000 * fps)`.
-   - For stock scenes, seek the `<video>` per frame via `video.currentTime = t; await 'seeked'` and draw. (Reliable in headless drawing, no realtime dependency.)
-   - Draw frame to offscreen canvas → `canvas.toBlob('image/png')` → `ffmpeg.writeFile('scene{i}/f_%05d.png', bytes)`.
-   - Progress: report `(scene i of N, frame k of M)` back to caller.
-3. Encode segment:
-   ```
-   ffmpeg -y -framerate {fps} -i scene{i}/f_%05d.png
-     -c:v libx264 -preset {preset} -crf {crf}
-     -pix_fmt yuv420p -movflags +faststart segN.mp4
-   ```
-   Delete the PNG frames after encode to free wasm heap.
-4. After all segments:
-   - Concat: `ffmpeg -f concat -safe 0 -i list.txt -c copy video.mp4`
-   - Mux master audio:
-     ```
-     ffmpeg -y -i video.mp4 -i master.wav
-       -c:v copy -c:a aac -b:a 192k -shortest final.mp4
-     ```
-   - Read `final.mp4` → `Blob({ type: 'video/mp4' })` → return.
+## Open technical notes
 
-Quality presets (match Frame Animator style):
-- `preview`: 1280×720, 30fps, `-preset ultrafast -crf 26`
-- `hd`: 1920×1080, 60fps, `-preset veryfast -crf 20`
+- Exact Replicate model id (Grounded-SAM 2 vs Grounded-SAM v1) picked at build time based on which is currently available and supports batched text prompts. Preference: `schananas/grounded_sam` (mature, text-prompted, returns masks).
+- Mask → transparent PNG cropping done server-side in the handler using `sharp` — **but** the Cloudflare Worker runtime does not support `sharp`. Fallback: use pure-JS PNG decoding + a Canvas polyfill, or perform the mask compositing on the **client** after downloading the raw mask+composite from the server function (simpler, no native deps). Plan: do the compositing client-side in `remove-white-bg.ts`-style code, keeping the server function returning `{ compositeUrl, masks: [{ id, maskUrl, bbox }] }` and letting the browser produce the transparent element data URLs. This matches the existing white-bg-removal pattern.
 
-### 4. Wire up `VideoPlayer`
-- Replace the `renderVideo` call in `handleExport` with `exportToMp4`.
-- Change download extension `.webm` → `.mp4`.
-- Progress UI: show `stage` label ("scene 3/6 · frame 42/120", "encoding", "stitching", "muxing audio") next to the % bar — much more informative than the current single number.
-- Keep both "Current quality" and "HD" buttons.
+## Requires from user before build
 
-### 5. Keep the current MediaRecorder path as fallback
-Leave `render-video.ts` intact for one release cycle behind a flag (`USE_FFMPEG = true`) in case ffmpeg.wasm fails on some browser. Delete once verified.
-
-## Handling scene types under ffmpeg
-
-- **Image comp scenes**: purely canvas — trivially rasterized per frame.
-- **Code scenes**: currently rendered by React (`CodeScene.tsx` uses DOM/SVG). We already have `drawCodeScene` in `render-video.ts` doing a canvas version — reuse it (typing progress based on `progress`).
-- **Stock video scenes**: seek the `HTMLVideoElement` per frame and draw. Slower but deterministic.
-- **Crossfades between scenes**: today they're a DOM CSS transition. For MP4 output we bake them in — during the last 700ms of scene N and first 700ms of scene N+1, we render an overlap by drawing scene N+1 with rising alpha on top of scene N. Two implementation choices:
-  - (a) Extend each segment by 700ms of overlap frames, then use ffmpeg `xfade` filter at concat time. Cleanest.
-  - (b) Render the overlap frames into a dedicated `transitionN.mp4` and interleave via concat. Simpler.
-  Plan: go with (a) — `xfade=transition=fade:duration=0.7:offset={segDur-0.7}` — one filtergraph, no extra passes.
-
-## Master audio for the mux
-
-- Script mode: we already produce a concatenated WAV blob (`audio-concat.ts`) — pass its blob URL straight in.
-- Audio-upload mode: the uploaded file (mp3/wav/m4a) → pass directly, ffmpeg re-encodes to AAC.
-
-Silent gaps between scenes are already baked into the master audio timing, so the video segments' durations match the audio automatically.
-
-## Progress model
-
-Total work units = (sum of frame counts across scenes) + (segments count for encode) + 2 (concat + mux). Report a single 0–1 fraction plus the current stage string.
-
-## Out of scope
-
-- Server-side rendering (would need a Worker with ffmpeg native, not available on Cloudflare).
-- SharedArrayBuffer / multi-threaded ffmpeg core — the single-threaded core is enough at these bitrates and avoids the COOP/COEP header requirements which can conflict with the Lovable preview iframe.
-- Changing the live in-browser `<VideoPlayer>` playback path. This plan only touches export.
-
-## Files touched
-
-- New: `src/lib/rasterize-scene.ts`, `src/lib/ffmpeg-stitcher.ts`
-- Modified: `src/components/VideoPlayer.tsx` (call new exporter, update progress UI, `.mp4` filename)
-- Modified: `package.json` (three new deps)
-- Untouched: `src/lib/render-video.ts` kept as fallback for one cycle
+1. Link the **Replicate** connector (I'll trigger the connect flow).
+2. Confirm you're OK with client-side mask compositing (keeps server simple, no native image deps).
