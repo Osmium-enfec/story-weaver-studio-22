@@ -1,59 +1,84 @@
-## Goal
+# Better Element Extraction — Plan
 
-Cut image-generation credits by generating **one Excalidraw-style composite image per scene** (with arrows, boxes, characters, labels drawn in), then using **Grounded-SAM 2** (text-prompted segmentation on Replicate) to cut each element (character, box, arrow, label) out as a transparent PNG. Elements are then revealed in sequence, timed to narration, on top of the user's background.
+## Diagnosis of current failures
 
-Also: stop over-fragmenting scripts. Let Gemini group 1–3 related sentences into a single scene when they visually belong together.
+From your screenshot:
+- **Duplicate/garbage labels** — "main text box" appears 3x, "icon eye icon" nonsense phrases from Gemini's blind auto-list
+- **Low DINO confidence (0.27–0.48)** on icons, arrows, hand-drawn frames — DINO was trained on real photos, not whiteboard illustrations
+- **Empty SAM masks** — SAM anchored on wrong points inside low-confidence bboxes (hearing/eye/smell icons blank)
+- **Wrong crops** — bboxes overlap, then SAM masks the background layer
+- **No spatial grounding** — labels have no coordinates to disambiguate 3 "text box" matches
 
-## Changes
+## New pipeline: 3 detectors in parallel, best-mask-wins
 
-### 1. Planner — chunk smarter, output "composite" scenes
-`src/lib/explainer.functions.ts` → `planScript`
-- New system prompt: "Group 1–3 consecutive sentences into one scene when they describe the same idea. Aim for scenes of 6–18 seconds of narration. Never split a single explanatory beat across scenes."
-- Scene output shape for image scenes changes to:
-  - `narrationText`: full text for the whole scene (concatenation of grouped sentences).
-  - `composition.compositePrompt`: ONE detailed Excalidraw whiteboard prompt describing the whole infographic — layout, arrows, boxes, characters, hand-lettered labels — all drawn together.
-  - `composition.elements[]`: each element is now `{ id, label, segmentPrompt, appearAt, anim }`. `segmentPrompt` is the text prompt passed to Grounded-SAM (e.g. `"the dog"`, `"the arrow between box A and box B"`, `"the label 'chunk'"`). No more separate `prompt` per element; no more grid layout — positions come from the segmentation mask.
+Replace the linear `list → DINO → SAM` chain with a parallel-detector + reconciliation pipeline. Each element gets extracted by whichever detector performs best for its type.
 
-### 2. Replicate connector
-- User links **Replicate** via `standard_connectors--connect` (gateway-backed). Injects `LOVABLE_CONNECTOR_REPLICATE_API_KEY`.
-- No custom secret prompt needed.
+```text
+                        ┌─ Gemini 2.5 (vision + bboxes) ──┐
+Uploaded image ─────────┼─ Florence-2 (dense region cap) ─┼─► Reconcile & dedupe ─► SAM 2 refine ─► Crop
+                        └─ PaddleOCR (text rectangles) ───┘
+```
 
-### 3. New server function: composite + segment
-`src/lib/explainer.functions.ts` → new `generateSceneComposite`
-- Input: `{ compositePrompt, segmentPrompts: string[] }`.
-- Step A: one call to OpenAI `gpt-image-1` (existing pipeline) at 1536×1024 with the full Excalidraw composite prompt (arrows, boxes, characters, labels all baked in).
-- Step B: upload the composite to Replicate `/v1/files`, then call Grounded-SAM 2 (e.g. `schananas/grounded_sam` or `meta/sam-2` with text prompts via Grounding DINO) once per `segmentPrompt` OR once with all prompts if the model supports batched labels.
-- Step C: for each returned mask, crop the composite to the mask's bounding box and apply the mask as alpha → transparent PNG. Store to `project-assets` bucket. Cache by `sha256(compositePrompt + segmentPrompt)` in `image_assets`.
-- Returns `{ compositeUrl, elements: [{ id, mediaUrl, bbox: {x,y,w,h} }] }`. The bbox (normalized 0–1) tells the player exactly where the piece sat in the original composite, so revealing it in place recreates the drawing.
+### Stage 1 — Three parallel detectors
 
-### 4. Player + rasterizer — position by bbox, not grid
-`src/components/VideoPlayer.tsx` (`ImageScene`) and `src/lib/rasterize-scene.ts`
-- Drop `LAYOUTS` grid lookup for composite scenes.
-- Position each element at its returned bbox inside the inset white card. Element image is already a transparent crop; render at natural aspect ratio (no forced 1:1 box).
-- Reveal order = `appearAt` from planner; label rendered underneath in Caveat font as today.
-- `scene-layouts.ts` stays for backward compat / 1-element fallback only.
+1. **Gemini 2.5 Pro with bbox output** (`lucataco/florence-2-large` also considered but Gemini is stronger on stylized art). Prompt returns JSON: `[{label, bbox: [x0,y0,x1,y1], type: "object"|"text"|"icon"|"arrow"|"frame"}]` normalized 0–1. Solves the "no spatial grounding" problem — no more blind label lists.
+2. **Florence-2 Large** on Replicate (`lucataco/florence-2-large`, task=`<DENSE_REGION_CAPTION>`) — catches small icons/arrows Gemini misses, works well on illustrations.
+3. **PaddleOCR** on Replicate (`cjwbw/paddleocr` or `abiruyt/text-extract-ocr`) — precise rectangles for every text run. These bypass SAM entirely.
 
-### 5. Build/render pipeline
-- `src/lib/rasterize-scene.ts` uses the same bbox positioning so exported MP4 matches preview.
-- `ffmpeg-stitcher.ts` unchanged.
+Run all three in parallel via `Promise.all`.
 
-### 6. UI
-`src/routes/index.tsx`
-- Progress row shows: 1 composite thumbnail + N element crops (same layout as today).
-- No new user-facing controls; segmentation runs automatically after composite generation.
-- Fallback: if Grounded-SAM returns 0 masks for a prompt, log it and show the whole composite as a single element for that scene (no crash).
+### Stage 2 — Reconcile & dedupe
 
-## Credits impact
+- Merge detections from Gemini + Florence-2 by IoU > 0.6 → keep the higher-confidence label
+- Attach OCR text rectangles as `type: "text"` elements
+- Drop detections with confidence < 0.35 unless no overlap exists
+- Log dropped/merged items in the UI
 
-Per image scene, before: 1 background + N element gens = **N+1 OpenAI image calls**.
-After: 1 composite gen + 1 Replicate Grounded-SAM run (all labels batched, ~$0.005–0.02) = **1 OpenAI call + 1 cheap Replicate call**. On a 6-scene video with 4 elements each, that's ~30 → ~6 image calls.
+### Stage 3 — Type-aware extraction
 
-## Open technical notes
+- **`type: "text"`** → rectangle crop from OCR bbox, no SAM. Alpha = full opaque.
+- **`type: "object" | "icon" | "arrow" | "frame"`** → SAM 2 (`meta/sam-2`, not the older grounded-sam) using **bbox as prompt AND center-point as positive point** (dramatically improves mask quality on stylized art vs bbox-only).
+- **`type: "frame"`** → try SAM first, fallback to bbox rectangle if mask is <5% or >95% of bbox area (bad mask).
 
-- Exact Replicate model id (Grounded-SAM 2 vs Grounded-SAM v1) picked at build time based on which is currently available and supports batched text prompts. Preference: `schananas/grounded_sam` (mature, text-prompted, returns masks).
-- Mask → transparent PNG cropping done server-side in the handler using `sharp` — **but** the Cloudflare Worker runtime does not support `sharp`. Fallback: use pure-JS PNG decoding + a Canvas polyfill, or perform the mask compositing on the **client** after downloading the raw mask+composite from the server function (simpler, no native deps). Plan: do the compositing client-side in `remove-white-bg.ts`-style code, keeping the server function returning `{ compositeUrl, masks: [{ id, maskUrl, bbox }] }` and letting the browser produce the transparent element data URLs. This matches the existing white-bg-removal pattern.
+### Stage 4 — Mask quality gate
 
-## Requires from user before build
+Before showing an element:
+- Reject masks where alpha coverage <3% (blank) or >95% (whole image)
+- Reject if mask centroid is >30% away from bbox center
+- Fallback: use bbox rectangle crop with soft feathered edges
 
-1. Link the **Replicate** connector (I'll trigger the connect flow).
-2. Confirm you're OK with client-side mask compositing (keeps server simple, no native image deps).
+## Segment Lab UI changes
+
+- Remove the labels input entirely — everything auto-detects now
+- Add toggle: **"Semantic groups"** vs **"Every visible object"** (passes different Gemini prompt: coarse panels vs fine elements)
+- Show per-detector breakdown: which detector found each element (Gemini/Florence/OCR), confidence, mask coverage %
+- Show rejected detections in a collapsed section with reason (low conf, bad mask, duplicate)
+- Add "Retry with adjusted params" button per element
+
+## Files to add / change
+
+**New:**
+- `src/lib/detect-florence.functions.ts` — Replicate call to Florence-2 large
+- `src/lib/detect-ocr.functions.ts` — Replicate PaddleOCR call
+- `src/lib/detect-gemini-bboxes.functions.ts` — Gemini vision returning structured bboxes
+- `src/lib/reconcile-detections.ts` — IoU merge, dedupe, quality gates (client-side, pure)
+- `src/lib/mask-quality.ts` — coverage/centroid checks
+
+**Change:**
+- `src/lib/explainer.functions.ts` — swap `autoListElements` + grounded-sam for new pipeline; keep `segmentUploadedImage` signature stable
+- `src/routes/_authenticated/segment-lab.tsx` — remove labels input, add granularity toggle, show detector breakdown & rejections
+- `src/lib/crop-composite.ts` — accept either mask or rectangle crop mode
+
+## Rollout
+
+1. Build new pipeline behind a Segment Lab toggle **without touching the main video flow**
+2. You test on a handful of infographics in Segment Lab
+3. Once quality is confirmed, port into `generateSceneComposite` for the main video pipeline (one-line swap)
+
+## Cost note
+
+You said don't worry about cheap, so this runs all 3 detectors every time. Rough per-image cost: ~$0.02 Gemini + ~$0.005 Florence + ~$0.002 OCR + ~$0.01 SAM-2 per element ≈ $0.05–0.15/image depending on element count. Well within your $6 Replicate budget for testing.
+
+## Open question I'll assume unless you say otherwise
+
+I'll use `meta/sam-2` (the newer, better model) on Replicate instead of the older `schananas/grounded_sam`. It supports both bbox and point prompts, which is what makes the type-aware extraction possible.

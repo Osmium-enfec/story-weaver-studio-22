@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { segmentUploadedImage, type CompositeStep } from "@/lib/explainer.functions";
 import { cropAndClear } from "@/lib/crop-composite";
 
@@ -12,17 +12,45 @@ export const Route = createFileRoute("/_authenticated/segment-lab")({
   component: SegmentLab,
 });
 
+type Bbox = { x: number; y: number; w: number; h: number };
+type DetType = "text" | "object" | "icon" | "arrow" | "frame";
+type DetSource = "gemini" | "florence" | "ocr";
 type Element = {
   label: string;
-  bbox: { x: number; y: number; w: number; h: number } | null;
+  bbox: Bbox;
   confidence: number;
+  type: DetType;
+  source: DetSource;
   maskUrl: string | null;
+  cropMode: "mask" | "rect" | "white";
+};
+type Rejected = {
+  label: string;
+  bbox: Bbox;
+  confidence: number;
+  type: DetType;
+  source: DetSource;
+  reason: string;
 };
 type Result = {
   uploadUrl: string;
   elements: Element[];
-  detections: Array<{ label: string; bbox: any; confidence: number }>;
+  rejected: Rejected[];
+  raw: { gemini: number; florence: number; ocr: number };
   steps: CompositeStep[];
+};
+
+const SOURCE_COLOR: Record<DetSource, string> = {
+  gemini: "bg-blue-100 text-blue-800 border-blue-300",
+  florence: "bg-purple-100 text-purple-800 border-purple-300",
+  ocr: "bg-emerald-100 text-emerald-800 border-emerald-300",
+};
+const TYPE_COLOR: Record<DetType, string> = {
+  text: "bg-emerald-50 text-emerald-700",
+  object: "bg-slate-100 text-slate-700",
+  icon: "bg-amber-50 text-amber-700",
+  arrow: "bg-rose-50 text-rose-700",
+  frame: "bg-indigo-50 text-indigo-700",
 };
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -57,11 +85,12 @@ function SegmentLab() {
   const runFn = useServerFn(segmentUploadedImage);
   const inputRef = useRef<HTMLInputElement>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
-  const [labelsText, setLabelsText] = useState("");
+  const [granularity, setGranularity] = useState<"fine" | "coarse">("fine");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [crops, setCrops] = useState<Record<string, string>>({});
+  const [showRejected, setShowRejected] = useState(false);
 
   const onPickFile = useCallback(async (f: File | null) => {
     if (!f) return;
@@ -77,31 +106,25 @@ function SegmentLab() {
       setError("Upload an image first");
       return;
     }
-    const labels = labelsText
-      .split(/[,\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    // Empty labels → server auto-detects every element via vision LLM.
     setBusy(true);
     setError(null);
     setResult(null);
     setCrops({});
     try {
-      const r = (await runFn({ data: { imageDataUrl, labels } })) as Result;
+      const r = (await runFn({ data: { imageDataUrl, granularity } })) as Result;
       setResult(r);
-      // Compute client-side crops
       const next: Record<string, string> = {};
       await Promise.all(
-        r.elements.map(async (el) => {
-          if (!el.bbox) return;
+        r.elements.map(async (el, i) => {
           try {
             const dataUrl = await cropAndClear(
               imageDataUrl,
               el.bbox,
-              0.04,
+              el.type === "text" ? 0.01 : 0.04,
               el.maskUrl ?? undefined,
+              el.cropMode,
             );
-            next[el.label] = dataUrl;
+            next[`${i}-${el.label}`] = dataUrl;
           } catch (e) {
             console.warn("crop failed", el.label, e);
           }
@@ -115,12 +138,20 @@ function SegmentLab() {
     }
   };
 
+  const sourceCounts = useMemo(() => {
+    if (!result) return null;
+    const c = { gemini: 0, florence: 0, ocr: 0 };
+    for (const e of result.elements) c[e.source]++;
+    return c;
+  }, [result]);
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="mb-2 text-3xl font-semibold">Segment Lab</h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        Upload any image, list the elements you want to extract (comma-separated),
-        and see what Grounding-DINO + SAM return.
+        Runs three detectors in parallel (Gemini vision · Florence-2 regions · Florence-2 OCR),
+        reconciles overlapping boxes, then extracts each element (SAM masks for objects, plain
+        rectangles for text).
       </p>
 
       <div className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
@@ -149,19 +180,24 @@ function SegmentLab() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium">
-            Labels (comma-separated) — leave empty to auto-detect everything
-          </label>
-          <input
-            type="text"
-            value={labelsText}
-            onChange={(e) => setLabelsText(e.target.value)}
-            placeholder="(leave blank for auto-detect) or: the dog, the laptop, the magnifying glass"
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          />
+          <label className="mb-1 block text-sm font-medium">Granularity</label>
+          <div className="flex gap-2">
+            {(["fine", "coarse"] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGranularity(g)}
+                className={`rounded-md border px-3 py-1.5 text-sm ${
+                  granularity === g
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {g === "fine" ? "Every visible object" : "Semantic groups"}
+              </button>
+            ))}
+          </div>
           <p className="mt-1 text-xs text-slate-500">
-            Empty = Gemini vision lists every visible element (up to 20), then Grounding-DINO + SAM segment them.
-            Fill in for targeted extraction.
+            Fine = list icons, arrows, labels separately. Coarse = group related items into panels.
           </p>
         </div>
 
@@ -186,19 +222,42 @@ function SegmentLab() {
             ))}
           </div>
 
+          {sourceCounts && (
+            <div className="flex flex-wrap gap-3 text-xs text-slate-600">
+              <span>
+                Raw: gemini {result.raw.gemini} · florence {result.raw.florence} · ocr {result.raw.ocr}
+              </span>
+              <span>·</span>
+              <span>
+                Kept: gemini {sourceCounts.gemini} · florence {sourceCounts.florence} · ocr {sourceCounts.ocr}
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
               <h2 className="mb-2 text-sm font-semibold text-slate-700">
-                Source (uploaded to Replicate)
+                Source with reconciled bboxes
               </h2>
               <div className="relative overflow-hidden rounded-lg border bg-white">
                 <img src={result.uploadUrl} alt="source" className="w-full" />
-                {/* Overlay bboxes */}
-                {result.elements.map((el, i) =>
-                  el.bbox ? (
+                {result.elements.map((el, i) => {
+                  const color =
+                    el.source === "gemini"
+                      ? "border-blue-500/80"
+                      : el.source === "florence"
+                        ? "border-purple-500/80"
+                        : "border-emerald-500/80";
+                  const bg =
+                    el.source === "gemini"
+                      ? "bg-blue-500"
+                      : el.source === "florence"
+                        ? "bg-purple-500"
+                        : "bg-emerald-500";
+                  return (
                     <div
                       key={i}
-                      className="pointer-events-none absolute border-2 border-emerald-500/80"
+                      className={`pointer-events-none absolute border-2 ${color}`}
                       style={{
                         left: `${el.bbox.x * 100}%`,
                         top: `${el.bbox.y * 100}%`,
@@ -206,91 +265,112 @@ function SegmentLab() {
                         height: `${el.bbox.h * 100}%`,
                       }}
                     >
-                      <span className="absolute -top-5 left-0 rounded bg-emerald-500 px-1 text-[10px] text-white">
-                        {el.label} {el.confidence ? `· ${el.confidence.toFixed(2)}` : ""}
+                      <span className={`absolute -top-5 left-0 rounded px-1 text-[10px] text-white ${bg}`}>
+                        {el.label}
                       </span>
                     </div>
-                  ) : null,
-                )}
+                  );
+                })}
               </div>
             </div>
 
             <div>
               <h2 className="mb-2 text-sm font-semibold text-slate-700">
-                All raw detections ({result.detections.length})
+                Kept elements ({result.elements.length})
               </h2>
               <div className="max-h-96 space-y-1 overflow-auto rounded-lg border bg-slate-50 p-3 text-xs font-mono">
-                {result.detections.map((d, i) => (
-                  <div key={i}>
+                {result.elements.map((d, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-1">
+                    <span className={`rounded border px-1 ${SOURCE_COLOR[d.source]}`}>
+                      {d.source}
+                    </span>
+                    <span className={`rounded px-1 ${TYPE_COLOR[d.type]}`}>{d.type}</span>
                     <span className="font-semibold">{d.label}</span>
-                    {" — "}
-                    conf {Number(d.confidence).toFixed(2)}, bbox [
-                    {(Array.isArray(d.bbox) ? d.bbox : [d.bbox?.x, d.bbox?.y, d.bbox?.w, d.bbox?.h])
-                      .map((n: any) => Number(n).toFixed(3))
-                      .join(", ")}
-                    ]
+                    <span className="text-slate-500">
+                      · conf {d.confidence.toFixed(2)}
+                    </span>
                   </div>
                 ))}
-                {result.detections.length === 0 && (
-                  <div className="text-slate-500">No detections returned.</div>
-                )}
               </div>
             </div>
           </div>
 
           <div>
-            <h2 className="mb-3 text-sm font-semibold text-slate-700">
-              Extracted elements
-            </h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-700">Extracted elements</h2>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-              {result.elements.map((el, i) => (
-                <div key={i} className="rounded-lg border bg-white p-3">
-                  <div
-                    className="mb-2 flex h-40 items-center justify-center rounded"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%)",
-                      backgroundSize: "16px 16px",
-                      backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
-                    }}
-                  >
-                    {crops[el.label] ? (
-                      <img
-                        src={crops[el.label]}
-                        alt={el.label}
-                        className="max-h-40 max-w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-xs text-slate-400">
-                        {el.bbox ? "cropping…" : "no match"}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs font-semibold">{el.label}</div>
-                  <div className="text-[10px] text-slate-500">
-                    {el.bbox ? (
-                      <>
-                        bbox {el.bbox.w.toFixed(2)}×{el.bbox.h.toFixed(2)} · mask{" "}
-                        {el.maskUrl ? "✓" : "✕"}
-                      </>
-                    ) : (
-                      "no bbox"
-                    )}
-                  </div>
-                  {el.maskUrl && (
-                    <a
-                      href={el.maskUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1 inline-block text-[10px] text-blue-600 underline"
+              {result.elements.map((el, i) => {
+                const cropKey = `${i}-${el.label}`;
+                return (
+                  <div key={i} className="rounded-lg border bg-white p-3">
+                    <div
+                      className="mb-2 flex h-40 items-center justify-center rounded"
+                      style={{
+                        backgroundImage:
+                          "linear-gradient(45deg, #eee 25%, transparent 25%), linear-gradient(-45deg, #eee 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #eee 75%), linear-gradient(-45deg, transparent 75%, #eee 75%)",
+                        backgroundSize: "16px 16px",
+                        backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0",
+                      }}
                     >
-                      raw mask
-                    </a>
-                  )}
-                </div>
-              ))}
+                      {crops[cropKey] ? (
+                        <img
+                          src={crops[cropKey]}
+                          alt={el.label}
+                          className="max-h-40 max-w-full object-contain"
+                        />
+                      ) : (
+                        <span className="text-xs text-slate-400">cropping…</span>
+                      )}
+                    </div>
+                    <div className="text-xs font-semibold">{el.label}</div>
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                      <span className={`rounded border px-1 ${SOURCE_COLOR[el.source]}`}>
+                        {el.source}
+                      </span>
+                      <span className={`rounded px-1 ${TYPE_COLOR[el.type]}`}>{el.type}</span>
+                      <span className="text-slate-500">
+                        {el.cropMode} · {el.maskUrl ? "mask ✓" : "no mask"}
+                      </span>
+                    </div>
+                    {el.maskUrl && (
+                      <a
+                        href={el.maskUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-block text-[10px] text-blue-600 underline"
+                      >
+                        raw mask
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
+
+          {result.rejected.length > 0 && (
+            <div className="rounded-lg border bg-slate-50 p-4">
+              <button
+                onClick={() => setShowRejected((v) => !v)}
+                className="text-sm font-semibold text-slate-700"
+              >
+                {showRejected ? "▼" : "▶"} Rejected detections ({result.rejected.length})
+              </button>
+              {showRejected && (
+                <div className="mt-3 space-y-1 font-mono text-xs">
+                  {result.rejected.map((r, i) => (
+                    <div key={i} className="flex flex-wrap items-center gap-1">
+                      <span className={`rounded border px-1 ${SOURCE_COLOR[r.source]}`}>
+                        {r.source}
+                      </span>
+                      <span className={`rounded px-1 ${TYPE_COLOR[r.type]}`}>{r.type}</span>
+                      <span>{r.label}</span>
+                      <span className="text-slate-500">· {r.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
