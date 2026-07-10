@@ -18,6 +18,8 @@ import {
 import { findOrGenerateImage } from "@/lib/image-library.functions";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
+import type { SceneBackground } from "@/lib/scene-background";
+
 import {
   alignSentences,
   computeSnappedRangesMs,
