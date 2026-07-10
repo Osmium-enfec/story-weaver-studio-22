@@ -14,6 +14,9 @@ import { layoutFor } from "./scene-layouts";
 export interface DrawOptions {
   background?: SceneBackground;
   transparent?: Map<string, HTMLImageElement>;
+  /** For background.kind === "video". Caller must seek/advance the element
+   *  before calling drawSceneFrame; we just draw its current frame. */
+  videoBg?: HTMLVideoElement;
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
