@@ -859,29 +859,8 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       throw new Error(`composite: ${e?.message || "failed"}`);
     }
 
-    // 2) Ask GPT-4o vision to inspect the composite and return each element's
-    //    bbox + a redraw prompt. Replaces upload+Grounding-DINO+match.
-    let visionElements: Awaited<ReturnType<typeof analyzeCompositeWithVision>> = [];
-    try {
-      visionElements = await analyzeCompositeWithVision(compositeUrl, data.compositePrompt);
-      steps.push({
-        name: "analyze",
-        status: visionElements.length ? "ok" : "warn",
-        message: `${visionElements.length} elements`,
-      });
-    } catch (e: any) {
-      steps.push({ name: "analyze", status: "warn", message: e?.message || "vision failed" });
-    }
-
-    const elements = visionElements.map((el) => ({
-      id: el.id,
-      label: el.label,
-      prompt: el.prompt,
-      bbox: el.bbox,
-      maskUrl: null as string | null,
-    }));
-
-    return { compositeUrl, elements, steps };
+    // Single-image mode: skip vision element extraction. The composite IS the scene.
+    return { compositeUrl, elements: [] as { id: string; label?: string; prompt: string; bbox: { x: number; y: number; w: number; h: number }; maskUrl: string | null }[], steps };
   });
 
 
