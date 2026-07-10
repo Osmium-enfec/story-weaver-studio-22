@@ -3,16 +3,16 @@ import { useCallback, useRef, useState } from "react";
 
 // Layout applied to the source image. Each entry crops a rectangle from
 // the source in fractions of image width/height (x/y = top-left).
-// These normalized boxes match the 1 px margin-applied safe boxes on a
-// 1600 × 900 px canvas.
+// These normalized boxes match the exact element positions on the user's
+// 1659 × 948 px uploaded image.
 const SLICE_LAYOUT: Array<{ label: string; x: number; y: number; w: number; h: number }> = [
-  { label: "Main title banner",  x: 161 / 1600, y: 41 / 900,  w: 1278 / 1600, h: 133 / 900 },
-  { label: "Subtitle",           x: 321 / 1600, y: 191 / 900, w: 958 / 1600,  h: 88 / 900 },
-  { label: "Option A card",      x: 41 / 1600,  y: 306 / 900, w: 366 / 1600,  h: 453 / 900 },
-  { label: "Option B card",      x: 425 / 1600, y: 306 / 900, w: 366 / 1600,  h: 453 / 900 },
-  { label: "Option C card",      x: 809 / 1600, y: 306 / 900, w: 366 / 1600,  h: 453 / 900 },
-  { label: "Option D card",      x: 1193 / 1600, y: 306 / 900, w: 366 / 1600, h: 453 / 900 },
-  { label: "Bottom answer banner", x: 161 / 1600, y: 786 / 900, w: 1278 / 1600, h: 88 / 900 },
+  { label: "MCQ Answer title banner", x: 339 / 1659, y: 559 / 948, w: 741 / 1659, h: 151 / 948 },
+  { label: "Valid Variable Names subtitle", x: 419 / 1659, y: 218 / 948, w: 189 / 1659, h: 43 / 948 },
+  { label: "Option A card", x: 113 / 1659, y: 315 / 948, w: 274 / 1659, h: 584 / 948 },
+  { label: "Option B card", x: 478 / 1659, y: 315 / 948, w: 331 / 1659, h: 458 / 948 },
+  { label: "Option C card", x: 846 / 1659, y: 315 / 948, w: 331 / 1659, h: 458 / 948 },
+  { label: "Option D card", x: 1215 / 1659, y: 315 / 948, w: 321 / 1659, h: 458 / 948 },
+  { label: "Correct answer banner", x: 322 / 1659, y: 790 / 948, w: 1025 / 1659, h: 114 / 948 },
 ];
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
