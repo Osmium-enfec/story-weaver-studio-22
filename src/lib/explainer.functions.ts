@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const AI_URL = "https://ai.gateway.lovable.dev/v1";
+const REPLICATE_GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
 const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
 const ELEVEN_MODEL = "eleven_v3";
 
@@ -12,22 +13,28 @@ export type ElementAnim = "pop" | "fade" | "slide-up" | "slide-left" | "slide-ri
 
 export interface CompositionElement {
   id: string;
-  prompt: string;
+  /** Legacy per-element image prompt (unused in composite mode). */
+  prompt?: string;
+  /** Text prompt used by Grounding-DINO/SAM to segment this element out of the composite. */
+  segmentPrompt?: string;
   /** Optional short hand-drawn label rendered UNDER the element by the player. */
   label?: string;
-  /** center X, 0..1 across 16:9 canvas — assigned by layout grid, not the LLM. */
+  /** center X, 0..1 across canvas — from segmentation bbox when available, else grid layout. */
   x: number;
-  /** center Y, 0..1 — assigned by layout grid, not the LLM. */
   y: number;
-  /** width as fraction of canvas width, 0..1 — assigned by layout grid. */
   w: number;
+  /** Normalized bbox (0..1) of this element inside the composite image. Set after segmentation. */
+  bbox?: { x: number; y: number; w: number; h: number };
   /** fraction of scene duration when element appears, 0..1 */
   appearAt: number;
   anim: ElementAnim;
 }
 
 export interface SceneComposition {
-  backgroundPrompt: string;
+  /** ONE detailed Excalidraw prompt for the whole scene composite (arrows, boxes, characters). */
+  compositePrompt?: string;
+  /** Legacy: mood-only background prompt. Kept for backward compat with cached plans. */
+  backgroundPrompt?: string;
   /** Hand-drawn topic title shown at the top of the scene (Excalidraw font). */
   title?: string;
   elements: CompositionElement[];
@@ -35,6 +42,7 @@ export interface SceneComposition {
 
 export interface ScenePlan {
   id: string;
+  /** Full narrated text for the scene (may span 1–3 grouped sentences). */
   sentence: string;
   narrationText: string;
   subtitle: string;
@@ -65,71 +73,75 @@ export const planScript = createServerFn({ method: "POST" })
       ? `You are a video director editing a TRANSCRIBED voiceover into scenes.
 The user gives you a raw transcript. Your job:
 
-STEP 1 — Split the transcript into 4–40 short scene-sized sentences.
+STEP 1 — Group the transcript into SCENES. Each scene contains 1–3 consecutive
+sentences that describe the SAME idea and can share one whiteboard illustration.
+Do NOT split a single explanatory beat across scenes. Aim for 3–12 scenes total
+depending on script length, roughly 6–20 seconds of narration per scene.
+
 CRITICAL: Do NOT rewrite, paraphrase, add, drop, reorder, or translate any word.
-The concatenation of sentence fields (in order) must equal the transcript
+The concatenation of the sentence fields (in order) must equal the transcript
 verbatim except for punctuation, casing, and whitespace. You may only ADD
 punctuation and fix capitalization.`
-      : `You are a video director + narration script editor for an explainer video.
+      : `You are a video director + narration script editor for an explainer video
+(usually short educational course content).
 
-STEP 1 — Enhance the script:
-- Rewrite the user script for clarity, natural spoken cadence, and engagement.
-- Keep the meaning and length roughly similar.
-- Split into 4–14 short, punchy sentences (each 6–20 words).`;
+STEP 1 — Enhance and CHUNK the script:
+- Rewrite for clarity, natural spoken cadence, and engagement (keep meaning).
+- Group ideas into 3–10 SCENES. Each scene is 1–3 sentences that describe the
+  SAME idea and can share ONE whiteboard illustration. Do NOT create a new
+  scene per sentence — think in terms of "what fits on one whiteboard".
+- Each scene should be roughly 6–20 seconds of narration.`;
 
     const narrationRule = preserveWords
       ? `- narrationText: set equal to sentence (unused — audio is provided).`
-      : `- narrationText: same sentence enhanced for ElevenLabs v3 expressive TTS.
+      : `- narrationText: same as sentence but enhanced for ElevenLabs v3 expressive TTS.
   Add inline audio tags in square brackets to shape delivery.
   Valid tags: [excited], [curious], [whispers], [laughs], [sighs],
   [thoughtful], [confident], [warm], [pauses], [emphasizes], [softly].
-  Use 1–3 tags per sentence, placed BEFORE the words they modify.
-  Use ellipses (…) and commas for pacing. Do NOT invent new tags.`;
+  Use 1–3 tags per scene. Use ellipses (…) and commas for pacing. Do NOT invent new tags.`;
 
     const sys = `${intro}
 
-STEP 2 — For each sentence, produce a scene object:
-- sentence: clean sentence (no audio tags, used for on-screen subtitle).
+STEP 2 — For each SCENE, produce a scene object:
+- sentence: the full text of the scene (all grouped sentences joined by a space).
 ${narrationRule}
 - kind: one of
-    "code"  — ONLY when the sentence explicitly discusses source code,
-      programming syntax, a specific function/method name, a file path,
-      a shell command, or a code snippet the viewer should read. Marketing
-      or general-audience sentences (e.g. "billions search the web",
-      "the future is here", "AI understands you") are NEVER code — use
-      "image" for those. When in doubt, choose "image".
-    "image" — the default for all narrative, marketing, explanatory, or
-      general-audience sentences. Use AI-generated illustrations.
+    "code"  — ONLY when the scene explicitly discusses source code, syntax,
+      a specific function/file/command, or a code snippet the viewer should read.
+    "image" — the default for narrative, marketing, explanatory content.
+      Use ONE Excalidraw-style whiteboard drawing that captures the WHOLE scene
+      (multiple sentences), with characters, boxes, arrows, and hand-lettered
+      labels all drawn together — like a teacher sketching on a whiteboard.
 - If kind = "image": composition object with:
-    backgroundPrompt: short mood/setting description of the scene
-      (e.g. "workflow diagram about data processing"). Used only to steer
-      the background style — do NOT include text here.
-    title: short hand-drawn TITLE (2-5 words) rendered by the player at the
-      TOP of the scene in an Excalidraw-style handwritten font. REQUIRED for
-      image scenes. Keep it a plain topic label, no punctuation.
-    elements: array of 1–6 distinct visual items appearing one-by-one. Element
-      positions are chosen automatically by a fixed grid layout — do NOT
-      include x/y/w. Each element:
-        id: short slug ("rocket","chart","user").
-        prompt: single subject description (e.g. "a smiling cartoon rocket
-          with flames"), NO style words — style is added later. NO text/labels.
+    compositePrompt: ONE rich prompt (60–200 words) describing the ENTIRE
+      whiteboard illustration for this scene. Include:
+        * the characters/objects/icons to draw (be specific — "a small dog",
+          "a laptop", "a magnifying glass"),
+        * their spatial arrangement (left, center, right, above, below),
+        * any BOXES/CONTAINERS around them,
+        * any ARROWS connecting them (with direction),
+        * any hand-lettered LABEL text inside/next to elements.
+      This should read like directions to an illustrator drawing one poster.
+    title: short hand-drawn TITLE (2-5 words) rendered at the TOP by the player.
+    elements: array of 2–6 REVEAL steps. Each step is one distinct visual piece
+      in the composite that should FADE IN one-by-one as narration reaches it.
+      Each element:
+        id: short slug ("dog","arrow-1","box-input").
+        segmentPrompt: 1–4 word noun phrase that describes THIS element as it
+          appears in the composite — this is fed to a text-prompted segmenter
+          to cut it out. Examples: "the dog", "the laptop", "the red arrow",
+          "the box labeled input". Be concrete and visually distinctive.
         label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the
-          element by the player (e.g. "read", "chunk", "embed").
+          element by the player (e.g. "input", "search", "answer").
         appearAt: 0..1 fraction of the scene duration when this element
-          appears. First element ~0.05, last element <= 0.75. Spread evenly.
+          appears. First element ~0.05, last element <= 0.80. Spread evenly.
         anim: one of "pop","fade","slide-up","slide-left","slide-right".
-    Prefer 2, 3, 4 or 6 elements — these map to the cleanest grid layouts
-    (50/50, thirds, 2x2, 3x2). Use 1 only for a single hero illustration.
 - If kind = "code":
     code: short realistic snippet (5–15 lines, real syntax, no backticks).
     codeLanguage: "ts" | "js" | "tsx" | "py" | "sh" | "json" | "html".
-    codeVariant: one of
-      "typing" (types out char by char — introducing new code),
-      "morph"  (line-by-line diff to codeTo — comparing before/after),
-      "scroll" (scrolls a long file — showing a whole module),
-      "flight" (lines fly in from sides — punchy list-style code).
+    codeVariant: "typing" | "morph" | "scroll" | "flight".
     codeTo: REQUIRED only for "morph".
-- subtitle: <= 8 words drawn from the sentence.
+- subtitle: <= 8 words summarizing the scene.
 
 Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
 
@@ -155,8 +167,6 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
     const finishReason = json.choices?.[0]?.finish_reason;
     console.log("[planner] finish_reason:", finishReason, "len:", raw.length, "usage:", json.usage);
 
-    // Robust JSON extraction: strip markdown fences and try to close a
-    // truncated JSON array so a MAX_TOKENS cut-off still yields scenes.
     const tryParse = (s: string): any => { try { return JSON.parse(s); } catch { return null; } };
     let parsed: any = tryParse(raw);
     if (!parsed) {
@@ -165,8 +175,6 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       if (start >= 0) cleaned = cleaned.slice(start);
       parsed = tryParse(cleaned);
       if (!parsed) {
-        // Truncated? Cut back to the last complete `}` inside the scenes array
-        // and close the array + object.
         const lastObj = cleaned.lastIndexOf("}");
         if (lastObj > 0) {
           const trimmed = cleaned.slice(0, lastObj + 1) + "]}";
@@ -181,26 +189,29 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
 
     let arr: any[] = Array.isArray(parsed) ? parsed : parsed.scenes ?? parsed.items ?? [];
     if (!arr.length) {
-      console.warn("[planner] empty scenes — falling back to sentence split. finish:", finishReason);
-
-      // Fallback: split the script into sentences and make one image scene each
-      // so we never hard-fail on a bad planner response.
+      console.warn("[planner] empty scenes — falling back to sentence split.");
       const sentences = data.script
         .replace(/\s+/g, " ")
         .split(/(?<=[.!?])\s+/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-      arr = (sentences.length ? sentences : [data.script.trim()]).map((s) => ({
+      // Group ~2 sentences per fallback scene
+      const groups: string[] = [];
+      for (let i = 0; i < sentences.length; i += 2) {
+        groups.push(sentences.slice(i, i + 2).join(" "));
+      }
+      arr = (groups.length ? groups : [data.script.trim()]).map((s) => ({
         kind: "image",
         sentence: s,
         narrationText: s,
-        durationMs: 3500,
-        backgroundPrompt: s,
-        elements: [],
+        composition: {
+          compositePrompt: `A hand-drawn whiteboard illustration about: ${s}`,
+          title: s.split(/\s+/).slice(0, 4).join(" "),
+          elements: [],
+        },
         subtitle: s.split(" ").slice(0, 8).join(" "),
       }));
     }
-
 
     const animations: ScenePlan["animation"][] = [
       "kenburns-in",
@@ -215,7 +226,6 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       return Math.max(lo, Math.min(hi, n));
     };
 
-    // Planner sometimes returns code as string[] or wrapped in ``` fences.
     const normalizeCode = (v: any): string => {
       let s = "";
       if (Array.isArray(v)) s = v.join("\n");
@@ -230,9 +240,6 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       const rawKind = meta?.kind;
       const sentence = String(meta?.sentence ?? "").trim() || `Scene ${i + 1}`;
       const narrationText = String(meta?.narrationText ?? "").trim() || sentence;
-      // Safety: only allow "code" when the sentence actually reads like code
-      // or the model provided a non-trivial code snippet. Otherwise fall back
-      // to "image" so marketing sentences don't render as an empty editor.
       const providedCode = normalizeCode(meta?.code);
       const looksLikeCode =
         CODE_HINT_RE.test(sentence) ||
@@ -256,13 +263,13 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           "slide-left",
           "slide-right",
         ];
-        // x/y/w are overridden by the grid layout on the client, but we still
-        // fill them so the type stays satisfied and legacy consumers work.
         const elements: CompositionElement[] = rawEls
           .slice(0, 6)
           .map((el: any, ei: number) => ({
             id: String(el?.id ?? `el${ei}`).slice(0, 24),
-            prompt: String(el?.prompt ?? sentence).slice(0, 200),
+            segmentPrompt: String(
+              el?.segmentPrompt ?? el?.prompt ?? el?.label ?? `element ${ei + 1}`,
+            ).slice(0, 120),
             label: el?.label ? String(el.label).slice(0, 40) : undefined,
             x: 0.5,
             y: 0.55,
@@ -271,10 +278,11 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
             anim: validAnims.includes(el?.anim) ? el.anim : "pop",
           }));
         composition = {
-          backgroundPrompt: String(
-            meta?.composition?.backgroundPrompt ??
-              `soft pastel whiteboard background for: ${sentence}`,
-          ).slice(0, 300),
+          compositePrompt: String(
+            meta?.composition?.compositePrompt ??
+              meta?.composition?.backgroundPrompt ??
+              `A hand-drawn whiteboard illustration about: ${sentence}`,
+          ).slice(0, 1500),
           title: meta?.composition?.title
             ? String(meta.composition.title).slice(0, 60)
             : sentence.split(/\s+/).slice(0, 4).join(" "),
@@ -283,7 +291,7 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
             : [
                 {
                   id: "main",
-                  prompt: sentence,
+                  segmentPrompt: sentence.split(/\s+/).slice(0, 3).join(" "),
                   x: 0.5,
                   y: 0.55,
                   w: 0.3,
@@ -319,74 +327,275 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
     return { scenes };
   });
 
-// ---------- Generate one composited BACKGROUND (16:9, empty scene) ----------
-const BgInput = z.object({ prompt: z.string().min(1) });
+// ---------- Generate ONE composite Excalidraw image + segment elements via Replicate ----------
+const CompositeInput = z.object({
+  compositePrompt: z.string().min(1).max(2000),
+  title: z.string().optional(),
+  elements: z
+    .array(
+      z.object({
+        id: z.string(),
+        segmentPrompt: z.string().min(1).max(120),
+      }),
+    )
+    .min(1)
+    .max(6),
+});
 
-export const generateSceneBackground = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => BgInput.parse(d))
-  .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("LOVABLE_API_KEY missing");
+async function generateCompositeImage(prompt: string, title?: string): Promise<string> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
-    const styled = `Empty 16:9 widescreen hand-drawn Excalidraw-style whiteboard background. Very light pastel wash (soft cream, mint, sky-blue, or lavender), subtle dotted or faint grid texture, gentle vignette. NO foreground objects, NO characters, NO icons, NO text, NO arrows — background only. Wide landscape composition. Mood context: ${data.prompt}`;
+  const styled = `A 16:9 widescreen hand-drawn Excalidraw-style whiteboard illustration on off-white paper.
+STYLE (must match exactly):
+- Thick slightly wobbly hand-drawn black marker outlines, confident but sketchy (occasional double strokes, small gaps).
+- Warm, rich color fills: honey-yellow, tan/brown, peach, sage green, dusty blue, terracotta. Soft watercolor shading with subtle cross-hatching.
+- Playful, cozy, educational — like a modern illustrated infographic or a teacher's whiteboard sketch. NOT flat emoji/corporate cartoon.
+- Include hand-lettered labels next to elements when relevant, drawn arrows connecting related items, and simple boxes/containers around groups.
 
-    const res = await fetch(`${AI_URL}/images/generations`, {
+SCENE TO DRAW: ${prompt}
+
+${title ? `At the very top-center, leave space for a title (do NOT draw the title text itself — that is added by the player). Keep the top 12% of the canvas mostly empty.` : ""}
+
+CRITICAL RULES:
+- ALL elements in a SINGLE composed illustration, laid out spatially like the scene description says.
+- Each distinct object/character should be VISUALLY SEPARATED from the others (some whitespace between them) so it can be segmented out later.
+- Off-white paper background, NO photorealism, NO background scenery beyond what the scene calls for.
+- Widescreen 16:9 composition, generous margins around the edges.`;
+
+  const res = await fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-image-1",
+      prompt: styled,
+      size: "1536x1024",
+      n: 1,
+      quality: "high",
+      background: "auto",
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`OpenAI composite failed: ${res.status} ${text.slice(0, 400)}`);
+  let j: any;
+  try { j = JSON.parse(text); } catch {
+    throw new Error(`OpenAI composite parse failed: ${text.slice(0, 300)}`);
+  }
+  const b64 = j?.data?.[0]?.b64_json;
+  if (!b64) throw new Error(`OpenAI composite returned no data: ${text.slice(0, 300)}`);
+  return `data:image/png;base64,${b64}`;
+}
+
+/**
+ * Upload a data-URL image to Replicate /v1/files and return the public URL
+ * that Replicate models can read.
+ */
+async function uploadToReplicate(dataUrl: string): Promise<string> {
+  const lovableKey = process.env.LOVABLE_API_KEY;
+  const replicateKey = process.env.REPLICATE_API_KEY;
+  if (!lovableKey || !replicateKey) throw new Error("Replicate connector env vars missing");
+
+  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!m) throw new Error("uploadToReplicate: expected data URL");
+  const mime = m[1];
+  const bytes = Buffer.from(m[2], "base64");
+
+  const form = new FormData();
+  form.append("content", new Blob([bytes], { type: mime }), "composite.png");
+
+  const res = await fetch(`${REPLICATE_GATEWAY}/files`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${lovableKey}`,
+      "X-Connection-Api-Key": replicateKey,
+    },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`Replicate upload failed: ${res.status} ${await res.text()}`);
+  const j = await res.json();
+  const url = j?.urls?.get;
+  if (!url) throw new Error("Replicate upload returned no url");
+  return url as string;
+}
+
+/**
+ * Run adirik/grounding-dino on Replicate to detect a set of labels in an image.
+ * Returns a list of detections with normalized (0..1) bboxes.
+ */
+async function detectWithGroundingDino(
+  imageUrl: string,
+  labels: string[],
+): Promise<Array<{ label: string; bbox: { x: number; y: number; w: number; h: number }; confidence: number }>> {
+  const lovableKey = process.env.LOVABLE_API_KEY;
+  const replicateKey = process.env.REPLICATE_API_KEY;
+  if (!lovableKey || !replicateKey) throw new Error("Replicate connector env vars missing");
+
+  // adirik/grounding-dino accepts labels separated by " . " (period+space).
+  const query = labels.join(" . ");
+
+  const createRes = await fetch(
+    `${REPLICATE_GATEWAY}/models/adirik/grounding-dino/predictions`,
+    {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${key}`,
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": replicateKey,
         "Content-Type": "application/json",
+        Prefer: "wait=60",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: styled }],
-        modalities: ["image", "text"],
+        input: {
+          image: imageUrl,
+          query,
+          box_threshold: 0.25,
+          text_threshold: 0.2,
+          show_visualisation: false,
+        },
       }),
-    });
-    if (!res.ok) throw new Error(`Background failed: ${res.status} ${await res.text()}`);
-    const json = await res.json();
-    const b64 = json.data?.[0]?.b64_json;
-    if (!b64) throw new Error("No background image returned");
-    return { dataUrl: `data:image/png;base64,${b64}` };
-  });
+    },
+  );
+  if (createRes.status === 402) {
+    throw new Error("Replicate account has no credit. Enable billing at https://replicate.com/account/billing.");
+  }
+  if (!createRes.ok) {
+    throw new Error(`GroundingDINO create failed: ${createRes.status} ${await createRes.text()}`);
+  }
+  let pred = await createRes.json();
 
-// ---------- Generate a single ELEMENT (isolated on pure white, for multiply blend) ----------
-const ElInput = z.object({ prompt: z.string().min(1) });
-
-export const generateSceneElement = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => ElInput.parse(d))
-  .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("LOVABLE_API_KEY missing");
-
-    const styled = `A SINGLE isolated hand-drawn Excalidraw-style illustration of: ${data.prompt}.
-Thick black sketch outlines, slightly imperfect hand-drawn shapes, pastel color fills, soft shadows. Playful, friendly, educational.
-CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous padding on all sides. Absolutely no other elements, no background scenery, no text, no labels, no borders, no frame. Square framing. Just the subject on white.`;
-
-    const res = await fetch(`${AI_URL}/images/generations`, {
-      method: "POST",
+  // Poll if still running.
+  for (let i = 0; i < 60 && (pred.status === "starting" || pred.status === "processing"); i++) {
+    await new Promise((r) => setTimeout(r, i < 5 ? 1500 : 3000));
+    const pollRes = await fetch(`${REPLICATE_GATEWAY}/predictions/${pred.id}`, {
       headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": replicateKey,
       },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [{ role: "user", content: styled }],
-        modalities: ["image", "text"],
-      }),
     });
-    if (!res.ok) throw new Error(`Element failed: ${res.status} ${await res.text()}`);
-    const json = await res.json();
-    const b64 = json.data?.[0]?.b64_json;
-    if (!b64) throw new Error("No element image returned");
-    return { dataUrl: `data:image/png;base64,${b64}` };
+    if (!pollRes.ok) throw new Error(`GroundingDINO poll failed: ${pollRes.status}`);
+    pred = await pollRes.json();
+  }
+
+  if (pred.status !== "succeeded") {
+    throw new Error(`GroundingDINO failed: ${pred.status} ${JSON.stringify(pred.error || pred).slice(0, 300)}`);
+  }
+
+  const output = pred.output;
+  // Output shape (adirik/grounding-dino): { detections: [{ label, bbox: [x1,y1,x2,y2], confidence }], image_width, image_height }
+  let detections: any[] = [];
+  let imgW = 0, imgH = 0;
+  if (Array.isArray(output)) {
+    detections = output;
+  } else if (output && typeof output === "object") {
+    detections = output.detections || output.result || output.predictions || [];
+    imgW = Number(output.image_width || output.width || 0);
+    imgH = Number(output.image_height || output.height || 0);
+  }
+
+  console.log("[grounding-dino] labels:", labels, "detections:", detections.length, "imgW:", imgW);
+
+  const results: Array<{ label: string; bbox: { x: number; y: number; w: number; h: number }; confidence: number }> = [];
+  for (const d of detections) {
+    const rawLabel = String(d.label || d.class || d.name || "").trim();
+    let bbox = d.bbox || d.box || d.bounding_box;
+    if (!Array.isArray(bbox) || bbox.length < 4) continue;
+    let [x1, y1, x2, y2] = bbox.map(Number);
+    // If values look like pixels (>1) and we know image dimensions, normalize.
+    const looksPixel = Math.max(x1, y1, x2, y2) > 1.5;
+    if (looksPixel && imgW && imgH) {
+      x1 /= imgW; x2 /= imgW; y1 /= imgH; y2 /= imgH;
+    } else if (looksPixel) {
+      // Unknown dims: fall back to 1536x1024 (our composite size).
+      x1 /= 1536; x2 /= 1536; y1 /= 1024; y2 /= 1024;
+    }
+    const nx = Math.max(0, Math.min(1, Math.min(x1, x2)));
+    const ny = Math.max(0, Math.min(1, Math.min(y1, y2)));
+    const nw = Math.max(0, Math.min(1 - nx, Math.abs(x2 - x1)));
+    const nh = Math.max(0, Math.min(1 - ny, Math.abs(y2 - y1)));
+    if (nw < 0.02 || nh < 0.02) continue;
+    results.push({
+      label: rawLabel,
+      bbox: { x: nx, y: ny, w: nw, h: nh },
+      confidence: Number(d.confidence || d.score || 0),
+    });
+  }
+  return results;
+}
+
+/**
+ * Fuzzy-match a detection back to the segmentPrompt the LLM asked for.
+ * Grounding-DINO may return partial matches ("dog" vs "the small dog").
+ */
+function matchDetection(
+  segmentPrompt: string,
+  detections: Array<{ label: string; bbox: any; confidence: number }>,
+  used: Set<number>,
+): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  const wanted = norm(segmentPrompt);
+  const wantedTokens = wanted.split(" ").filter((t) => t.length > 2 && !["the", "and"].includes(t));
+
+  let best = -1;
+  let bestScore = -1;
+  for (let i = 0; i < detections.length; i++) {
+    if (used.has(i)) continue;
+    const cand = norm(detections[i].label);
+    let score = 0;
+    if (cand === wanted) score += 100;
+    for (const tok of wantedTokens) {
+      if (cand.includes(tok)) score += 10;
+    }
+    score += detections[i].confidence * 5;
+    if (score > bestScore) { bestScore = score; best = i; }
+  }
+  return bestScore > 0 ? best : -1;
+}
+
+export const generateSceneComposite = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => CompositeInput.parse(d))
+  .handler(async ({ data }) => {
+    // 1) Generate composite image
+    const compositeUrl = await generateCompositeImage(data.compositePrompt, data.title);
+
+    // 2) Upload to Replicate so the segmenter can read it
+    let uploadUrl: string;
+    try {
+      uploadUrl = await uploadToReplicate(compositeUrl);
+    } catch (e: any) {
+      console.warn("[composite] Replicate upload failed, returning composite w/o segmentation:", e?.message);
+      return {
+        compositeUrl,
+        elements: data.elements.map((el) => ({ id: el.id, bbox: null as any })),
+      };
+    }
+
+    // 3) Detect all labels in one call
+    let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
+    try {
+      detections = await detectWithGroundingDino(
+        uploadUrl,
+        data.elements.map((el) => el.segmentPrompt),
+      );
+    } catch (e: any) {
+      console.warn("[composite] Grounding-DINO failed:", e?.message);
+    }
+
+    // 4) Match detections back to elements
+    const used = new Set<number>();
+    const resolved = data.elements.map((el) => {
+      const idx = matchDetection(el.segmentPrompt, detections, used);
+      if (idx < 0) return { id: el.id, bbox: null as any };
+      used.add(idx);
+      return { id: el.id, bbox: detections[idx].bbox };
+    });
+
+    return { compositeUrl, elements: resolved };
   });
-
-// Pexels stock video search removed — the app now uses only AI-generated
-// images for every scene.
-
 
 // ---------- TTS (ElevenLabs v3, Liam voice) ----------
-const TtsInput = z.object({ text: z.string().min(1).max(2000) });
+const TtsInput = z.object({ text: z.string().min(1).max(4000) });
 
 export const generateNarration = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => TtsInput.parse(d))
@@ -406,8 +615,6 @@ export const generateNarration = createServerFn({ method: "POST" })
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            // Trailing ellipsis gives ElevenLabs a natural ~600ms tail pause
-            // so the next scene doesn't start abruptly on top of speech.
             text: data.text.replace(/[.!?…]*\s*$/, "") + " ... ",
             model_id: ELEVEN_MODEL,
             voice_settings: {
