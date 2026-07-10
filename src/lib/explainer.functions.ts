@@ -259,14 +259,28 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
     }
 
     let arr: any[] = Array.isArray(parsed) ? parsed : parsed.scenes ?? parsed.items ?? [];
-    if (!arr.length) {
+
+    // If user tagged scenes manually, force the array to match the manual list
+    // exactly (count, order, sentence, kind, codeVariant) and only borrow
+    // enrichment fields (composition/code/subtitle) from the LLM per index.
+    if (manual) {
+      arr = manual.map((ms, i) => {
+        const llmMeta = arr[i] ?? {};
+        return {
+          ...llmMeta,
+          sentence: ms.text,
+          narrationText: ms.text,
+          kind: ms.kind,
+          codeVariant: ms.kind === "code" ? (ms.codeVariant ?? "typing") : llmMeta.codeVariant,
+        };
+      });
+    } else if (!arr.length) {
       console.warn("[planner] empty scenes — falling back to sentence split.");
       const sentences = data.script
         .replace(/\s+/g, " ")
         .split(/(?<=[.!?])\s+/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-      // Group ~2 sentences per fallback scene
       const groups: string[] = [];
       for (let i = 0; i < sentences.length; i += 2) {
         groups.push(sentences.slice(i, i + 2).join(" "));
@@ -283,6 +297,7 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         subtitle: s.split(" ").slice(0, 8).join(" "),
       }));
     }
+
 
     const animations: ScenePlan["animation"][] = [
       "kenburns-in",
