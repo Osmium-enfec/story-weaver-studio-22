@@ -419,10 +419,12 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
     return { scenes };
   });
 
-// ---------- Generate ONE composite Excalidraw image + segment elements via Replicate ----------
+// ---------- Generate ONE composite Excalidraw image + discover elements via GPT-4o vision ----------
 const CompositeInput = z.object({
   compositePrompt: z.string().min(1).max(2000),
   title: z.string().optional(),
+  // Optional hint list from the planner. Ignored by the vision analyzer — kept
+  // for backwards compat with older callers.
   elements: z
     .array(
       z.object({
@@ -430,9 +432,94 @@ const CompositeInput = z.object({
         segmentPrompt: z.string().min(1).max(120),
       }),
     )
-    .min(1)
-    .max(6),
+    .optional(),
 });
+
+/**
+ * Send the composite to GPT-4o vision and ask it to list every distinct
+ * visual element it can see, with a normalized bbox and a rich hand-drawn
+ * regeneration prompt for each. Replaces Grounding-DINO detection.
+ */
+async function analyzeCompositeWithVision(
+  compositeDataUrl: string,
+  compositePrompt: string,
+): Promise<Array<{ id: string; label: string; prompt: string; bbox: { x: number; y: number; w: number; h: number } }>> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
+
+  const sys = `You are a vision analyst for a whiteboard-style explainer video.
+You will receive ONE hand-drawn Excalidraw-style composite illustration.
+Your job: list EVERY distinct visual element in it — characters, objects,
+icons, arrows, boxes, hand-lettered labels, footers — so each can be
+regenerated as its own transparent PNG and placed back at the exact same
+spot on a fresh white canvas.
+
+For EACH element return:
+  id:     short slug ("dog","arrow-1","title-pill","robot-footer")
+  label:  1-4 word noun phrase describing what it is
+  prompt: 15-30 word rich standalone prompt to REDRAW this element alone,
+          in the SAME Excalidraw style, on pure white. Include colors,
+          pose, and any text lettering that is inside it.
+  bbox:   [x, y, w, h] normalized to 0..1 of the full image (top-left origin).
+          Tight around the element. Do NOT include big whitespace padding.
+
+Rules:
+- 3 to 8 elements. Merge tiny sub-parts into their parent.
+- Do NOT return the whole-image background as an element.
+- Order elements left-to-right, top-to-bottom (reading order).
+- Return ONLY JSON: { "elements": [...] }. No prose.`;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: sys },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `Composite context (what was requested):\n${compositePrompt}\n\nAnalyze the image and list its elements.` },
+            { type: "image_url", image_url: { url: compositeDataUrl } },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Vision analyze failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  const j = await res.json();
+  const raw = j?.choices?.[0]?.message?.content ?? "{}";
+  let parsed: any = {};
+  try { parsed = JSON.parse(raw); } catch { console.warn("[vision] parse fail:", raw.slice(0, 300)); }
+  const arr: any[] = Array.isArray(parsed?.elements) ? parsed.elements : Array.isArray(parsed) ? parsed : [];
+  const out: Array<{ id: string; label: string; prompt: string; bbox: { x: number; y: number; w: number; h: number } }> = [];
+  arr.slice(0, 10).forEach((el, i) => {
+    const bb = Array.isArray(el?.bbox) ? el.bbox.map(Number) : null;
+    if (!bb || bb.length < 4 || bb.some((n: any) => !isFinite(n))) return;
+    let [x, y, w, h] = bb;
+    const maxV = Math.max(Math.abs(x), Math.abs(y), Math.abs(w), Math.abs(h), Math.abs(x + w), Math.abs(y + h));
+    if (maxV > 1.5) {
+      const div = maxV > 100 ? 1000 : maxV;
+      x /= div; y /= div; w /= div; h /= div;
+    }
+    x = Math.max(0, Math.min(1, x));
+    y = Math.max(0, Math.min(1, y));
+    w = Math.max(0.02, Math.min(1 - x, w));
+    h = Math.max(0.02, Math.min(1 - y, h));
+    const label = String(el?.label ?? `element ${i + 1}`).slice(0, 60);
+    out.push({
+      id: String(el?.id ?? `el${i}`).slice(0, 24),
+      label,
+      prompt: String(el?.prompt ?? `hand-drawn illustration of ${label}`).slice(0, 400),
+      bbox: { x, y, w, h },
+    });
+  });
+  return out;
+}
 
 async function generateCompositeImage(prompt: string, title?: string): Promise<string> {
   const openaiKey = process.env.OPENAI_API_KEY;
@@ -754,7 +841,7 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const steps: CompositeStep[] = [];
 
-    // 1) Generate composite image (OpenAI)
+    // 1) Generate ONE composite image (OpenAI gpt-image-1)
     let compositeUrl: string;
     try {
       compositeUrl = await generateCompositeImage(data.compositePrompt, data.title);
@@ -764,56 +851,29 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       throw new Error(`composite: ${e?.message || "failed"}`);
     }
 
-    // 2) Upload to Replicate for segmentation
-    let uploadUrl: string;
+    // 2) Ask GPT-4o vision to inspect the composite and return each element's
+    //    bbox + a redraw prompt. Replaces upload+Grounding-DINO+match.
+    let visionElements: Awaited<ReturnType<typeof analyzeCompositeWithVision>> = [];
     try {
-      uploadUrl = await uploadToReplicate(compositeUrl);
-      steps.push({ name: "upload", status: "ok" });
+      visionElements = await analyzeCompositeWithVision(compositeUrl, data.compositePrompt);
+      steps.push({
+        name: "analyze",
+        status: visionElements.length ? "ok" : "warn",
+        message: `${visionElements.length} elements`,
+      });
     } catch (e: any) {
-      steps.push({ name: "upload", status: "warn", message: e?.message || "upload failed" });
-      return {
-        compositeUrl,
-        elements: data.elements.map((el) => ({ id: el.id, bbox: null as any, maskUrl: null as any })),
-        steps,
-      };
+      steps.push({ name: "analyze", status: "warn", message: e?.message || "vision failed" });
     }
 
-    // 3) Detect bboxes (Grounding-DINO) — used for placement.
-    let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
-    try {
-      detections = await detectWithGroundingDino(
-        uploadUrl,
-        data.elements.map((el) => el.segmentPrompt),
-      );
-      steps.push({ name: "segment", status: "ok", message: `${detections.length} boxes` });
-    } catch (e: any) {
-      steps.push({ name: "segment", status: "warn", message: e?.message || "segmentation failed" });
-    }
-
-    // 4) Match detections → elements (bbox for placement)
-    const used = new Set<number>();
-    const withBbox = data.elements.map((el) => {
-      const idx = matchDetection(el.segmentPrompt, detections, used);
-      if (idx < 0) return { id: el.id, segmentPrompt: el.segmentPrompt, bbox: null as any };
-      used.add(idx);
-      return { id: el.id, segmentPrompt: el.segmentPrompt, bbox: detections[idx].bbox };
-    });
-    const matched = withBbox.filter((r) => r.bbox).length;
-    steps.push({
-      name: "match",
-      status: matched === 0 && data.elements.length > 0 ? "warn" : "ok",
-      message: `${matched}/${data.elements.length} elements matched`,
-    });
-
-    // (SAM step removed — elements are regenerated individually by the client
-    // using the bbox as placement metadata only.)
-    const resolved = withBbox.map((el) => ({
+    const elements = visionElements.map((el) => ({
       id: el.id,
+      label: el.label,
+      prompt: el.prompt,
       bbox: el.bbox,
       maskUrl: null as string | null,
     }));
 
-    return { compositeUrl, elements: resolved, steps };
+    return { compositeUrl, elements, steps };
   });
 
 
