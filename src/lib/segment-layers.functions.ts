@@ -2,8 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1";
-
 const Input = z.object({
   imageDataUrl: z.string().min(20),
 });
@@ -19,15 +17,19 @@ export interface GeminiSegment {
   maskDataUrl: string; // bbox-sized white-on-black PNG
 }
 
-function stripCodeFence(t: string): string {
-  const m = t.match(/```(?:json)?\s*([\s\S]*?)```/);
-  return (m ? m[1] : t).trim();
-}
+type SegmentImageLayersResult =
+  | { layers: GeminiSegment[]; error?: never; fallback?: never }
+  | { layers: GeminiSegment[]; error: string; fallback: true };
 
 export const segmentImageLayers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
-  .handler(async ({ data }): Promise<{ layers: GeminiSegment[] }> => {
+  .handler(async ({ data }): Promise<SegmentImageLayersResult> => {
+    const aiGateway = "https://ai.gateway.lovable.dev/v1";
+    const stripCodeFence = (text: string): string => {
+      const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      return (match ? match[1] : text).trim();
+    };
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("LOVABLE_API_KEY missing");
 
@@ -38,35 +40,76 @@ Output a JSON list where each entry has:
 - "label": a short lowercase descriptive noun phrase
 Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-parts into their parent element.`;
 
-    const res = await fetch(`${AI_GATEWAY}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Lovable-API-Key": key,
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: data.imageDataUrl } },
-            ],
+    let res: Response;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      try {
+        res = await fetch(`${aiGateway}/chat/completions`, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Lovable-API-Key": key,
+            "X-Lovable-AIG-SDK": "direct-fetch",
+            "Content-Type": "application/json",
           },
-        ],
-      }),
-    });
+          body: JSON.stringify({
+            model: "google/gemini-2.5-pro",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: prompt },
+                  { type: "image_url", image_url: { url: data.imageDataUrl } },
+                ],
+              },
+            ],
+          }),
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (error) {
+      console.error("Gemini segmentation fetch failed", error);
+      return {
+        layers: [],
+        fallback: true,
+        error:
+          error instanceof Error && error.name === "AbortError"
+            ? "Gemini segmentation timed out. Try a smaller image or retry in a moment."
+            : "Could not reach Lovable AI for segmentation. Please retry in a moment.",
+      };
+    }
 
     if (!res.ok) {
       const body = await res.text();
-      if (res.status === 429) throw new Error("Rate limited by AI Gateway. Retry in a moment.");
-      if (res.status === 402) throw new Error("Lovable AI credits exhausted. Add credits in workspace settings.");
-      throw new Error(`Gemini segmentation failed [${res.status}]: ${body.slice(0, 400)}`);
+      if (res.status === 429) {
+        return { layers: [], fallback: true, error: "Lovable AI is rate limited. Retry in a moment." };
+      }
+      if (res.status === 402) {
+        return {
+          layers: [],
+          fallback: true,
+          error: "Lovable AI credits are exhausted. Add credits in workspace settings.",
+        };
+      }
+      return {
+        layers: [],
+        fallback: true,
+        error: `Gemini segmentation failed [${res.status}]: ${body.slice(0, 400)}`,
+      };
     }
 
-    const j = await res.json();
+    let j: any;
+    try {
+      j = await res.json();
+    } catch {
+      return {
+        layers: [],
+        fallback: true,
+        error: "Gemini returned an unreadable response. Please retry in a moment.",
+      };
+    }
     const text: string = j?.choices?.[0]?.message?.content ?? "";
     const cleaned = stripCodeFence(text);
 
@@ -76,11 +119,27 @@ Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-part
     } catch {
       // Try to extract the first JSON array substring
       const m = cleaned.match(/\[[\s\S]*\]/);
-      if (!m) throw new Error(`Could not parse Gemini output: ${text.slice(0, 300)}`);
-      parsed = JSON.parse(m[0]);
+      if (!m) {
+        return {
+          layers: [],
+          fallback: true,
+          error: `Could not parse Gemini output: ${text.slice(0, 300)}`,
+        };
+      }
+      try {
+        parsed = JSON.parse(m[0]);
+      } catch {
+        return {
+          layers: [],
+          fallback: true,
+          error: `Could not parse Gemini output: ${text.slice(0, 300)}`,
+        };
+      }
     }
 
-    if (!Array.isArray(parsed)) throw new Error("Gemini did not return a JSON array");
+    if (!Array.isArray(parsed)) {
+      return { layers: [], fallback: true, error: "Gemini did not return a JSON array" };
+    }
 
     const layers: GeminiSegment[] = [];
     parsed.forEach((item: any, i: number) => {
@@ -105,7 +164,11 @@ Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-part
     });
 
     if (layers.length === 0) {
-      throw new Error(`No usable segments in Gemini response. Raw: ${text.slice(0, 300)}`);
+      return {
+        layers: [],
+        fallback: true,
+        error: `No usable segments in Gemini response. Raw: ${text.slice(0, 300)}`,
+      };
     }
 
     return { layers };

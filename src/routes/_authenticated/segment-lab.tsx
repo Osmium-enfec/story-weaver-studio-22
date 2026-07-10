@@ -56,6 +56,11 @@ function SegmentLab() {
     try {
       setStatus("Segmenting with Gemini 2.5 Pro (10–30s)…");
       const res = await runSegment({ data: { imageDataUrl: imageUrl } });
+      if (res.fallback || res.error) {
+        setError(res.error ?? "Segmentation failed. Please retry in a moment.");
+        setStatus("");
+        return;
+      }
       setStatus(`Got ${res.layers.length} masks. Extracting transparent PNGs…`);
 
       const bitmaps: UILayer[] = [];
