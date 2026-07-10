@@ -185,11 +185,7 @@ function Index() {
         : (async () => {
             const comp = plan.composition;
             if (!comp) return null;
-            const compElements = Array.isArray(comp.elements) ? comp.elements : [];
             totalImgs = 1;
-            if (compElements.length === 0) {
-              return { kind: "image" as const, title: comp.title, elements: [] };
-            }
 
             emit({ name: "composite", status: "running" });
             let result: Awaited<ReturnType<typeof generateSceneComposite>>;
@@ -199,48 +195,46 @@ function Index() {
                   compositePrompt:
                     comp.compositePrompt ?? comp.backgroundPrompt ?? plan.sentence,
                   title: comp.title,
-                  elements: compElements.map((el) => ({
-                    id: el.id,
-                    segmentPrompt: el.segmentPrompt || el.label || el.id,
-                  })),
                 },
               });
             } catch (e: any) {
               emit({ name: "composite", status: "error", message: e?.message || "failed" });
               throw e;
             }
-            // Replay server-side sub-steps so the UI shows exactly what happened.
             const serverSteps = (result as any).steps as SceneStep[] | undefined;
             if (serverSteps?.length) serverSteps.forEach((s) => emit(s));
             else emit({ name: "composite", status: "ok" });
 
             const { compositeUrl, elements: seg } = result;
-            const bySeg = new Map(seg.map((s) => [s.id, s]));
+            if (!seg.length) {
+              return { kind: "image" as const, title: comp.title, elements: [] };
+            }
+
             emit({ name: "generate-elements", status: "running" });
             let genCached = 0;
             let genNew = 0;
             const els = await Promise.all(
-              compElements.map(async (el) => {
-                const info = bySeg.get(el.id) as { bbox?: any } | undefined;
-                const bbox = info?.bbox;
+              seg.map(async (el, i) => {
+                const bbox = el.bbox;
+                const appearAt = Math.min(0.8, 0.05 + (i / Math.max(1, seg.length)) * 0.75);
                 try {
-                  const promptText =
-                    (el as any).prompt || el.segmentPrompt || el.label || el.id;
                   const gen = await findOrGenerateImage({
-                    data: { prompt: promptText, kind: "element" },
+                    data: { prompt: el.prompt, kind: "element" },
                   });
                   if (gen.cached) genCached++; else genNew++;
                   return {
-                    id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
-                    appearAt: el.appearAt, anim: el.anim, mediaUrl: gen.dataUrl,
-                    bbox: bbox ?? undefined,
+                    id: el.id, label: el.label,
+                    x: bbox.x + bbox.w / 2, y: bbox.y + bbox.h / 2, w: bbox.w,
+                    appearAt, anim: "fade" as const, mediaUrl: gen.dataUrl,
+                    bbox,
                   };
                 } catch (e: any) {
                   console.warn(`[element] "${el.id}" gen failed:`, e?.message);
                   return {
-                    id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
-                    appearAt: el.appearAt, anim: el.anim, mediaUrl: compositeUrl,
-                    bbox: bbox ?? undefined,
+                    id: el.id, label: el.label,
+                    x: bbox.x + bbox.w / 2, y: bbox.y + bbox.h / 2, w: bbox.w,
+                    appearAt, anim: "fade" as const, mediaUrl: compositeUrl,
+                    bbox,
                   };
                 }
               }),
