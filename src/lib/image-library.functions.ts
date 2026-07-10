@@ -24,19 +24,27 @@ async function generateImage(prompt: string, kind: "background" | "element"): Pr
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
   let styled: string;
+  const STYLE_BASE = `EXCALIDRAW EDUCATIONAL INFOGRAPHIC STYLE (Python-for-AI course context):
+- Pure white background #FFFFFF. No textures, no gradients, no dark background.
+- Hand-drawn sketchy black outlines #111111, 2-5px, slightly wobbly / organic, rounded corners.
+- Flat PASTEL fills only (no watercolor, no cross-hatching, no photorealism, no 3D):
+  blue #3B82F6 / #DBEAFE, green #22C55E / #DCFCE7, red #EF4444 / #FEE2E2,
+  purple #8B5CF6 / #EDE9FE, orange/yellow #F59E0B / #FEF3C7.
+- Handwritten marker-style font for any text. Short phrases only.
+- Doodle icons only (check, X, lock, star, lightbulb, snake, robot, laptop, file, folder, speech bubble, code window, tag, magnifier).
+- Generous white space. No overlapping arrows / text / icons. One idea per element.`;
+
   if (kind === "element") {
-    styled = `A SINGLE isolated hand-drawn illustration of: ${prompt}.
+    styled = `A SINGLE isolated Excalidraw-style hand-drawn doodle of: ${prompt}.
 
-STYLE (must match exactly):
-- Hand-drawn sketch/doodle look, like a high-quality illustrated children's book or a polished Notability/Procreate sketch.
-- Confident but slightly wobbly INK outlines in near-black (#1a1a1a), medium-thin weight, with visible sketchy quality (occasional double lines, small gaps at corners).
-- WARM, RICH color fills: golden-honey yellows, warm browns/tans, soft peach, muted sage green, dusty blue, warm terracotta. NOT flat pastel — use gentle color variation within each shape.
-- Soft watercolor-like shading with visible pencil/marker texture, subtle cross-hatching in shadow areas, a hint of highlight on rounded surfaces.
-- Small subtle ground shadow beneath the subject (short horizontal pencil scribbles or a soft gray smudge), not a hard drop shadow.
-- Expressive, friendly character with clear personality — detailed facial features (eyes with tiny highlight, defined nose, subtle mouth), fur/texture hinted with short directional strokes.
-- Reference vibe: warm, cozy, illustrated infographic character (like a modern educational sketchbook), NOT flat corporate cartoon and NOT thick-outline emoji.
+${STYLE_BASE}
 
-CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous padding on all sides. Absolutely no other elements, no background scenery, no text, no labels, no borders, no frame, no color swatches. Square framing. Just the subject on clean white.`;
+CRITICAL for this element:
+- Just the subject, centered on PURE WHITE #FFFFFF with generous padding on all sides.
+- Sketchy black outline + FLAT PASTEL fill (pick the palette color that fits the subject's role: blue=python/title, green=correct, red=wrong, purple=technical, orange/yellow=hint).
+- Friendly, minimal, classroom-slide feel. Slightly uneven lines, rounded corners.
+- Absolutely NO background scenery, NO text/labels (unless the subject itself is a labeled card), NO borders, NO frame, NO color swatches, NO watercolor shading, NO cross-hatching, NO drop shadow.
+- Square framing. Easy to crop and animate on its own.`;
   } else {
     const titleMatch = prompt.match(/TITLE_PILL:\{color:([a-z]+);text:"([^"]+)"\}/);
     const flowMatch = prompt.match(/FLOW:([^|]+)/);
@@ -49,32 +57,36 @@ CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous pa
     const footer = footerMatch?.[1];
 
     const titleLine = title
-      ? `At the TOP CENTER, draw the title "${title}" in large hand-drawn black marker font, enclosed in a rounded rectangle "pill" filled with soft PASTEL ${titleColor.toUpperCase()}, with a thick black sketchy outline. Add small hand-drawn decorative marks (little lines/sparkles) on either side of the pill.`
+      ? `At the TOP CENTER, draw the title "${title}" in large handwritten marker-style font (black #111), inside a rounded rectangle "pill" with a sketchy black outline and a FLAT PASTEL ${titleColor.toUpperCase()} fill (use the palette in the style guide). Add tiny hand-drawn sparkles/marks beside the pill.`
       : `Leave the top area empty and clean.`;
     const flowLine =
       flow.length >= 2
-        ? `DIRECTLY BELOW the title pill, draw a small hand-drawn horizontal arrow flow: ${flow
+        ? `DIRECTLY BELOW the title pill, draw a simple hand-drawn horizontal arrow flow: ${flow
             .map((s) => `"${s}"`)
-            .join(" → ")}. Use thin gray hand-drawn text separated by little curved arrows.`
+            .join(" → ")}. Short handwritten labels, thin black sketchy arrows, no overlaps.`
         : "";
     const footerLine = footer
-      ? `At the BOTTOM CENTER, draw a wide rounded rectangle "pill" filled with soft PASTEL LAVENDER/PURPLE, with a thick black sketchy outline. Inside the pill, on the LEFT, draw a small cute cartoon robot with a smiling face (rounded body, antenna, one small screen face). To the right of the robot, write the message "${footer}" in hand-drawn black marker font. Add a small hand-drawn pencil doodle at the far right of the pill.`
+      ? `At the BOTTOM CENTER, draw a wide rounded rectangle "pill" with a sketchy black outline and a FLAT PASTEL LAVENDER (#EDE9FE) fill. Inside, on the LEFT, draw a small friendly doodle robot (rounded body, antenna, simple smiling screen face). To the right of the robot, write "${footer}" in handwritten marker-style black text.`
       : `Leave the bottom area empty and clean.`;
 
-    styled = `A hand-drawn Excalidraw-style whiteboard INFOGRAPHIC background, 16:9 widescreen. Off-white paper background with a very subtle warm cream tint. All strokes are thick, slightly wobbly hand-drawn black marker lines. Overall look matches these references: colorful pastel pill labels, sketched arrow flow, cute robot mascot footer message.
+    styled = `A 16:9 Excalidraw-style whiteboard EDUCATIONAL INFOGRAPHIC frame.
 
+${STYLE_BASE}
+
+Composition:
 ${titleLine}
 
 ${flowLine}
 
-The LARGE CENTER AREA (roughly 70% of the canvas height) MUST be COMPLETELY EMPTY — pure clean off-white paper with no drawings, no icons, no shapes, no lines. This empty area will be filled with separate illustrations later. Do NOT draw anything in the middle of the canvas.
+The LARGE CENTER AREA (roughly 70% of canvas height) MUST be COMPLETELY EMPTY — pure white paper, no drawings, no icons, no shapes, no lines. This empty area will be filled with separate element PNGs later. Do NOT draw anything in the middle.
 
 ${footerLine}
 
-Mood context (do not draw literally): ${moodPrompt}.
+Mood context (do not draw literally, only informs color choice): ${moodPrompt}.
 
-Style: educational infographic, playful, cheerful, hand-drawn, high-quality Excalidraw sketch. No photorealism. No stock icons. Consistent pastel palette. Only draw the title pill at the top, optional arrow flow just under it, and optional robot pill at the bottom — nothing else.`;
+Only draw: the title pill at top, optional arrow flow just under it, and optional robot pill at bottom. Nothing else. Keep everything minimal, spacious, and consistent with the pastel Excalidraw palette.`;
   }
+
 
   const size = kind === "background" ? "1536x1024" : "1024x1024";
 
