@@ -1,5 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+// Layout on a 16:9 canvas. Each entry maps to a tile index (0..8, row-major).
+// x/y/w/h are fractions of canvas width/height. x/y = top-left.
+const COMPOSE_LAYOUT: Array<{ tile: number; x: number; y: number; w: number; h: number }> = [
+  { tile: 0, x: 0.10, y: 0.00, w: 0.80, h: 0.15 }, // 1st: 80w x 15h
+  { tile: 1, x: 0.20, y: 0.15, w: 0.60, h: 0.10 }, // 2nd: 60w x 10h
+  // Row of 4 @ 23w x 65h, centered (4*23=92, side pad 4%)
+  { tile: 2, x: 0.04, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 3, x: 0.27, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 4, x: 0.50, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 5, x: 0.73, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 6, x: 0.10, y: 0.90, w: 0.80, h: 0.10 }, // last: 80w x 10h
+];
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
@@ -50,6 +63,8 @@ function SegmentLab() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [parts, setParts] = useState<string[]>([]);
+  const [composed, setComposed] = useState<string | null>(null);
+  const composeCanvasRef = useRef<HTMLCanvasElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +72,7 @@ function SegmentLab() {
     if (!f) return;
     setError(null);
     setParts([]);
+    setComposed(null);
     try {
       const url = await fileToDataUrl(f);
       setImageDataUrl(url);
@@ -81,6 +97,34 @@ function SegmentLab() {
       setBusy(false);
     }
   };
+
+  // Compose the 7 selected tiles onto a 16:9 canvas using COMPOSE_LAYOUT.
+  useEffect(() => {
+    if (parts.length < 7) { setComposed(null); return; }
+    let cancelled = false;
+    (async () => {
+      const W = 1600, H = 900;
+      const canvas = composeCanvasRef.current ?? document.createElement("canvas");
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, W, H);
+      for (const slot of COMPOSE_LAYOUT) {
+        const src = parts[slot.tile];
+        if (!src) continue;
+        const img = await loadImage(src);
+        const dx = slot.x * W;
+        const dy = slot.y * H;
+        const dw = slot.w * W;
+        const dh = slot.h * H;
+        // stretch (non-uniform) into the slot — that is the requested behavior
+        ctx.drawImage(img, dx, dy, dw, dh);
+      }
+      if (!cancelled) setComposed(canvas.toDataURL("image/png"));
+    })();
+    return () => { cancelled = true; };
+  }, [parts]);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
@@ -140,6 +184,25 @@ function SegmentLab() {
           </div>
         </div>
       )}
+
+      {composed && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">
+            Composed 16:9 canvas (tiles stretched into layout)
+          </h2>
+          <div className="overflow-hidden rounded-lg border bg-white p-2 shadow-sm">
+            <img src={composed} alt="composed" className="w-full" style={{ aspectRatio: "16 / 9" }} />
+          </div>
+          <a
+            href={composed}
+            download="composed-16x9.png"
+            className="mt-3 inline-block rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+          >
+            Download PNG
+          </a>
+        </div>
+      )}
+      <canvas ref={composeCanvasRef} className="hidden" />
     </div>
   );
 }
