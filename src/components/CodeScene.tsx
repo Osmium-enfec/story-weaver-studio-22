@@ -68,13 +68,13 @@ function tokenize(line: string): Tok[] {
 
 function tokenClass(kind: Tok["kind"]): string {
   switch (kind) {
-    case "kw": return "text-fuchsia-400";
-    case "str": return "text-emerald-400";
-    case "num": return "text-amber-400";
-    case "com": return "text-slate-500 italic";
-    case "fn": return "text-sky-400";
-    case "pun": return "text-slate-400";
-    default: return "text-slate-200";
+    case "kw": return "text-purple-600";
+    case "str": return "text-emerald-600";
+    case "num": return "text-amber-600";
+    case "com": return "text-slate-400 italic";
+    case "fn": return "text-sky-600";
+    case "pun": return "text-slate-500";
+    default: return "text-slate-800";
   }
 }
 
