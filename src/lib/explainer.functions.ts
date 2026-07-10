@@ -422,6 +422,30 @@ async function uploadToReplicate(dataUrl: string): Promise<string> {
 }
 
 /**
+ * Look up the latest version id for a community model (cached in-memory).
+ */
+const versionCache = new Map<string, string>();
+async function getModelVersion(owner: string, name: string): Promise<string> {
+  const key = `${owner}/${name}`;
+  const cached = versionCache.get(key);
+  if (cached) return cached;
+  const lovableKey = process.env.LOVABLE_API_KEY!;
+  const replicateKey = process.env.REPLICATE_API_KEY!;
+  const res = await fetch(`${REPLICATE_GATEWAY}/models/${owner}/${name}`, {
+    headers: {
+      Authorization: `Bearer ${lovableKey}`,
+      "X-Connection-Api-Key": replicateKey,
+    },
+  });
+  if (!res.ok) throw new Error(`Model lookup failed: ${res.status} ${await res.text()}`);
+  const j = await res.json();
+  const version = j?.latest_version?.id;
+  if (!version) throw new Error(`No latest_version for ${key}`);
+  versionCache.set(key, version);
+  return version;
+}
+
+/**
  * Run adirik/grounding-dino on Replicate to detect a set of labels in an image.
  * Returns a list of detections with normalized (0..1) bboxes.
  */
@@ -436,9 +460,13 @@ async function detectWithGroundingDino(
   // adirik/grounding-dino accepts labels separated by " . " (period+space).
   const query = labels.join(" . ");
 
-  const createRes = await fetch(
-    `${REPLICATE_GATEWAY}/models/adirik/grounding-dino/predictions`,
-    {
+  const version = await getModelVersion("adirik", "grounding-dino");
+
+  // Retry on 429 (rate limit — low-credit accounts are capped at 6 rpm).
+  let createRes: Response | null = null;
+  let lastBody = "";
+  for (let attempt = 0; attempt < 6; attempt++) {
+    createRes = await fetch(`${REPLICATE_GATEWAY}/predictions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${lovableKey}`,
@@ -447,6 +475,7 @@ async function detectWithGroundingDino(
         Prefer: "wait=60",
       },
       body: JSON.stringify({
+        version,
         input: {
           image: imageUrl,
           query,
@@ -455,13 +484,24 @@ async function detectWithGroundingDino(
           show_visualisation: false,
         },
       }),
-    },
-  );
+    });
+    if (createRes.ok || (createRes.status < 500 && createRes.status !== 429)) break;
+    lastBody = await createRes.text();
+    // Respect retry_after when present, else exponential backoff.
+    let waitMs = 2000 * Math.pow(2, attempt);
+    try {
+      const j = JSON.parse(lastBody);
+      if (j?.retry_after) waitMs = Number(j.retry_after) * 1000 + 500;
+    } catch {}
+    console.warn(`[grounding-dino] ${createRes.status} — retrying in ${waitMs}ms (attempt ${attempt + 1})`);
+    await new Promise((r) => setTimeout(r, Math.min(15000, waitMs)));
+  }
+  if (!createRes) throw new Error("GroundingDINO: no response");
   if (createRes.status === 402) {
     throw new Error("Replicate account has no credit. Enable billing at https://replicate.com/account/billing.");
   }
   if (!createRes.ok) {
-    throw new Error(`GroundingDINO create failed: ${createRes.status} ${await createRes.text()}`);
+    throw new Error(`GroundingDINO create failed: ${createRes.status} ${lastBody || (await createRes.text())}`);
   }
   let pred = await createRes.json();
 
