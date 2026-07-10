@@ -100,7 +100,16 @@ Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-part
       };
     }
 
-    const j = await res.json();
+    let j: any;
+    try {
+      j = await res.json();
+    } catch {
+      return {
+        layers: [],
+        fallback: true,
+        error: "Gemini returned an unreadable response. Please retry in a moment.",
+      };
+    }
     const text: string = j?.choices?.[0]?.message?.content ?? "";
     const cleaned = stripCodeFence(text);
 
