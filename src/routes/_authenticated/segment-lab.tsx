@@ -182,6 +182,31 @@ function SegmentLab() {
     URL.revokeObjectURL(url);
   };
 
+  const generateAndPlay = async () => {
+    if (!topic.trim() || generating) return;
+    setGenError(null);
+    setGenerating(true);
+    try {
+      // Force MCQ template for generation flow.
+      const tpl = getTemplate("mcq-four-card");
+      const result = await genFn({ data: { topic: topic.trim() } });
+      const timeline = buildFadeInSequence(tpl, 1000, 200);
+      setScene({ templateId: tpl.id, regions: tpl.regions.map((r) => ({ ...r })), timeline });
+      setImageDataUrl(result.dataUrl);
+      setSelectedId(tpl.regions[0]?.id ?? null);
+      setShowOutlines(false);
+      offsetRef.current = 0;
+      setTimeMs(0);
+      // Kick off playback on next tick so state settles.
+      setTimeout(() => setPlaying(true), 50);
+    } catch (e: any) {
+      setGenError(e?.message ?? String(e));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col bg-slate-50">
       {/* Top bar */}
