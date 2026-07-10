@@ -680,24 +680,6 @@ function Index() {
 
         {progress.length > 0 && (
           <section className="mt-10">
-            <div className="mb-3 rounded-md border bg-muted/40 p-3 text-xs">
-              <div className="mb-1 font-medium text-foreground">
-                Approx. credit usage this run
-              </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-                <span>🖼 New images: <b className="text-foreground">{stats.imagesNew}</b> (~2 cr each)</span>
-                <span>♻ Cached images: <b className="text-foreground">{stats.imagesCached}</b> (free)</span>
-                <span>🎙 TTS clips: <b className="text-foreground">{stats.tts}</b></span>
-                <span>🧠 Plan: <b className="text-foreground">{stats.planSkipped ? "cached" : stats.plan}</b></span>
-                {mode === "audio" && (
-                  <span>📝 STT: <b className="text-foreground">{stats.sttSkipped ? "cached" : stats.stt}</b></span>
-                )}
-              </div>
-              <div className="mt-1.5 text-[11px] text-muted-foreground">
-                Estimated total: <b className="text-foreground">~{stats.imagesNew * 2 + stats.tts + stats.plan + stats.stt}</b> credits.
-                Re-running the same audio or script skips STT & planning; identical prompts reuse the image library — so a re-run is nearly free.
-              </div>
-            </div>
             <h2 className="mb-3 flex items-center justify-between text-sm font-medium text-muted-foreground">
               <span>Scenes ({progress.filter((p) => p.status === "ready").length}/{progress.length})</span>
               {totalCached > 0 && (
@@ -707,38 +689,58 @@ function Index() {
               )}
             </h2>
             <ol className="space-y-2">
-              {progress.map((p, i) => (
-                <li key={p.id} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
-                  <span className="mt-0.5 w-6 shrink-0 text-xs text-muted-foreground">{i + 1}</span>
-                  <span className="mt-0.5 shrink-0">
-                    {p.status === "ready" ? (
-                      <CheckCircle2 size={16} className="text-green-600" />
-                    ) : p.status === "error" ? (
-                      <AlertCircle size={16} className="text-destructive" />
-                    ) : (
-                      <Loader2 size={16} className="animate-spin text-muted-foreground" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate">{p.sentence}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {p.kind === "image"
-                        ? "🎨 AI image"
-                        : `⌨️ Code (${p.codeVariant ?? "typing"})`}
-                      {p.cached ? " · ♻ reused from library" : ""}
-                      {p.error ? ` · ${p.error}` : ""}
+              {progress.map((p, i) => {
+                const scene = results[i];
+                const thumbs: string[] = [];
+                if (scene?.kind === "image") {
+                  if (scene.backgroundUrl) thumbs.push(scene.backgroundUrl);
+                  for (const el of scene.elements ?? []) thumbs.push(el.mediaUrl);
+                }
+                return (
+                  <li key={p.id} className="flex items-start gap-3 rounded-md border bg-card p-3 text-sm">
+                    <span className="mt-0.5 w-6 shrink-0 text-xs text-muted-foreground">{i + 1}</span>
+                    <span className="mt-0.5 shrink-0">
+                      {p.status === "ready" ? (
+                        <CheckCircle2 size={16} className="text-green-600" />
+                      ) : p.status === "error" ? (
+                        <AlertCircle size={16} className="text-destructive" />
+                      ) : (
+                        <Loader2 size={16} className="animate-spin text-muted-foreground" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate">{p.sentence}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {p.kind === "image"
+                          ? "🎨 AI image"
+                          : `⌨️ Code (${p.codeVariant ?? "typing"})`}
+                        {p.cached ? " · ♻ reused from library" : ""}
+                        {p.error ? ` · ${p.error}` : ""}
+                      </div>
+                      {thumbs.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {thumbs.slice(0, 6).map((src, k) => (
+                            <img
+                              key={k}
+                              src={src}
+                              alt=""
+                              className="h-16 w-16 rounded border bg-white object-contain p-1"
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  {p.status === "error" && !running && (
-                    <button
-                      onClick={() => handleRetry(i)}
-                      className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
-                    >
-                      <RotateCcw size={12} /> Retry
-                    </button>
-                  )}
-                </li>
-              ))}
+                    {p.status === "error" && !running && (
+                      <button
+                        onClick={() => handleRetry(i)}
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs hover:bg-accent"
+                      >
+                        <RotateCcw size={12} /> Retry
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
           </section>
         )}
