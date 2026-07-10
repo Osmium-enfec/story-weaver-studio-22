@@ -21,12 +21,51 @@ async function embed(prompt: string): Promise<number[]> {
 
 async function generateImage(prompt: string, kind: "background" | "element"): Promise<string> {
   const key = process.env.LOVABLE_API_KEY!;
-  const styled =
-    kind === "background"
-      ? `Empty 16:9 widescreen hand-drawn Excalidraw-style whiteboard background. Very light pastel wash (soft cream, mint, sky-blue, or lavender), subtle dotted or faint grid texture, gentle vignette. NO foreground objects, NO characters, NO icons, NO text, NO arrows — background only. Wide landscape composition. Mood context: ${prompt}`
-      : `A SINGLE isolated hand-drawn Excalidraw-style illustration of: ${prompt}.
-Thick black sketch outlines, slightly imperfect hand-drawn shapes, pastel color fills, soft shadows. Playful, friendly, educational.
+
+  let styled: string;
+  if (kind === "element") {
+    styled = `A SINGLE isolated hand-drawn Excalidraw-style illustration of: ${prompt}.
+Thick black sketchy outlines (slightly wobbly, hand-drawn feel), pastel color fills (soft blues, greens, yellows, pinks, purples), subtle cross-hatch shading, gentle drop shadow. Friendly, cheerful, educational infographic character.
 CRITICAL: subject centered on a PURE WHITE (#FFFFFF) background with generous padding on all sides. Absolutely no other elements, no background scenery, no text, no labels, no borders, no frame. Square framing. Just the subject on white.`;
+  } else {
+    // Parse baked-in directives from the composite prompt built in the client.
+    const titleMatch = prompt.match(/TITLE_PILL:\{color:([a-z]+);text:"([^"]+)"\}/);
+    const flowMatch = prompt.match(/FLOW:([^|]+)/);
+    const footerMatch = prompt.match(/FOOTER_ROBOT:"([^"]+)"/);
+    const moodPrompt = prompt.split("|")[0].trim();
+
+    const title = titleMatch?.[2];
+    const titleColor = titleMatch?.[1] ?? "blue";
+    const flow = flowMatch?.[1]?.trim().split(/\s*->\s*/).filter(Boolean) ?? [];
+    const footer = footerMatch?.[1];
+
+    const titleLine = title
+      ? `At the TOP CENTER, draw the title "${title}" in large hand-drawn black marker font, enclosed in a rounded rectangle "pill" filled with soft PASTEL ${titleColor.toUpperCase()}, with a thick black sketchy outline. Add small hand-drawn decorative marks (little lines/sparkles) on either side of the pill.`
+      : `Leave the top area empty and clean.`;
+    const flowLine =
+      flow.length >= 2
+        ? `DIRECTLY BELOW the title pill, draw a small hand-drawn horizontal arrow flow: ${flow
+            .map((s) => `"${s}"`)
+            .join(" → ")}. Use thin gray hand-drawn text separated by little curved arrows.`
+        : "";
+    const footerLine = footer
+      ? `At the BOTTOM CENTER, draw a wide rounded rectangle "pill" filled with soft PASTEL LAVENDER/PURPLE, with a thick black sketchy outline. Inside the pill, on the LEFT, draw a small cute cartoon robot with a smiling face (rounded body, antenna, one small screen face). To the right of the robot, write the message "${footer}" in hand-drawn black marker font. Add a small hand-drawn pencil doodle at the far right of the pill.`
+      : `Leave the bottom area empty and clean.`;
+
+    styled = `A hand-drawn Excalidraw-style whiteboard INFOGRAPHIC background, 16:9 widescreen. Off-white paper background with a very subtle warm cream tint. All strokes are thick, slightly wobbly hand-drawn black marker lines. Overall look matches these references: colorful pastel pill labels, sketched arrow flow, cute robot mascot footer message.
+
+${titleLine}
+
+${flowLine}
+
+The LARGE CENTER AREA (roughly 70% of the canvas height) MUST be COMPLETELY EMPTY — pure clean off-white paper with no drawings, no icons, no shapes, no lines. This empty area will be filled with separate illustrations later. Do NOT draw anything in the middle of the canvas.
+
+${footerLine}
+
+Mood context (do not draw literally): ${moodPrompt}.
+
+Style: educational infographic, playful, cheerful, hand-drawn, high-quality Excalidraw sketch. No photorealism. No stock icons. Consistent pastel palette. Only draw the title pill at the top, optional arrow flow just under it, and optional robot pill at the bottom — nothing else.`;
+  }
 
   function extractB64(j: any): string | null {
     // Normalized OpenAI-images shape
