@@ -525,23 +525,31 @@ async function generateCompositeImage(prompt: string, title?: string): Promise<s
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  const styled = `A 16:9 widescreen hand-drawn Excalidraw-style whiteboard illustration on a PURE WHITE (#FFFFFF) background.
+  const styled = `A clean 16:9 widescreen Excalidraw-style EDUCATIONAL INFOGRAPHIC on a PURE WHITE (#FFFFFF) background, suitable for a Python-for-AI course with voiceover.
+
 STYLE (must match exactly):
-- Thick slightly wobbly hand-drawn black marker outlines, confident but sketchy (occasional double strokes, small gaps).
-- Warm, rich color fills: honey-yellow, tan/brown, peach, sage green, dusty blue, terracotta. Soft watercolor shading with subtle cross-hatching.
-- Playful, cozy, educational — like a modern illustrated infographic or a teacher's whiteboard sketch. NOT flat emoji/corporate cartoon.
-- Include hand-lettered labels next to elements when relevant, drawn arrows connecting related items, and simple boxes/containers around groups.
+- Hand-drawn slightly wobbly BLACK marker outlines (2–5px), rounded corners, occasional double strokes — sketchy but confident.
+- FLAT PASTEL fills only (no watercolor, no cross-hatching, no gradients, no 3D, no photorealism):
+  blue #3B82F6 / #DBEAFE (Python / main titles),
+  green #22C55E / #DCFCE7 (correct / success),
+  red #EF4444 / #FEE2E2 (wrong / errors),
+  purple #8B5CF6 / #EDE9FE (technical concepts),
+  orange/yellow #F59E0B / #FEF3C7 (hints).
+- Rounded cards / pill shapes with sketchy outlines to group ideas.
+- Playful doodle icons only (check, X, lock, star, lightbulb, snake, robot, laptop, file, folder, speech bubble, code window, tag, magnifier).
+- Handwritten marker-style font for ALL text. Large, readable. Short phrases only.
+- Minimal and spacious: generous white space everywhere. NO overlapping arrows, text, icons, or cards. One idea per element.
+- Friendly, classroom-slide feel — like a modern teacher's whiteboard sketch.
 
 SCENE TO DRAW: ${prompt}
 
-${title ? `At the very top-center, leave space for a title (do NOT draw the title text itself — that is added by the player). Keep the top 12% of the canvas mostly empty.` : ""}
+${title ? `At the TOP CENTER, draw the title "${title}" in large handwritten marker-style black text inside a rounded rectangle "pill" with a sketchy black outline and a flat pastel BLUE (#DBEAFE) fill.` : ""}
 
 CRITICAL RULES:
-- ALL elements in a SINGLE composed illustration, laid out spatially like the scene description says.
-- Each distinct object/character MUST be clearly VISUALLY SEPARATED from the others with generous whitespace between them (no overlapping shapes, no shared backgrounds, no beige/cream paper texture behind any element) so each one can be cleanly segmented out later.
-- Background must be PURE WHITE (#FFFFFF) EVERYWHERE — no cream, no off-white, no paper texture, no colored panels, no boxes/rectangles behind elements. Just pure white empty space between the drawings.
-- NO photorealism, NO background scenery beyond what the scene calls for.
-- Widescreen 16:9 composition, generous margins around the edges.`;
+- SINGLE composed illustration — all elements laid out spatially with generous whitespace between them.
+- Background must be PURE WHITE (#FFFFFF) EVERYWHERE — no cream, no off-white, no paper texture, no full-canvas colored panels.
+- NO photorealism, NO watercolor, NO cross-hatching, NO drop shadows, NO scenery beyond what the scene calls for.
+- Widescreen 16:9, generous margins on all edges.`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
