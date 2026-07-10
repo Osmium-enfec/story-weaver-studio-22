@@ -145,6 +145,23 @@ export function drawImageSceneFrame(
     ctx.scale(scale, scale);
     ctx.drawImage(img, -targetW / 2, -targetH / 2, targetW, targetH);
     ctx.restore();
+
+    if (el.label) {
+      const labelSize = Math.max(18, Math.round(targetW * 0.09));
+      ctx.save();
+      ctx.globalAlpha = eased;
+      ctx.font = `700 ${labelSize}px Caveat, Kalam, cursive`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const labelY = cy + dy + targetH / 2 - 4;
+      // subtle white halo for legibility over pastel backgrounds
+      ctx.lineWidth = Math.max(3, labelSize * 0.18);
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.strokeText(el.label, cx + dx, labelY);
+      ctx.fillStyle = "#1a1a1a";
+      ctx.fillText(el.label, cx + dx, labelY);
+      ctx.restore();
+    }
   }
 }
 

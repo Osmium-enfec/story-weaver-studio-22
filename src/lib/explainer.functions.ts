@@ -10,9 +10,13 @@ export type SceneKind = "image" | "stock" | "code";
 export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
 export type ElementAnim = "pop" | "fade" | "slide-up" | "slide-left" | "slide-right";
 
+export type PillColor = "green" | "blue" | "yellow" | "purple" | "orange" | "pink";
+
 export interface CompositionElement {
   id: string;
   prompt: string;
+  /** Optional short hand-drawn label rendered UNDER the element by the player. */
+  label?: string;
   /** center X, 0..1 across 16:9 canvas */
   x: number;
   /** center Y, 0..1 */
@@ -26,6 +30,13 @@ export interface CompositionElement {
 
 export interface SceneComposition {
   backgroundPrompt: string;
+  /** Baked-in title (colored pill at the top of the background). */
+  title?: string;
+  titleColor?: PillColor;
+  /** Baked-in "A → B → C" arrow flow under the title. */
+  flowSteps?: string[];
+  /** Baked-in purple robot mascot pill message at the bottom. */
+  footerMessage?: string;
   elements: CompositionElement[];
 }
 
@@ -93,16 +104,29 @@ ${narrationRule}
     "image" — abstract concepts, ideas, metaphors, workflows.
     "stock" — concrete real-world things (people, nature, cities, products).
 - If kind = "image": composition object with:
-    backgroundPrompt: describe an EMPTY 16:9 whiteboard background scene
-      (soft pastel wash, subtle grid or dot texture, no foreground objects,
-      no text). Sets the mood.
+    backgroundPrompt: describe the SETTING/mood of the scene (e.g. "workflow diagram
+      about data processing"). Used by the image model along with the baked title.
+    title: short hand-drawn TITLE (2-5 words) shown as a colored pill at the TOP of the
+      background image. Required for image scenes.
+    titleColor: one of "green","blue","yellow","purple","orange","pink" — pick a color
+      that fits the sentence's mood.
+    flowSteps: OPTIONAL array of 2-5 very short words shown as a hand-drawn
+      "A → B → C" arrow flow directly under the title. Use ONLY when the sentence
+      literally describes a pipeline / sequence / progression. Otherwise omit.
+    footerMessage: OPTIONAL short takeaway sentence (<= 10 words) shown in a purple
+      pill with a cute robot mascot at the BOTTOM of the background. Use for
+      summary / punch-line scenes; omit for mid-flow scenes.
     elements: array of 2–5 items appearing one-by-one. Each element:
       id: short slug ("rocket","chart","user").
       prompt: single subject description (e.g. "a smiling cartoon rocket
         with flames"), NO style words — style is added later. NO text/labels.
+      label: OPTIONAL short 1-3 word hand-drawn label rendered UNDER the element
+        by the player (e.g. "read", "chunk", "embed"). Use for diagram/pipeline
+        elements that benefit from a name; omit for purely decorative subjects.
       x: 0..1 center X on the canvas (0=left, 1=right).
-      y: 0..1 center Y (0=top, 1=bottom).
-      w: 0..1 width fraction (typical 0.18–0.35).
+      y: 0..1 center Y (0=top, 1=bottom). Keep 0.30–0.75 — top ~0-0.22 is
+        reserved for the title pill and bottom ~0.82-1.0 for the footer pill.
+      w: 0..1 width fraction (typical 0.14–0.28).
       appearAt: 0..1 fraction of the scene duration when this element
         appears. First element ~0.05, last element <= 0.75. Spread evenly.
       anim: one of "pop","fade","slide-up","slide-left","slide-right".
@@ -243,17 +267,31 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
           .map((el: any, ei: number) => ({
             id: String(el?.id ?? `el${ei}`).slice(0, 24),
             prompt: String(el?.prompt ?? sentence).slice(0, 200),
+            label: el?.label ? String(el.label).slice(0, 40) : undefined,
             x: clamp(el?.x, 0.05, 0.95, 0.2 + (ei * 0.6) / Math.max(1, rawEls.length - 1)),
-            y: clamp(el?.y, 0.1, 0.9, 0.5),
-            w: clamp(el?.w, 0.1, 0.5, 0.25),
+            y: clamp(el?.y, 0.3, 0.75, 0.5),
+            w: clamp(el?.w, 0.1, 0.5, 0.22),
             appearAt: clamp(el?.appearAt, 0, 0.85, (ei / Math.max(1, rawEls.length)) * 0.75),
             anim: validAnims.includes(el?.anim) ? el.anim : "pop",
           }));
+        const validColors: PillColor[] = ["green", "blue", "yellow", "purple", "orange", "pink"];
+        const rawTitleColor = meta?.composition?.titleColor;
+        const rawFlow = meta?.composition?.flowSteps;
         composition = {
           backgroundPrompt: String(
             meta?.composition?.backgroundPrompt ??
               `soft pastel whiteboard background for: ${sentence}`,
           ).slice(0, 300),
+          title: meta?.composition?.title
+            ? String(meta.composition.title).slice(0, 60)
+            : undefined,
+          titleColor: validColors.includes(rawTitleColor) ? rawTitleColor : "blue",
+          flowSteps: Array.isArray(rawFlow)
+            ? rawFlow.slice(0, 5).map((s: any) => String(s).slice(0, 24)).filter(Boolean)
+            : undefined,
+          footerMessage: meta?.composition?.footerMessage
+            ? String(meta.composition.footerMessage).slice(0, 120)
+            : undefined,
           elements: elements.length
             ? elements
             : [
@@ -261,8 +299,8 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
                   id: "main",
                   prompt: sentence,
                   x: 0.5,
-                  y: 0.5,
-                  w: 0.35,
+                  y: 0.55,
+                  w: 0.3,
                   appearAt: 0.05,
                   anim: "pop",
                 },
