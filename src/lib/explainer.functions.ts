@@ -346,7 +346,7 @@ async function generateCompositeImage(prompt: string, title?: string): Promise<s
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  const styled = `A 16:9 widescreen hand-drawn Excalidraw-style whiteboard illustration on off-white paper.
+  const styled = `A 16:9 widescreen hand-drawn Excalidraw-style whiteboard illustration on a PURE WHITE (#FFFFFF) background.
 STYLE (must match exactly):
 - Thick slightly wobbly hand-drawn black marker outlines, confident but sketchy (occasional double strokes, small gaps).
 - Warm, rich color fills: honey-yellow, tan/brown, peach, sage green, dusty blue, terracotta. Soft watercolor shading with subtle cross-hatching.
@@ -359,8 +359,9 @@ ${title ? `At the very top-center, leave space for a title (do NOT draw the titl
 
 CRITICAL RULES:
 - ALL elements in a SINGLE composed illustration, laid out spatially like the scene description says.
-- Each distinct object/character should be VISUALLY SEPARATED from the others (some whitespace between them) so it can be segmented out later.
-- Off-white paper background, NO photorealism, NO background scenery beyond what the scene calls for.
+- Each distinct object/character MUST be clearly VISUALLY SEPARATED from the others with generous whitespace between them (no overlapping shapes, no shared backgrounds, no beige/cream paper texture behind any element) so each one can be cleanly segmented out later.
+- Background must be PURE WHITE (#FFFFFF) EVERYWHERE — no cream, no off-white, no paper texture, no colored panels, no boxes/rectangles behind elements. Just pure white empty space between the drawings.
+- NO photorealism, NO background scenery beyond what the scene calls for.
 - Widescreen 16:9 composition, generous margins around the edges.`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
@@ -595,6 +596,67 @@ function matchDetection(
 
 export type CompositeStep = { name: string; status: "ok" | "warn" | "error"; message?: string };
 
+/**
+ * Run schananas/grounded_sam (Grounding-DINO + SAM) on ONE label to get a
+ * pixel-precise mask (white=element, black=elsewhere) as a URL.
+ * Returns null if segmentation fails or nothing is detected.
+ */
+async function segmentOneWithGroundedSam(imageUrl: string, label: string): Promise<string | null> {
+  const lovableKey = process.env.LOVABLE_API_KEY!;
+  const replicateKey = process.env.REPLICATE_API_KEY!;
+  const version = await getModelVersion("schananas", "grounded_sam");
+
+  let createRes: Response | null = null;
+  let lastBody = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    createRes = await fetch(`${REPLICATE_GATEWAY}/predictions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": replicateKey,
+        "Content-Type": "application/json",
+        Prefer: "wait=60",
+      },
+      body: JSON.stringify({
+        version,
+        input: {
+          image: imageUrl,
+          mask_prompt: label,
+          negative_mask_prompt: "background, white paper, text label",
+          adjustment_factor: 0,
+        },
+      }),
+    });
+    if (createRes.ok || (createRes.status < 500 && createRes.status !== 429)) break;
+    lastBody = await createRes.text();
+    let waitMs = 2000 * Math.pow(2, attempt);
+    try { const j = JSON.parse(lastBody); if (j?.retry_after) waitMs = Number(j.retry_after) * 1000 + 500; } catch {}
+    await new Promise((r) => setTimeout(r, Math.min(15000, waitMs)));
+  }
+  if (!createRes || !createRes.ok) {
+    console.warn(`[grounded_sam] "${label}" create failed:`, createRes?.status, lastBody.slice(0, 200));
+    return null;
+  }
+  let pred = await createRes.json();
+  for (let i = 0; i < 40 && (pred.status === "starting" || pred.status === "processing"); i++) {
+    await new Promise((r) => setTimeout(r, i < 5 ? 1500 : 3000));
+    const pollRes = await fetch(`${REPLICATE_GATEWAY}/predictions/${pred.id}`, {
+      headers: { Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": replicateKey },
+    });
+    if (!pollRes.ok) return null;
+    pred = await pollRes.json();
+  }
+  if (pred.status !== "succeeded") {
+    console.warn(`[grounded_sam] "${label}" ${pred.status}:`, JSON.stringify(pred.error || "").slice(0, 200));
+    return null;
+  }
+  // Output is [annotated, neg_annotated, mask, inverted_mask] — index 2 is the positive mask (white on black).
+  const out = pred.output;
+  if (Array.isArray(out) && out.length >= 3 && typeof out[2] === "string") return out[2];
+  if (typeof out === "string") return out;
+  return null;
+}
+
 export const generateSceneComposite = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => CompositeInput.parse(d))
   .handler(async ({ data }) => {
@@ -619,12 +681,12 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       steps.push({ name: "upload", status: "warn", message: e?.message || "upload failed" });
       return {
         compositeUrl,
-        elements: data.elements.map((el) => ({ id: el.id, bbox: null as any })),
+        elements: data.elements.map((el) => ({ id: el.id, bbox: null as any, maskUrl: null as any })),
         steps,
       };
     }
 
-    // 3) Detect all labels (Grounding-DINO)
+    // 3) Detect bboxes (Grounding-DINO) — used for placement.
     let detections: Array<{ label: string; bbox: any; confidence: number }> = [];
     try {
       detections = await detectWithGroundingDino(
@@ -636,23 +698,52 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
       steps.push({ name: "segment", status: "warn", message: e?.message || "segmentation failed" });
     }
 
-    // 4) Match detections → elements
+    // 4) Match detections → elements (bbox for placement)
     const used = new Set<number>();
-    const resolved = data.elements.map((el) => {
+    const withBbox = data.elements.map((el) => {
       const idx = matchDetection(el.segmentPrompt, detections, used);
-      if (idx < 0) return { id: el.id, bbox: null as any };
+      if (idx < 0) return { id: el.id, segmentPrompt: el.segmentPrompt, bbox: null as any };
       used.add(idx);
-      return { id: el.id, bbox: detections[idx].bbox };
+      return { id: el.id, segmentPrompt: el.segmentPrompt, bbox: detections[idx].bbox };
     });
-    const matched = resolved.filter((r) => r.bbox).length;
+    const matched = withBbox.filter((r) => r.bbox).length;
     steps.push({
       name: "match",
       status: matched === 0 && data.elements.length > 0 ? "warn" : "ok",
       message: `${matched}/${data.elements.length} elements matched`,
     });
 
+    // 5) SAM: per-element pixel mask (Grounding-DINO + SAM via schananas/grounded_sam).
+    // Run in parallel, but only for matched elements (skip failed ones to save credits).
+    let maskCount = 0;
+    const masks = await Promise.all(
+      withBbox.map(async (el) => {
+        if (!el.bbox) return null;
+        try {
+          const m = await segmentOneWithGroundedSam(uploadUrl, el.segmentPrompt);
+          if (m) maskCount++;
+          return m;
+        } catch (e: any) {
+          console.warn(`[sam] "${el.segmentPrompt}" failed:`, e?.message);
+          return null;
+        }
+      }),
+    );
+    steps.push({
+      name: "sam",
+      status: maskCount === 0 && matched > 0 ? "warn" : "ok",
+      message: `${maskCount}/${matched} masks`,
+    });
+
+    const resolved = withBbox.map((el, i) => ({
+      id: el.id,
+      bbox: el.bbox,
+      maskUrl: masks[i] ?? null,
+    }));
+
     return { compositeUrl, elements: resolved, steps };
   });
+
 
 // ---------- TTS (ElevenLabs v3, Liam voice) ----------
 const TtsInput = z.object({ text: z.string().min(1).max(4000) });

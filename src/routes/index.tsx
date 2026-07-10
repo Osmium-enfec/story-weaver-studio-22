@@ -215,12 +215,16 @@ function Index() {
             else emit({ name: "composite", status: "ok" });
 
             const { compositeUrl, elements: seg } = result;
-            const byId = new Map(seg.map((s) => [s.id, s.bbox]));
+            const bySeg = new Map(seg.map((s) => [s.id, s]));
             emit({ name: "crop", status: "running" });
             const els = await Promise.all(
               compElements.map(async (el) => {
-                const bbox = byId.get(el.id);
-                const mediaUrl = bbox ? await cropAndClear(compositeUrl, bbox) : compositeUrl;
+                const info = bySeg.get(el.id) as { bbox?: any; maskUrl?: string | null } | undefined;
+                const bbox = info?.bbox;
+                const maskUrl = info?.maskUrl || undefined;
+                const mediaUrl = bbox
+                  ? await cropAndClear(compositeUrl, bbox, 0.06, maskUrl)
+                  : compositeUrl;
                 return {
                   id: el.id, label: el.label, x: el.x, y: el.y, w: el.w,
                   appearAt: el.appearAt, anim: el.anim, mediaUrl,
