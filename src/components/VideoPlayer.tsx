@@ -94,78 +94,95 @@ function ImageScene({
             style={bgStyle}
           />
         )}
-        {scene.elements?.map((el) => {
-          const single = (scene.elements?.length ?? 0) === 1;
-          const shown = t >= el.appearAt;
-          const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
-          const p = shown ? Math.min(1, (t - el.appearAt) / revealWindow) : 0;
-          const eased = 1 - Math.pow(1 - p, 3);
+        {scene.title && (
+          <div
+            className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
+            style={{
+              top: "3%",
+              fontFamily: '"Caveat", "Kalam", cursive',
+              fontWeight: 700,
+              fontSize: "clamp(28px, 6.5%, 84px)",
+              color: "#1a1a1a",
+              lineHeight: 1,
+              textShadow: "0 1px 0 rgba(255,255,255,0.9)",
+            }}
+          >
+            {scene.title}
+          </div>
+        )}
+        {(() => {
+          const els = scene.elements ?? [];
+          const layout = layoutFor(els.length);
+          return els.map((el, i) => {
+            const pos = layout[i] ?? { x: el.x, y: el.y, w: el.w };
+            const shown = t >= el.appearAt;
+            const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
+            const p = shown ? Math.min(1, (t - el.appearAt) / revealWindow) : 0;
+            const eased = 1 - Math.pow(1 - p, 3);
 
-          let transform = "";
-          const opacity = eased;
-          switch (el.anim) {
-            case "pop":
-              transform = `scale(${0.6 + 0.4 * eased})`;
-              break;
-            case "fade":
-              transform = "scale(1)";
-              break;
-            case "slide-up":
-              transform = `translateY(${(1 - eased) * 40}px)`;
-              break;
-            case "slide-left":
-              transform = `translateX(${(1 - eased) * -60}px)`;
-              break;
-            case "slide-right":
-              transform = `translateX(${(1 - eased) * 60}px)`;
-              break;
-          }
+            let transform = "";
+            const opacity = eased;
+            switch (el.anim) {
+              case "pop":
+                transform = `scale(${0.6 + 0.4 * eased})`;
+                break;
+              case "fade":
+                transform = "scale(1)";
+                break;
+              case "slide-up":
+                transform = `translateY(${(1 - eased) * 40}px)`;
+                break;
+              case "slide-left":
+                transform = `translateX(${(1 - eased) * -60}px)`;
+                break;
+              case "slide-right":
+                transform = `translateX(${(1 - eased) * 60}px)`;
+                break;
+            }
 
-          const width = single ? Math.max(0.6, el.w * 2.2) : el.w;
-          const leftPct = single ? 50 : el.x * 100;
-          const topPct = single ? 50 : el.y * 100;
-          const src = transparentMap.get(el.mediaUrl) ?? el.mediaUrl;
-          const useTransparent = transparentMap.has(el.mediaUrl);
+            const src = transparentMap.get(el.mediaUrl) ?? el.mediaUrl;
+            const useTransparent = transparentMap.has(el.mediaUrl);
 
-          return (
-            <div
-              key={el.id}
-              className="absolute select-none"
-              style={{
-                left: `${leftPct}%`,
-                top: `${topPct}%`,
-                width: `${width * 100}%`,
-                transform: `translate(-50%, -50%) ${transform}`,
-                transformOrigin: "center center",
-                opacity,
-                pointerEvents: "none",
-              }}
-            >
-              <img
-                src={src}
-                alt=""
-                className="block w-full"
-                style={useTransparent ? undefined : { mixBlendMode: "multiply" }}
-                draggable={false}
-              />
-              {el.label && (
-                <div
-                  className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
-                  style={{
-                    top: "calc(100% - 6px)",
-                    fontFamily: '"Caveat", "Kalam", cursive',
-                    fontWeight: 700,
-                    fontSize: `${Math.max(14, width * 60)}px`,
-                    color: "#1a1a1a",
-                    textShadow: "0 1px 0 rgba(255,255,255,0.9)",
-                  }}
-                >
-                  {el.label}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            return (
+              <div
+                key={el.id}
+                className="absolute select-none"
+                style={{
+                  left: `${pos.x * 100}%`,
+                  top: `${pos.y * 100}%`,
+                  width: `${pos.w * 100}%`,
+                  transform: `translate(-50%, -50%) ${transform}`,
+                  transformOrigin: "center center",
+                  opacity,
+                  pointerEvents: "none",
+                }}
+              >
+                <img
+                  src={src}
+                  alt=""
+                  className="block w-full"
+                  style={useTransparent ? undefined : { mixBlendMode: "multiply" }}
+                  draggable={false}
+                />
+                {el.label && (
+                  <div
+                    className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
+                    style={{
+                      top: "calc(100% - 6px)",
+                      fontFamily: '"Caveat", "Kalam", cursive',
+                      fontWeight: 700,
+                      fontSize: `${Math.max(14, pos.w * 60)}px`,
+                      color: "#1a1a1a",
+                      textShadow: "0 1px 0 rgba(255,255,255,0.9)",
+                    }}
+                  >
+                    {el.label}
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
       </div>
     </div>
   );
