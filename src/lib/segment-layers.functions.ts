@@ -2,172 +2,111 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
 const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1";
-
-function replicateHeaders() {
-  const lov = process.env.LOVABLE_API_KEY;
-  const rep = process.env.REPLICATE_API_KEY ?? process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY;
-  if (!lov) throw new Error("LOVABLE_API_KEY missing");
-  if (!rep) throw new Error("Replicate connector not linked (REPLICATE_API_KEY missing)");
-  return {
-    Authorization: `Bearer ${lov}`,
-    "X-Connection-Api-Key": rep,
-    "Content-Type": "application/json",
-  };
-}
-
-async function pollPrediction(id: string, maxSec = 300): Promise<any> {
-  const headers = replicateHeaders();
-  const start = Date.now();
-  let delay = 2000;
-  while ((Date.now() - start) / 1000 < maxSec) {
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay + 1000, 8000);
-    const res = await fetch(`${GATEWAY}/predictions/${id}`, { headers });
-    if (!res.ok) throw new Error(`Poll failed ${res.status}: ${await res.text()}`);
-    const j = await res.json();
-    if (j.status === "succeeded") return j;
-    if (j.status === "failed" || j.status === "canceled") {
-      throw new Error(`Prediction ${j.status}: ${j.error ?? "unknown"}`);
-    }
-  }
-  throw new Error("Prediction timed out");
-}
-
-async function runReplicate(model: string, input: Record<string, unknown>, attempt = 0): Promise<any> {
-  const headers = replicateHeaders();
-  // Try official model endpoint first; fall back to community (version) endpoint on 404.
-  let res = await fetch(`${GATEWAY}/models/${model}/predictions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ input }),
-  });
-  if (res.status === 404) {
-    const mres = await fetch(`${GATEWAY}/models/${model}`, { headers });
-    if (!mres.ok) {
-      throw new Error(`Replicate model lookup failed [${mres.status}]: ${await mres.text()}`);
-    }
-    const meta = await mres.json();
-    const version = meta?.latest_version?.id;
-    if (!version) throw new Error(`Replicate model ${model} has no latest_version`);
-    res = await fetch(`${GATEWAY}/predictions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ version, input }),
-    });
-  }
-  if (res.status === 429 && attempt < 4) {
-    const body = await res.text();
-    let retryAfter = 10;
-    try { retryAfter = JSON.parse(body)?.retry_after ?? 10; } catch {}
-    const wait = Math.min(retryAfter, 30) * 1000 + 500;
-    await new Promise((r) => setTimeout(r, wait));
-    return runReplicate(model, input, attempt + 1);
-  }
-  if (res.status === 402) {
-    throw new Error("Replicate account has no credit. Enable billing at https://replicate.com/account/billing.");
-  }
-  if (!res.ok) throw new Error(`Replicate create failed [${res.status}]: ${await res.text()}`);
-  const created = await res.json();
-  return pollPrediction(created.id);
-}
-
-async function labelElements(imageDataUrl: string): Promise<string[]> {
-  const key = process.env.LOVABLE_API_KEY!;
-  const res = await fetch(`${AI_GATEWAY}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Lovable-API-Key": key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Look at this image. List every DISTINCT visual element / object / character / labeled shape you can see, as short lowercase noun phrases separated by commas. Focus on things a designer would want as separate layers (title bar, character, arrow, icon card, footer, robot, etc.). Return ONLY the comma-separated list, no explanation, max 12 items.`,
-            },
-            { type: "image_url", image_url: { url: imageDataUrl } },
-          ],
-        },
-      ],
-      max_tokens: 300,
-    }),
-  });
-  if (!res.ok) throw new Error(`Label call failed ${res.status}: ${await res.text()}`);
-  const j = await res.json();
-  const text: string = j?.choices?.[0]?.message?.content ?? "";
-  return text
-    .split(/[,\n]/)
-    .map((s) => s.trim().toLowerCase().replace(/^[-*\d.)\s]+/, ""))
-    .filter((s) => s.length > 1 && s.length < 60)
-    .slice(0, 12);
-}
 
 const Input = z.object({
   imageDataUrl: z.string().min(20),
 });
 
+// Gemini returns items shaped like:
+//   { box_2d: [ymin, xmin, ymax, xmax], mask: "data:image/png;base64,...", label: "..." }
+// where box_2d is normalized to 0-1000 and mask is a small PNG sized to that bbox.
+export interface GeminiSegment {
+  id: string;
+  label: string;
+  // normalized 0..1
+  box: { x: number; y: number; w: number; h: number };
+  maskDataUrl: string; // bbox-sized white-on-black PNG
+}
+
+function stripCodeFence(t: string): string {
+  const m = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  return (m ? m[1] : t).trim();
+}
+
 export const segmentImageLayers = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
-  .handler(async ({ data }) => {
-    // 1. Labels
-    const labels = await labelElements(data.imageDataUrl);
-    if (labels.length === 0) throw new Error("No labels detected in image");
+  .handler(async ({ data }): Promise<{ layers: GeminiSegment[] }> => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("LOVABLE_API_KEY missing");
 
-    // 2. Grounded SAM — one call, all labels
-    // schananas/grounded_sam takes: image (url/data), mask_prompt (comma labels)
-    const gs = await runReplicate("schananas/grounded_sam", {
-      image_url: data.imageDataUrl,
-      mask_prompt: labels.join(","),
-      negative_mask_prompt: "",
-      adjustment_factor: 0,
+    const prompt = `Give the segmentation masks for every distinct visual element in this image (characters, icons, titles, cards, arrows, footer, robots, etc.).
+Output a JSON list where each entry has:
+- "box_2d": [ymin, xmin, ymax, xmax] normalized to 0-1000
+- "mask": a base64 PNG data URL of the mask (white=object, black=background), sized to the bbox
+- "label": a short lowercase descriptive noun phrase
+Return ONLY the JSON array, no prose. Max 15 items. Prefer merging tiny sub-parts into their parent element.`;
+
+    const res = await fetch(`${AI_GATEWAY}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Lovable-API-Key": key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-pro",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: data.imageDataUrl } },
+            ],
+          },
+        ],
+      }),
     });
 
-    // Response shape varies. Log to help debug and be tolerant.
-    console.log("[grounded_sam] output keys:", Object.keys(gs?.output ?? {}));
-
-    const output = gs.output;
-    // Common shapes:
-    //   { masks: [url,...], individual_masks: [url,...], json_data: {...} }
-    //   [url, url, ...]  (annotated + masks)
-    //   { mask: url, image: url }
-    let maskUrls: string[] = [];
-    if (Array.isArray(output)) {
-      maskUrls = output.filter((u): u is string => typeof u === "string" && u.includes(".png"));
-    } else if (output && typeof output === "object") {
-      const candidates = [
-        (output as any).individual_masks,
-        (output as any).masks,
-        (output as any).mask_images,
-      ];
-      for (const c of candidates) {
-        if (Array.isArray(c) && c.length > 0) {
-          maskUrls = c.filter((u): u is string => typeof u === "string");
-          break;
-        }
-      }
-      if (maskUrls.length === 0 && typeof (output as any).mask === "string") {
-        maskUrls = [(output as any).mask];
-      }
+    if (!res.ok) {
+      const body = await res.text();
+      if (res.status === 429) throw new Error("Rate limited by AI Gateway. Retry in a moment.");
+      if (res.status === 402) throw new Error("Lovable AI credits exhausted. Add credits in workspace settings.");
+      throw new Error(`Gemini segmentation failed [${res.status}]: ${body.slice(0, 400)}`);
     }
 
-    if (maskUrls.length === 0) {
-      throw new Error(`grounded_sam returned no masks. Raw output: ${JSON.stringify(output).slice(0, 400)}`);
+    const j = await res.json();
+    const text: string = j?.choices?.[0]?.message?.content ?? "";
+    const cleaned = stripCodeFence(text);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // Try to extract the first JSON array substring
+      const m = cleaned.match(/\[[\s\S]*\]/);
+      if (!m) throw new Error(`Could not parse Gemini output: ${text.slice(0, 300)}`);
+      parsed = JSON.parse(m[0]);
     }
 
-    // Pair masks with labels by index (best effort — schananas returns 1 mask per label in order)
-    const layers = maskUrls.map((maskUrl, i) => ({
-      id: `layer-${i}`,
-      label: labels[i] ?? `element-${i + 1}`,
-      maskUrl,
-    }));
+    if (!Array.isArray(parsed)) throw new Error("Gemini did not return a JSON array");
 
-    return { labels, layers, rawOutput: output };
+    const layers: GeminiSegment[] = [];
+    parsed.forEach((item: any, i: number) => {
+      const box = item?.box_2d;
+      const mask = item?.mask;
+      const label = String(item?.label ?? `element-${i + 1}`).toLowerCase().trim();
+      if (!Array.isArray(box) || box.length !== 4) return;
+      if (typeof mask !== "string" || !mask.startsWith("data:image")) return;
+      const [ymin, xmin, ymax, xmax] = box.map(Number);
+      if ([ymin, xmin, ymax, xmax].some((n) => !Number.isFinite(n))) return;
+      layers.push({
+        id: `layer-${i}`,
+        label,
+        box: {
+          x: xmin / 1000,
+          y: ymin / 1000,
+          w: Math.max(0, xmax - xmin) / 1000,
+          h: Math.max(0, ymax - ymin) / 1000,
+        },
+        maskDataUrl: mask,
+      });
+    });
+
+    if (layers.length === 0) {
+      throw new Error(`No usable segments in Gemini response. Raw: ${text.slice(0, 300)}`);
+    }
+
+    return { layers };
   });

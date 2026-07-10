@@ -99,3 +99,32 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
   a.click();
   a.remove();
 }
+
+/**
+ * Build a full-size white-on-black mask by pasting a bbox-sized mask
+ * (as returned by Gemini segmentation) onto a black canvas at the
+ * normalized bbox position, then extract the transparent layer.
+ */
+export async function extractLayerFromBboxMask(
+  sourceUrl: string,
+  bboxMaskUrl: string,
+  normBox: { x: number; y: number; w: number; h: number },
+): Promise<LayerBitmap> {
+  const [src, mask] = await Promise.all([loadImg(sourceUrl), loadImg(bboxMaskUrl)]);
+  const W = src.naturalWidth;
+  const H = src.naturalHeight;
+  const bx = Math.round(normBox.x * W);
+  const by = Math.round(normBox.y * H);
+  const bw = Math.max(1, Math.round(normBox.w * W));
+  const bh = Math.max(1, Math.round(normBox.h * H));
+
+  const full = document.createElement("canvas");
+  full.width = W;
+  full.height = H;
+  const fctx = full.getContext("2d")!;
+  fctx.fillStyle = "#000";
+  fctx.fillRect(0, 0, W, H);
+  fctx.drawImage(mask, bx, by, bw, bh);
+  const fullMaskUrl = full.toDataURL("image/png");
+  return extractLayer(sourceUrl, fullMaskUrl);
+}

@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { segmentImageLayers } from "@/lib/segment-layers.functions";
-import { extractLayer, downloadDataUrl, type LayerBitmap } from "@/lib/layer-compose";
+import { extractLayerFromBboxMask, downloadDataUrl, type LayerBitmap } from "@/lib/layer-compose";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
@@ -54,8 +54,7 @@ function SegmentLab() {
     setError(null);
     setLayers([]);
     try {
-      setStatus("Labeling elements with vision model…");
-      setStatus("Running Grounded-SAM on Replicate (30–90s)…");
+      setStatus("Segmenting with Gemini 2.5 Pro (10–30s)…");
       const res = await runSegment({ data: { imageDataUrl: imageUrl } });
       setStatus(`Got ${res.layers.length} masks. Extracting transparent PNGs…`);
 
@@ -64,7 +63,7 @@ function SegmentLab() {
         const l = res.layers[i];
         setStatus(`Extracting layer ${i + 1}/${res.layers.length}: ${l.label}`);
         try {
-          const b = await extractLayer(imageUrl, l.maskUrl);
+          const b = await extractLayerFromBboxMask(imageUrl, l.maskDataUrl, l.box);
           bitmaps.push({
             ...b,
             id: l.id,
