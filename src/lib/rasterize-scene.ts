@@ -212,13 +212,14 @@ export function drawImageSceneFrame(
           h: el.bbox.h,
         }
       : null;
-    const pos = bboxPos ?? layout[i] ?? { x: el.x, y: el.y, w: el.w, h: undefined as number | undefined };
+    const pos: { x: number; y: number; w: number; h?: number } =
+      bboxPos ?? layout[i] ?? { x: el.x, y: el.y, w: el.w };
     const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
     const p = Math.min(1, (progress - el.appearAt) / revealWindow);
     const eased = easeOutCubic(p);
 
     const boxW = innerW * pos.w;
-    const boxH = pos.h != null ? innerH * pos.h : boxW; // bbox uses aspect, else square
+    const boxH = pos.h != null ? innerH * pos.h : boxW;
     const iw = img.naturalWidth || 1;
     const ih = img.naturalHeight || 1;
     const ratio = ih / iw;
