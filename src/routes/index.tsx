@@ -664,15 +664,21 @@ function Index() {
 
         <div className="space-y-4">
           {mode === "script" && (
-            <textarea
-              value={script}
-              onChange={(e) => setScript(e.target.value)}
-              rows={8}
-              className="w-full rounded-lg border bg-card p-4 text-sm outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Paste your explainer script here…"
-              disabled={running}
-            />
+            <div className="space-y-2">
+              <textarea
+                value={script}
+                onChange={(e) => setScript(e.target.value)}
+                rows={10}
+                className="w-full rounded-lg border bg-card p-4 text-sm outline-none focus:ring-2 focus:ring-ring"
+                placeholder={`Tag each scene with [scene N - TYPE], then the narration text.\n\nExample:\n[scene 1 - AI Image] Every day, billions of people search the web for answers.\n[scene 2 - AI Image] Now, AI can understand what you actually mean.\n[scene 3 - Code Typing] const answer = await ai.ask(query);`}
+                disabled={running}
+              />
+              <p className="text-xs text-muted-foreground">
+                Supported types: <code>AI Image</code>, <code>Code Typing</code>, <code>Code Morph</code>, <code>Code Scroll</code>, <code>Code Flight</code>. Without tags, we auto-chunk the script into scenes.
+              </p>
+            </div>
           )}
+
 
           {mode === "audio" && (
             <div
