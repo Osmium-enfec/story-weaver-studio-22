@@ -132,7 +132,7 @@ export async function exportToMp4(
       }
     }
 
-    onProgress(`encoding scene ${i + 1}/${scenes.length}`, unitsDone / totalUnits);
+    onProgress(`encoding scene ${i + 1}/${scenes.length}`, frac());
 
     const segName = `seg${i}.mp4`;
     await ffmpeg.exec([
