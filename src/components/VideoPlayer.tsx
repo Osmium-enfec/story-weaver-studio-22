@@ -95,10 +95,8 @@ function ImageScene({
         const topPct = single ? 50 : el.y * 100;
 
         return (
-          <img
+          <div
             key={el.id}
-            src={el.mediaUrl}
-            alt=""
             className="absolute select-none"
             style={{
               left: `${leftPct}%`,
@@ -107,12 +105,32 @@ function ImageScene({
               transform: `translate(-50%, -50%) ${transform}`,
               transformOrigin: "center center",
               opacity,
-              mixBlendMode: "multiply",
-              transition: "none",
               pointerEvents: "none",
             }}
-            draggable={false}
-          />
+          >
+            <img
+              src={el.mediaUrl}
+              alt=""
+              className="block w-full"
+              style={{ mixBlendMode: "multiply" }}
+              draggable={false}
+            />
+            {el.label && (
+              <div
+                className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center"
+                style={{
+                  top: "calc(100% - 6px)",
+                  fontFamily: '"Caveat", "Kalam", cursive',
+                  fontWeight: 700,
+                  fontSize: `${Math.max(14, width * 60)}px`,
+                  color: "#1a1a1a",
+                  textShadow: "0 1px 0 rgba(255,255,255,0.9)",
+                }}
+              >
+                {el.label}
+              </div>
+            )}
+          </div>
         );
       })}
     </div>
