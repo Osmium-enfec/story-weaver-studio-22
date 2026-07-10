@@ -791,6 +791,7 @@ function BackgroundPicker({
   const preview = (bg: SceneBackground) => {
     if (bg.kind === "solid") return bg.color;
     if (bg.kind === "gradient") return `linear-gradient(${bg.angle ?? 135}deg, ${bg.from}, ${bg.to})`;
+    if (bg.kind === "video") return "linear-gradient(135deg, #0f172a, #6366f1)";
     return "repeating-linear-gradient(45deg, #f8fafc 0 8px, #eef2f7 8px 16px)";
   };
   return (
