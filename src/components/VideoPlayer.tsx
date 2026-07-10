@@ -189,7 +189,7 @@ function ImageScene({
                   left: `${pos.x * 100}%`,
                   top: `${pos.y * 100}%`,
                   width: `${pos.w * 100}%`,
-                  aspectRatio: "1 / 1",
+                  ...(pos.h != null ? { height: `${pos.h * 100}%` } : { aspectRatio: "1 / 1" }),
                   transform: `translate(-50%, -50%) ${transform}`,
                   transformOrigin: "center center",
                   opacity,
