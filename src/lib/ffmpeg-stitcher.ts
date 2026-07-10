@@ -9,6 +9,7 @@ import {
   preloadSceneAssets,
   drawSceneFrame,
   seekVideo,
+  loadVideo,
 } from "./rasterize-scene";
 import { DEFAULT_BACKGROUND, type SceneBackground } from "./scene-background";
 import { preloadTransparent } from "./remove-white-bg";
