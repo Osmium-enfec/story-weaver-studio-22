@@ -767,7 +767,6 @@ function Index() {
   );
 }
 
-import bgLoopAsset from "@/assets/bg-loop.mp4.asset.json";
 
 const BG_PRESETS: { label: string; bg: SceneBackground }[] = [
   { label: "Video Loop", bg: { kind: "video", url: bgLoopAsset.url } },
