@@ -215,7 +215,16 @@ function SceneStage({
   background: SceneBackground;
   transparentMap: Map<string, string>;
 }) {
-  console.log("[SceneStage]", { id: scene.id, kind: scene.kind, hasCode: !!scene.code, codeLen: scene.code?.length, codeVariant: scene.codeVariant });
+  console.log("[SceneStage]", {
+    id: scene.id,
+    kind: scene.kind,
+    codeLen: scene.code?.length ?? 0,
+    codeVariant: scene.codeVariant ?? null,
+    elements: (scene.elements ?? []).length,
+    elementUrls: (scene.elements ?? []).map((e) => e.mediaUrl?.slice(0, 60)),
+    bgUrl: scene.backgroundUrl?.slice(0, 60) ?? null,
+    subtitle: scene.subtitle,
+  });
   if (scene.kind === "code") {
     return (
       <CodeScene
