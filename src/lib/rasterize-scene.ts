@@ -204,18 +204,30 @@ export function drawImageSceneFrame(
 
   rawElements.forEach(({ img, el, transparent }, i) => {
     if (progress < el.appearAt) return;
-    const pos = layout[i] ?? { x: el.x, y: el.y, w: el.w };
+    const bboxPos = el.bbox
+      ? {
+          x: el.bbox.x + el.bbox.w / 2,
+          y: el.bbox.y + el.bbox.h / 2,
+          w: el.bbox.w,
+          h: el.bbox.h,
+        }
+      : null;
+    const pos: { x: number; y: number; w: number; h?: number } =
+      bboxPos ?? layout[i] ?? { x: el.x, y: el.y, w: el.w };
     const revealWindow = Math.max(0.02, 450 / Math.max(1, scene.durationMs));
     const p = Math.min(1, (progress - el.appearAt) / revealWindow);
     const eased = easeOutCubic(p);
 
     const boxW = innerW * pos.w;
-    const boxH = boxW; // square box (object-contain)
+    const boxH = pos.h != null ? innerH * pos.h : boxW;
     const iw = img.naturalWidth || 1;
     const ih = img.naturalHeight || 1;
     const ratio = ih / iw;
-    const targetW = ratio > 1 ? boxW / ratio : boxW;
-    const targetH = ratio > 1 ? boxH : boxW * ratio;
+    // Fit-contain into box
+    const boxRatio = boxH / boxW;
+    let targetW: number, targetH: number;
+    if (ratio > boxRatio) { targetH = boxH; targetW = boxH / ratio; }
+    else { targetW = boxW; targetH = boxW * ratio; }
     const cx = innerX + pos.x * innerW;
     const cy = innerY + pos.y * innerH;
 
