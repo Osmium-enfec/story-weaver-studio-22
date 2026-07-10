@@ -330,7 +330,7 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
       const looksLikeCode =
         CODE_HINT_RE.test(sentence) ||
         (providedCode.length > 20 && /[{};=()]/.test(providedCode));
-      const kind: SceneKind = rawKind === "code" && looksLikeCode ? "code" : "image";
+      const kind: SceneKind = rawKind === "code" && (manual || looksLikeCode) ? "code" : "image";
       const codeVariant: CodeVariant = ["typing", "morph", "scroll", "flight"].includes(
         meta?.codeVariant,
       )
