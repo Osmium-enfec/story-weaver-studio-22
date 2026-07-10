@@ -1,5 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+// Layout on a 16:9 canvas. Each entry maps to a tile index (0..8, row-major).
+// x/y/w/h are fractions of canvas width/height. x/y = top-left.
+const COMPOSE_LAYOUT: Array<{ tile: number; x: number; y: number; w: number; h: number }> = [
+  { tile: 0, x: 0.10, y: 0.00, w: 0.80, h: 0.15 }, // 1st: 80w x 15h
+  { tile: 1, x: 0.20, y: 0.15, w: 0.60, h: 0.10 }, // 2nd: 60w x 10h
+  // Row of 4 @ 23w x 65h, centered (4*23=92, side pad 4%)
+  { tile: 2, x: 0.04, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 3, x: 0.27, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 4, x: 0.50, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 5, x: 0.73, y: 0.25, w: 0.23, h: 0.65 },
+  { tile: 6, x: 0.10, y: 0.90, w: 0.80, h: 0.10 }, // last: 80w x 10h
+];
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
