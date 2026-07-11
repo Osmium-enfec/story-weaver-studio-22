@@ -199,15 +199,17 @@ function SegmentLab() {
 
   const playReveal = useCallback(() => {
     clearRevealTimers();
-    // Reset then fade covers out sequentially with a 400ms stagger.
+    // Reset then fade covers out one at a time with a clear interval so each
+    // element reads before the next appears.
     setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
-    const STAGGER = 400;
+    const INTERVAL = 1100; // ms between successive reveals
+    const START_DELAY = 300;
     covers.forEach((_, i) => {
       const t = setTimeout(() => {
         setCovers((cs) =>
           cs.map((c, j) => (j === i ? { ...c, opacity: 0 } : c)),
         );
-      }, 200 + i * STAGGER);
+      }, START_DELAY + i * INTERVAL);
       revealTimers.current.push(t);
     });
   }, [covers, clearRevealTimers]);
