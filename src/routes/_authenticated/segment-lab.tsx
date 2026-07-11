@@ -165,11 +165,16 @@ function SegmentLab() {
       bitmaps.forEach((b, i) => (b.zIndex = i));
       setLayers(bitmaps);
 
-      // Reveal order: largest area first (big shapes, then details). Residual last.
+      // Reveal order: top-to-bottom, left-to-right within the same row.
+      // Residual (stray ink) always last.
+      const ROW_TOL = 60; // px tolerance to consider two elements on the same row
       coverList.sort((a, b) => {
         if (a.id === "__residual__") return 1;
         if (b.id === "__residual__") return -1;
-        return b.bitmap.area - a.bitmap.area;
+        const ay = a.bitmap.bbox.y;
+        const by = b.bitmap.bbox.y;
+        if (Math.abs(ay - by) > ROW_TOL) return ay - by;
+        return a.bitmap.bbox.x - b.bitmap.bbox.x;
       });
       setCovers(coverList);
       setMode("reveal");
