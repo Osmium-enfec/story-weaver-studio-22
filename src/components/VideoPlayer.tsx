@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
@@ -11,6 +11,7 @@ import {
 } from "@/lib/scene-background";
 import { getTransparentUrl } from "@/lib/remove-white-bg";
 import { layoutFor } from "@/lib/scene-layouts";
+import { coverOpacityAt, type RevealCover } from "@/lib/build-reveal";
 
 
 
