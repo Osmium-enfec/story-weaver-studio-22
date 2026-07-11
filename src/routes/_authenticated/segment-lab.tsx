@@ -165,11 +165,16 @@ function SegmentLab() {
       bitmaps.forEach((b, i) => (b.zIndex = i));
       setLayers(bitmaps);
 
-      // Reveal order: largest area first (big shapes, then details). Residual last.
+      // Reveal order: top-to-bottom, left-to-right within the same row.
+      // Residual (stray ink) always last.
+      const ROW_TOL = 60; // px tolerance to consider two elements on the same row
       coverList.sort((a, b) => {
         if (a.id === "__residual__") return 1;
         if (b.id === "__residual__") return -1;
-        return b.bitmap.area - a.bitmap.area;
+        const ay = a.bitmap.bbox.y;
+        const by = b.bitmap.bbox.y;
+        if (Math.abs(ay - by) > ROW_TOL) return ay - by;
+        return a.bitmap.bbox.x - b.bitmap.bbox.x;
       });
       setCovers(coverList);
       setMode("reveal");
@@ -194,15 +199,17 @@ function SegmentLab() {
 
   const playReveal = useCallback(() => {
     clearRevealTimers();
-    // Reset then fade covers out sequentially with a 400ms stagger.
+    // Reset then fade covers out one at a time with a clear interval so each
+    // element reads before the next appears.
     setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
-    const STAGGER = 400;
+    const INTERVAL = 1100; // ms between successive reveals
+    const START_DELAY = 300;
     covers.forEach((_, i) => {
       const t = setTimeout(() => {
         setCovers((cs) =>
           cs.map((c, j) => (j === i ? { ...c, opacity: 0 } : c)),
         );
-      }, 200 + i * STAGGER);
+      }, START_DELAY + i * INTERVAL);
       revealTimers.current.push(t);
     });
   }, [covers, clearRevealTimers]);
