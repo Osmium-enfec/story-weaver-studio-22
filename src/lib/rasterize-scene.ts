@@ -158,7 +158,7 @@ export function drawImageSceneFrame(
     ctx.clip();
   }
 
-  const bg = !customBg && scene.backgroundUrl ? assets.bg.get(scene.backgroundUrl) ?? null : null;
+  const bg = scene.backgroundUrl ? assets.bg.get(scene.backgroundUrl) ?? null : null;
   if (bg) {
     const t = progress;
     let scale = 1.02;
@@ -167,26 +167,12 @@ export function drawImageSceneFrame(
     else if (scene.animation === "kenburns-out") scale = 1.08 - 0.08 * t;
     else if (scene.animation === "slide-left") { scale = 1.04; tx = (0.5 - t) * 20; }
     ctx.save();
-    ctx.translate(W / 2 + tx, H / 2);
+    ctx.translate(innerX + innerW / 2 + tx, innerY + innerH / 2);
     ctx.scale(scale, scale);
-    drawContain(ctx, bg, -W / 2, -H / 2, W, H, "cover");
-    ctx.restore();
-  }
-
-  // Title (hand-drawn Excalidraw-style text) at the top of the card.
-  if (scene.title) {
-    const titleSize = Math.max(28, Math.round(innerH * 0.09));
-    ctx.save();
-    ctx.font = `700 ${titleSize}px Caveat, Kalam, cursive`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    const tx = innerX + innerW / 2;
-    const ty = innerY + innerH * 0.03;
-    ctx.lineWidth = Math.max(4, titleSize * 0.12);
-    ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    ctx.strokeText(scene.title, tx, ty);
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillText(scene.title, tx, ty);
+    // Match live player: object-contain over a white card background.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(-innerW / 2, -innerH / 2, innerW, innerH);
+    drawContain(ctx, bg, -innerW / 2, -innerH / 2, innerW, innerH, "contain");
     ctx.restore();
   }
 
