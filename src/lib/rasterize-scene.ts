@@ -222,7 +222,6 @@ export function drawImageSceneFrame(
         );
         ctx.restore();
       });
-      }
     }
   }
 
