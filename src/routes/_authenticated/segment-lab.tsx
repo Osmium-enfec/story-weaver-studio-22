@@ -68,7 +68,7 @@ function SegmentLab() {
         const l = res.layers[i];
         setStatus(`Extracting layer ${i + 1}/${res.layers.length}: ${l.label}`);
         try {
-          const b = await extractLayerFromBboxMask(imageUrl, l.maskDataUrl, l.box);
+          const b = await extractLayer(imageUrl, l.maskUrl);
           bitmaps.push({
             ...b,
             id: l.id,
