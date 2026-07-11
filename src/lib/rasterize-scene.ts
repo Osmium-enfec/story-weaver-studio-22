@@ -57,12 +57,14 @@ export interface SceneAssets {
   bg: Map<string, HTMLImageElement>;
   el: Map<string, HTMLImageElement>;
   vid: Map<string, HTMLVideoElement>;
+  cov: Map<string, HTMLImageElement>;
 }
 
 export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> {
   const bg = new Map<string, HTMLImageElement>();
   const el = new Map<string, HTMLImageElement>();
   const vid = new Map<string, HTMLVideoElement>();
+  const cov = new Map<string, HTMLImageElement>();
 
   const jobs: Promise<void>[] = [];
   for (const s of scenes) {
@@ -81,6 +83,14 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
           );
         }
       }
+      for (const c of s.revealCovers ?? []) {
+        if (!cov.has(c.pngUrl)) {
+          const url = c.pngUrl;
+          jobs.push(
+            loadImage(url).then((img) => { cov.set(url, img); }).catch(() => {}),
+          );
+        }
+      }
     } else if (s.kind === "stock" && s.mediaUrl) {
       const url = s.mediaUrl;
       if (!vid.has(url)) {
@@ -91,7 +101,7 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
     }
   }
   await Promise.all(jobs);
-  return { bg, el, vid };
+  return { bg, el, vid, cov };
 }
 
 function drawContain(
@@ -174,6 +184,42 @@ export function drawImageSceneFrame(
     ctx.fillRect(-innerW / 2, -innerH / 2, innerW, innerH);
     drawContain(ctx, bg, -innerW / 2, -innerH / 2, innerW, innerH, "contain");
     ctx.restore();
+
+    // White covers → fade out to reveal underlying image (all covers together)
+    const covers = scene.revealCovers ?? [];
+    if (covers.length > 0) {
+      const aspect = scene.bgAspect ?? (bg.naturalWidth / Math.max(1, bg.naturalHeight));
+      const cr = innerW / innerH;
+      let dw: number, dh: number;
+      if (aspect > cr) { dw = innerW; dh = innerW / aspect; }
+      else { dh = innerH; dw = innerH * aspect; }
+      const dx = innerX + (innerW - dw) / 2;
+      const dy = innerY + (innerH - dh) / 2;
+      // Same easing as the live player.
+      const FADE_START = 0.03, FADE_END = 0.35;
+      let alpha = 1;
+      if (progress >= FADE_END) alpha = 0;
+      else if (progress > FADE_START) {
+        const tt = (progress - FADE_START) / (FADE_END - FADE_START);
+        alpha = Math.pow(1 - tt, 3);
+      }
+      if (alpha > 0) {
+        for (const c of covers) {
+          const img = assets.cov.get(c.pngUrl);
+          if (!img) continue;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(
+            img,
+            dx + c.bbox.x * dw,
+            dy + c.bbox.y * dh,
+            c.bbox.w * dw,
+            c.bbox.h * dh,
+          );
+          ctx.restore();
+        }
+      }
+    }
   }
 
   const rawElements = (scene.elements ?? [])

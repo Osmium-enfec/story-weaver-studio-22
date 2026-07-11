@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
 import type { CompositionElement } from "@/lib/explainer.functions";
@@ -11,6 +11,7 @@ import {
 } from "@/lib/scene-background";
 import { getTransparentUrl } from "@/lib/remove-white-bg";
 import { layoutFor } from "@/lib/scene-layouts";
+import { coverOpacityAt, type RevealCover } from "@/lib/build-reveal";
 
 
 
@@ -45,6 +46,66 @@ export interface Scene {
   masterAudioUrl?: string;
   startMs?: number;
   endMs?: number;
+  /** SAM-derived white covers overlaid on backgroundUrl; fade out to reveal
+   *  the underlying image at the start of the scene. */
+  revealCovers?: RevealCover[];
+  /** Natural aspect (w/h) of backgroundUrl — needed to place covers on the
+   *  object-contain draw rect. Defaults to 1.5 (composite is 1536x1024). */
+  bgAspect?: number;
+}
+
+function RevealCoverLayer({
+  covers,
+  aspect,
+  opacity,
+}: {
+  covers: RevealCover[];
+  aspect: number;
+  opacity: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const compute = () => {
+      const cw = el.clientWidth;
+      const ch = el.clientHeight;
+      if (!cw || !ch) return;
+      const cr = cw / ch;
+      let w: number, h: number;
+      if (aspect > cr) { w = cw; h = cw / aspect; }
+      else { h = ch; w = ch * aspect; }
+      setRect({ x: (cw - w) / 2, y: (ch - h) / 2, w, h });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [aspect]);
+
+  return (
+    <div ref={ref} className="pointer-events-none absolute inset-0">
+      {rect &&
+        covers.map((c) => (
+          <img
+            key={c.id}
+            src={c.pngUrl}
+            alt=""
+            style={{
+              position: "absolute",
+              left: rect.x + c.bbox.x * rect.w,
+              top: rect.y + c.bbox.y * rect.h,
+              width: c.bbox.w * rect.w,
+              height: c.bbox.h * rect.h,
+              opacity,
+            }}
+            draggable={false}
+          />
+        ))}
+    </div>
+  );
 }
 
 function ImageScene({
@@ -100,12 +161,21 @@ function ImageScene({
         }}
       >
         {scene.backgroundUrl && (
-          <img
-            src={scene.backgroundUrl}
-            alt=""
-            className="absolute inset-0 h-full w-full object-contain transition-transform duration-100 ease-linear"
-            style={{ ...bgStyle, background: "#ffffff" }}
-          />
+          <>
+            <img
+              src={scene.backgroundUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-contain transition-transform duration-100 ease-linear"
+              style={{ ...bgStyle, background: "#ffffff" }}
+            />
+            {scene.revealCovers && scene.revealCovers.length > 0 && (
+              <RevealCoverLayer
+                covers={scene.revealCovers}
+                aspect={scene.bgAspect ?? 1.5}
+                opacity={coverOpacityAt(progress)}
+              />
+            )}
+          </>
         )}
         {(() => {
           const els = scene.elements ?? [];

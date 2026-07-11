@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   Loader2,
   Sparkles,
@@ -15,6 +16,8 @@ import {
   generateSceneComposite,
   type ScenePlan,
 } from "@/lib/explainer.functions";
+import { segmentImageLayers } from "@/lib/segment-layers.functions";
+import { buildSceneRevealCovers } from "@/lib/build-reveal";
 import { findOrGenerateImage } from "@/lib/image-library.functions";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
@@ -111,6 +114,7 @@ function Index() {
   const [dragOver, setDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const navigate = useNavigate();
+  const runSegment = useServerFn(segmentImageLayers);
 
   const plansRef = useRef<ScenePlan[]>([]);
   
@@ -472,6 +476,46 @@ function Index() {
         setResults(merged);
       }
 
+      // ---------- SAM white-cover reveal pass ----------
+      // For every image scene with a backgroundUrl, segment it and build
+      // white covers so the image reveals with a fade-in during playback.
+      const sceneList = resultsRef.current;
+      const CONC = 2;
+      let rc = 0;
+      async function revealWorker() {
+        while (true) {
+          const i = rc++;
+          if (i >= sceneList.length) return;
+          const s = sceneList[i];
+          if (!s || s.kind !== "image" || !s.backgroundUrl) continue;
+          pushStep(i, { name: "reveal-analyze", status: "running" });
+          try {
+            const build = await buildSceneRevealCovers(s.backgroundUrl, runSegment as any);
+            if (build && build.covers.length > 0) {
+              const updated: Scene = {
+                ...s,
+                revealCovers: build.covers,
+                bgAspect: build.aspect,
+              };
+              sceneList[i] = updated;
+              resultsRef.current = sceneList;
+              setResults([...sceneList]);
+              pushStep(i, {
+                name: "reveal-analyze",
+                status: "ok",
+                message: `${build.covers.length} covers`,
+              });
+            } else {
+              pushStep(i, { name: "reveal-analyze", status: "warn", message: "no covers" });
+            }
+          } catch (e: any) {
+            console.warn("[reveal] scene", i, "failed:", e?.message);
+            pushStep(i, { name: "reveal-analyze", status: "warn", message: e?.message || "failed" });
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: CONC }, revealWorker));
+
       // Final autosave with all scenes settled.
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       persist(undefined, true);
@@ -560,7 +604,10 @@ function Index() {
                 mediaUrl: await toPortableUrl(el.mediaUrl, userId, pid, extFromUrl(el.mediaUrl, "png")),
               })),
             );
-            return { ...s, audioUrl, masterAudioUrl, backgroundUrl, elements };
+            // Strip revealCovers (data URLs) from persisted payload — they'll
+            // be rebuilt on demand and would otherwise bloat JSONB.
+            const { revealCovers: _rc, ...rest } = s;
+            return { ...rest, audioUrl, masterAudioUrl, backgroundUrl, elements };
           }
           return { ...s, audioUrl, masterAudioUrl };
         }),
