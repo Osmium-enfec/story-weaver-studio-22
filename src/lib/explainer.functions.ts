@@ -539,23 +539,21 @@ async function generateCompositeImage(prompt: string, title?: string): Promise<s
 - Generous whitespace. NOTHING overlaps. One idea per card.
 - CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own HAND-DRAWN IMPERFECT box — a wobbly, slightly wavy rounded rectangle with a sketchy black marker outline (NEVER a perfect geometric rectangle). Each side has small wiggles/kinks, corners slightly asymmetric and unevenly rounded, occasional double stroke on one edge — like drawn quickly by hand with a marker. Flat pastel fill inside. This includes the title, subtitle, each example card, every code-chip, and any mascot/doodle. Do NOT draw loose icons or floating text without such a hand-drawn box.
 
-=== REQUIRED COMPOSITION (16:9, 1536x1024) ===
-1. TOP: a hand-drawn RIBBON/BANNER (a wide rounded-rectangle box) centered at the top, pastel BLUE #DBEAFE fill with sketchy black outline and small blue sparkle marks on both sides. Inside, write ${title ? `"${title}"` : "the short rule/topic title"} in large handwritten marker text, blue #2563EB.
-2. Directly under the banner: a one-line handwritten SUBTITLE inside a small rounded-rectangle pill/box with a soft pastel BLUE or GRAY fill, describing the rule, with a hand-drawn wavy blue underline beneath it.
-3. MIDDLE ROW: two large rounded-rectangle CARDS side by side with sketchy black outlines and a subtle sketched shadow (a second offset outline, not a real shadow):
-     - LEFT card = green #DCFCE7 fill. Header row inside: a green circle-check ✓ + the word "Valid" in green #16A34A (underlined). Below the header, show the concrete VALID examples from the scene as small rounded green code-chips (monospace-looking handwritten text, e.g. \`user1\`, \`model2\`), plus one tiny supporting doodle (smiling computer or thumbs-up) and a short handwritten caption like "numbers inside = okay".
-     - RIGHT card = red #FEE2E2 fill. Header row: a red circle-X ✗ + the word "Wrong" in red #DC2626 (underlined). Below, show the WRONG example as a red DASHED-outline code-chip (e.g. \`1user\`), a small confused Python-snake mascot with "??" and a red warning triangle nearby, and a short handwritten caption like "starts with a number = not allowed".
-4. BOTTOM: a wide rounded SUMMARY PILL/box, pastel LAVENDER #EDE9FE fill, sketchy black outline. Inside: a small purple star doodle on the left, a small yellow lightbulb doodle on the right, and one handwritten summary sentence in the middle in black — with the KEY verb/negation (e.g. "cannot start") emphasized in purple #7C3AED.
+=== SCENE CONTENT (this is the ONLY source of truth for what to draw) ===
+${title ? `Title: ${title}\n` : ""}${prompt}
 
-=== SCENE CONTENT (use the concrete words/examples from this) ===
-${prompt}
+=== REQUIRED COMPOSITION (16:9, 1536x1024) ===
+1. TOP: a hand-drawn RIBBON/BANNER (wide rounded-rectangle box) centered at the top, pastel BLUE #DBEAFE fill with sketchy black outline and small blue sparkle marks on both sides. Inside, write ${title ? `"${title}"` : "a SHORT title derived from the scene content above (max 5 words)"} in large handwritten marker text, blue #2563EB.
+2. Directly under the banner: a one-line handwritten SUBTITLE inside a small rounded-rectangle pill/box with a soft pastel BLUE or GRAY fill, summarizing the scene content in ONE short sentence, with a hand-drawn wavy blue underline beneath it.
+3. MIDDLE: 2–4 hand-drawn rounded-rectangle CARDS arranged in a clean row or 2x2 grid with generous whitespace. Each card visualizes ONE concrete idea, example, or contrast taken DIRECTLY from the scene content above. Pick pastel fills that match meaning: green #DCFCE7 for positive/correct/valid, red #FEE2E2 for negative/wrong/error, yellow #FEF3C7 for hint/warning, blue #DBEAFE for neutral/info, purple #EDE9FE for summary/tip. Each card has a short handwritten header, a tiny relevant doodle icon, and a short handwritten caption or code-chip — all describing THIS specific scene, never a generic Python-variable-name example.
+4. BOTTOM: a wide rounded SUMMARY PILL/box, pastel LAVENDER #EDE9FE fill, sketchy black outline. Inside: a small purple star doodle on the left, a small yellow lightbulb doodle on the right, and ONE handwritten takeaway sentence in the middle that paraphrases the scene content — with the KEY word emphasized in purple #7C3AED.
 
 === HARD RULES ===
 - 16:9 single composition, pure white background.
 - Everything is HAND-DRAWN, not typed/geometric. Lines slightly wobble.
-- Every element must be inside its own HAND-DRAWN wobbly imperfect box (wavy sketchy outline, slightly crooked corners, marker-style — NEVER a perfect rectangle). No floating objects, no bare text, no loose icons.
-- Do NOT invent extra rules or examples that aren't in the scene content. Use the exact code examples given (e.g. user1, model2, 1user).
-- No captions outside the three regions above. No page numbers, no watermarks, no logos.`;
+- Every element must be inside its own HAND-DRAWN wobbly imperfect box. No floating objects, no bare text, no loose icons.
+- The words, examples, icons and colors MUST reflect the SCENE CONTENT above. Do NOT default to Python variable-name rules, "Valid / Wrong", user1 / model2 / 1user, or any other example that is not literally in the scene content.
+- No captions outside the four regions above. No page numbers, no watermarks, no logos.`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
