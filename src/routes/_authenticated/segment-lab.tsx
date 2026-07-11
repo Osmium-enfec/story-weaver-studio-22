@@ -31,23 +31,55 @@ interface UILayer extends LayerBitmap {
 
 function SegmentLab() {
   const runSegment = useServerFn(segmentImageLayers);
+  const runGenerate = useServerFn(generateStyledImageWithLabels);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [knownLabels, setKnownLabels] = useState<string[] | null>(null);
   const [layers, setLayers] = useState<UILayer[]>([]);
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [genPrompt, setGenPrompt] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const onFile = useCallback(async (f: File) => {
-    setError(null);
-    setLayers([]);
-    const url = await fileToDataUrl(f);
+  const loadImage = useCallback((url: string) => {
     setImageUrl(url);
     const img = new Image();
     img.onload = () => setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
     img.src = url;
   }, []);
+
+  const onFile = useCallback(
+    async (f: File) => {
+      setError(null);
+      setLayers([]);
+      setKnownLabels(null);
+      const url = await fileToDataUrl(f);
+      loadImage(url);
+    },
+    [loadImage],
+  );
+
+  const generateFromText = useCallback(async () => {
+    if (!genPrompt.trim()) return;
+    setBusy(true);
+    setError(null);
+    setLayers([]);
+    setKnownLabels(null);
+    try {
+      setStatus("Planning elements & generating image (GPT + DALL·E)…");
+      const res = await runGenerate({ data: { prompt: genPrompt.trim() } });
+      loadImage(res.imageDataUrl);
+      setKnownLabels(res.labels);
+      setStatus(`Generated. ${res.labels.length} labels ready: ${res.labels.join(", ")}`);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }, [genPrompt, runGenerate, loadImage]);
+
 
   const analyze = useCallback(async () => {
     if (!imageUrl) return;
