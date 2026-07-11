@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { segmentImageLayers } from "@/lib/segment-layers.functions";
+import { generateStyledImageWithLabels } from "@/lib/generate-styled.functions";
 import { extractLayer, downloadDataUrl, type LayerBitmap } from "@/lib/layer-compose";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
@@ -30,23 +31,55 @@ interface UILayer extends LayerBitmap {
 
 function SegmentLab() {
   const runSegment = useServerFn(segmentImageLayers);
+  const runGenerate = useServerFn(generateStyledImageWithLabels);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [knownLabels, setKnownLabels] = useState<string[] | null>(null);
   const [layers, setLayers] = useState<UILayer[]>([]);
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [genPrompt, setGenPrompt] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const onFile = useCallback(async (f: File) => {
-    setError(null);
-    setLayers([]);
-    const url = await fileToDataUrl(f);
+  const loadImage = useCallback((url: string) => {
     setImageUrl(url);
     const img = new Image();
     img.onload = () => setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
     img.src = url;
   }, []);
+
+  const onFile = useCallback(
+    async (f: File) => {
+      setError(null);
+      setLayers([]);
+      setKnownLabels(null);
+      const url = await fileToDataUrl(f);
+      loadImage(url);
+    },
+    [loadImage],
+  );
+
+  const generateFromText = useCallback(async () => {
+    if (!genPrompt.trim()) return;
+    setBusy(true);
+    setError(null);
+    setLayers([]);
+    setKnownLabels(null);
+    try {
+      setStatus("Planning elements & generating image (GPT + DALL·E)…");
+      const res = await runGenerate({ data: { prompt: genPrompt.trim() } });
+      loadImage(res.imageDataUrl);
+      setKnownLabels(res.labels);
+      setStatus(`Generated. ${res.labels.length} labels ready: ${res.labels.join(", ")}`);
+    } catch (e: any) {
+      setError(e?.message ?? String(e));
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }, [genPrompt, runGenerate, loadImage]);
+
 
   const analyze = useCallback(async () => {
     if (!imageUrl) return;
@@ -54,8 +87,14 @@ function SegmentLab() {
     setError(null);
     setLayers([]);
     try {
-      setStatus("Segmenting with Gemini 2.5 Pro (10–30s)…");
-      const res = await runSegment({ data: { imageDataUrl: imageUrl } });
+      setStatus(
+        knownLabels && knownLabels.length > 0
+          ? `Segmenting with Grounded-SAM using ${knownLabels.length} known labels…`
+          : "Discovering labels (GPT) then segmenting with Grounded-SAM…",
+      );
+      const res = await runSegment({
+        data: { imageDataUrl: imageUrl, labels: knownLabels ?? undefined },
+      });
       if (res.fallback || res.error) {
         setError(res.error ?? "Segmentation failed. Please retry in a moment.");
         setStatus("");
@@ -93,7 +132,7 @@ function SegmentLab() {
     } finally {
       setBusy(false);
     }
-  }, [imageUrl, runSegment]);
+  }, [imageUrl, runSegment, knownLabels]);
 
   const toggle = (id: string) =>
     setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
@@ -114,13 +153,35 @@ function SegmentLab() {
       <div className="border-b bg-white px-6 py-4">
         <h1 className="text-xl font-semibold">Segment Lab — Magic Layer</h1>
         <p className="text-sm text-neutral-600">
-          Upload an image → get separate transparent layers via Gemini + Grounded-SAM.
+          Generate an Excalidraw-style image from text (or upload one) → segment it into transparent layers via Grounded-SAM.
         </p>
       </div>
 
       <div className="grid grid-cols-[320px_1fr_320px] gap-4 p-4">
         {/* LEFT */}
         <div className="space-y-3 rounded-lg border bg-white p-4">
+          <div className="space-y-2 rounded-md border border-dashed border-blue-300 bg-blue-50/50 p-2">
+            <div className="text-xs font-semibold text-blue-900">Generate from text</div>
+            <textarea
+              value={genPrompt}
+              onChange={(e) => setGenPrompt(e.target.value)}
+              placeholder="e.g. Rules for valid Python variable names: cannot start with a number"
+              rows={3}
+              className="w-full resize-none rounded border border-blue-200 bg-white p-2 text-xs"
+            />
+            <button
+              onClick={generateFromText}
+              disabled={busy || !genPrompt.trim()}
+              className="w-full rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40"
+            >
+              {busy ? "Working…" : "Generate image + labels"}
+            </button>
+          </div>
+
+          <div className="text-center text-[10px] uppercase tracking-wider text-neutral-400">
+            or upload
+          </div>
+
           <div
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
@@ -129,7 +190,7 @@ function SegmentLab() {
               if (f) onFile(f);
             }}
             onClick={() => fileInputRef.current?.click()}
-            className="flex h-40 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-neutral-300 text-sm text-neutral-500 hover:bg-neutral-50"
+            className="flex h-28 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-neutral-300 text-sm text-neutral-500 hover:bg-neutral-50"
           >
             {imageUrl ? "Drop new image or click" : "Drop image or click to upload"}
           </div>
@@ -143,6 +204,12 @@ function SegmentLab() {
               if (f) onFile(f);
             }}
           />
+          {knownLabels && knownLabels.length > 0 && (
+            <div className="rounded bg-green-50 p-2 text-[11px] text-green-900">
+              <div className="font-semibold">Baked-in labels ({knownLabels.length}):</div>
+              <div>{knownLabels.join(", ")}</div>
+            </div>
+          )}
           {imageUrl && (
             <div>
               <img src={imageUrl} alt="source" className="w-full rounded border" />

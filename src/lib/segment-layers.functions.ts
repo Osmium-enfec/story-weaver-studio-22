@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const Input = z.object({
   imageDataUrl: z.string().min(20),
+  labels: z.array(z.string()).optional(),
 });
 
 export interface ReplicateSegment {
@@ -94,7 +95,7 @@ async function discoverLabels(
     method: "POST",
     headers: { "Lovable-API-Key": lovableKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "openai/gpt-5",
       messages: [
         {
           role: "user",
@@ -133,11 +134,13 @@ export const segmentImageLayers = createServerFn({ method: "POST" })
     }
     const keys = { lovable, rep };
 
-    let labels: string[] = [];
-    try {
-      labels = await discoverLabels(data.imageDataUrl, lovable);
-    } catch (e: any) {
-      return { layers: [], fallback: true, error: `Label discovery: ${e?.message ?? e}` };
+    let labels: string[] = data.labels?.map((l) => l.toLowerCase().trim()).filter(Boolean) ?? [];
+    if (labels.length === 0) {
+      try {
+        labels = await discoverLabels(data.imageDataUrl, lovable);
+      } catch (e: any) {
+        return { layers: [], fallback: true, error: `Label discovery: ${e?.message ?? e}` };
+      }
     }
     if (labels.length === 0) {
       return { layers: [], fallback: true, error: "No labels discovered in image" };
