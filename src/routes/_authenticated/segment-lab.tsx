@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { detectBoxesInImage } from "@/lib/detect-boxes.functions";
+import { detectBoxesInImage, type DetectedBox } from "@/lib/detect-boxes.functions";
 import { generateStyledImageWithLabels } from "@/lib/generate-styled.functions";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
-  head: () => ({ meta: [{ title: "Segment Lab · Magic Layer" }] }),
+  head: () => ({ meta: [{ title: "Segment Lab · Box Reveal" }] }),
   component: SegmentLab,
 });
 
@@ -19,27 +19,17 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-interface UILayer extends LayerBitmap {
-  id: string;
-  label: string;
-  visible: boolean;
-  zIndex: number;
-  offsetX: number;
-  offsetY: number;
+interface OrderedBox extends DetectedBox {
+  opacity: number;
 }
 
 function SegmentLab() {
-  const runSegment = useServerFn(segmentImageLayers);
+  const runDetect = useServerFn(detectBoxesInImage);
   const runGenerate = useServerFn(generateStyledImageWithLabels);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
-  const [knownLabels, setKnownLabels] = useState<string[] | null>(null);
-  const [layers, setLayers] = useState<UILayer[]>([]);
-  const [covers, setCovers] = useState<
-    Array<{ id: string; label: string; bitmap: LayerBitmap; opacity: number }>
-  >([]);
-  const [mode, setMode] = useState<"reconstruct" | "reveal">("reveal");
-  const [status, setStatus] = useState<string>("");
+  const [boxes, setBoxes] = useState<OrderedBox[]>([]);
+  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [genPrompt, setGenPrompt] = useState("");
@@ -48,6 +38,7 @@ function SegmentLab() {
 
   const loadImage = useCallback((url: string) => {
     setImageUrl(url);
+    setBoxes([]);
     const img = new Image();
     img.onload = () => setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
     img.src = url;
@@ -56,8 +47,6 @@ function SegmentLab() {
   const onFile = useCallback(
     async (f: File) => {
       setError(null);
-      setLayers([]);
-      setKnownLabels(null);
       const url = await fileToDataUrl(f);
       loadImage(url);
     },
@@ -68,14 +57,11 @@ function SegmentLab() {
     if (!genPrompt.trim()) return;
     setBusy(true);
     setError(null);
-    setLayers([]);
-    setKnownLabels(null);
     try {
-      setStatus("Planning elements & generating image (GPT + DALL·E)…");
+      setStatus("Generating hand-drawn infographic…");
       const res = await runGenerate({ data: { prompt: genPrompt.trim() } });
       loadImage(res.imageDataUrl);
-      setKnownLabels(res.labels);
-      setStatus(`Generated. ${res.labels.length} labels ready: ${res.labels.join(", ")}`);
+      setStatus("Generated. Hit Detect boxes.");
     } catch (e: any) {
       setError(e?.message ?? String(e));
       setStatus("");
@@ -84,176 +70,75 @@ function SegmentLab() {
     }
   }, [genPrompt, runGenerate, loadImage]);
 
-
   const analyze = useCallback(async () => {
     if (!imageUrl) return;
     setBusy(true);
     setError(null);
-    setLayers([]);
-    setCovers([]);
+    setBoxes([]);
     try {
-      setStatus(
-        knownLabels && knownLabels.length > 0
-          ? `Segmenting with Grounded-SAM using ${knownLabels.length} known labels…`
-          : "Discovering labels (GPT) then segmenting with Grounded-SAM…",
-      );
-      const res = await runSegment({
-        data: { imageDataUrl: imageUrl, labels: knownLabels ?? undefined },
-      });
+      setStatus("Detecting hand-drawn boxes (Grounding-DINO)…");
+      const res = await runDetect({ data: { imageDataUrl: imageUrl } });
       if (res.fallback || res.error) {
-        setError(res.error ?? "Segmentation failed. Please retry in a moment.");
+        setError(res.error ?? "Detection failed.");
         setStatus("");
         return;
       }
-      setStatus(`Got ${res.layers.length} masks. Extracting layers + white covers…`);
-
-      const bitmaps: UILayer[] = [];
-      const coverList: Array<{ id: string; label: string; bitmap: LayerBitmap; opacity: number }> = [];
-      for (let i = 0; i < res.layers.length; i++) {
-        const l = res.layers[i];
-        setStatus(`Layer ${i + 1}/${res.layers.length}: ${l.label}`);
-        try {
-          const [b, cov] = await Promise.all([
-            extractLayer(imageUrl, l.maskUrl),
-            extractWhiteCover(imageUrl, l.maskUrl),
-          ]);
-          bitmaps.push({
-            ...b,
-            id: l.id,
-            label: l.label,
-            visible: true,
-            zIndex: 0,
-            offsetX: 0,
-            offsetY: 0,
-          });
-          if (cov.area > 0 && cov.pngUrl) {
-            coverList.push({ id: l.id, label: l.label, bitmap: cov, opacity: 1 });
-          }
-        } catch (e) {
-          console.warn("Layer extract failed:", l.label, e);
-        }
-      }
-
-      // Residual cover: catches everything SAM missed (stray strokes, text bits).
-      setStatus("Building residual white cover for uncovered ink…");
-      try {
-        const residual = await buildResidualCover(
-          imageUrl,
-          res.layers.map((l) => l.maskUrl),
-        );
-        if (residual.area > 0 && residual.pngUrl) {
-          coverList.push({
-            id: "__residual__",
-            label: "misc ink",
-            bitmap: residual,
-            opacity: 1,
-          });
-        }
-      } catch (e) {
-        console.warn("Residual cover failed:", e);
-      }
-
-      // z-index: smaller area = higher (on top)
-      bitmaps.sort((a, b) => b.area - a.area);
-      bitmaps.forEach((b, i) => (b.zIndex = i));
-      setLayers(bitmaps);
-
-      // Reveal order: top-to-bottom, left-to-right within the same row.
-      // Use bbox CENTER (not top-left) so tall/large masks don't get sorted to
-      // the top just because their bbox happens to start at y=0. Any cover
-      // that spans nearly the full image is treated as "background-like" and
-      // pushed to the end alongside the residual.
-      const imgH = imgSize?.h ?? 1024;
-      const imgW = imgSize?.w ?? 1024;
-      const isBackgroundLike = (c: (typeof coverList)[number]) =>
-        c.bitmap.bbox.h >= imgH * 0.85 && c.bitmap.bbox.w >= imgW * 0.85;
-      const ROW_TOL = Math.max(40, Math.round(imgH * 0.05));
-      coverList.sort((a, b) => {
-        if (a.id === "__residual__") return 1;
-        if (b.id === "__residual__") return -1;
-        const aBg = isBackgroundLike(a);
-        const bBg = isBackgroundLike(b);
-        if (aBg && !bBg) return 1;
-        if (!aBg && bBg) return -1;
-        const ay = a.bitmap.bbox.y + a.bitmap.bbox.h / 2;
-        const by = b.bitmap.bbox.y + b.bitmap.bbox.h / 2;
-        if (Math.abs(ay - by) > ROW_TOL) return ay - by;
-        return (
-          a.bitmap.bbox.x + a.bitmap.bbox.w / 2 -
-          (b.bitmap.bbox.x + b.bitmap.bbox.w / 2)
-        );
+      // Sort top-to-bottom, left-to-right (row tolerance = 5% of image height).
+      const rowTol = 0.05;
+      const sorted = [...res.boxes].sort((a, b) => {
+        const ay = a.bbox.y + a.bbox.h / 2;
+        const by = b.bbox.y + b.bbox.h / 2;
+        if (Math.abs(ay - by) > rowTol) return ay - by;
+        return a.bbox.x + a.bbox.w / 2 - (b.bbox.x + b.bbox.w / 2);
       });
-      console.log(
-        "[reveal order]",
-        coverList.map((c) => ({
-          label: c.label,
-          y: c.bitmap.bbox.y,
-          cy: c.bitmap.bbox.y + c.bitmap.bbox.h / 2,
-          h: c.bitmap.bbox.h,
-        })),
-      );
-      setCovers(coverList);
-      setMode("reveal");
-      setStatus(`Done — ${bitmaps.length} layers, ${coverList.length} covers. Hit "Play reveal".`);
+      setBoxes(sorted.map((b) => ({ ...b, opacity: 1 })));
+      setStatus(`Found ${sorted.length} boxes. Hit ▶ Play reveal.`);
     } catch (e: any) {
       setError(e?.message ?? String(e));
       setStatus("");
     } finally {
       setBusy(false);
     }
-  }, [imageUrl, runSegment, knownLabels]);
+  }, [imageUrl, runDetect]);
 
-  const clearRevealTimers = useCallback(() => {
+  const clearTimers = useCallback(() => {
     revealTimers.current.forEach((t) => clearTimeout(t));
     revealTimers.current = [];
   }, []);
 
   const resetReveal = useCallback(() => {
-    clearRevealTimers();
-    setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
-  }, [clearRevealTimers]);
+    clearTimers();
+    setBoxes((bs) => bs.map((b) => ({ ...b, opacity: 1 })));
+  }, [clearTimers]);
 
   const playReveal = useCallback(() => {
-    clearRevealTimers();
-    // Reset then fade covers out one at a time with a clear interval so each
-    // element reads before the next appears.
-    setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
-    const INTERVAL = 1100; // ms between successive reveals
-    const START_DELAY = 300;
-    covers.forEach((_, i) => {
+    clearTimers();
+    setBoxes((bs) => bs.map((b) => ({ ...b, opacity: 1 })));
+    const INTERVAL = 900;
+    const START = 250;
+    boxes.forEach((_, i) => {
       const t = setTimeout(() => {
-        setCovers((cs) =>
-          cs.map((c, j) => (j === i ? { ...c, opacity: 0 } : c)),
-        );
-      }, START_DELAY + i * INTERVAL);
+        setBoxes((bs) => bs.map((b, j) => (j === i ? { ...b, opacity: 0 } : b)));
+      }, START + i * INTERVAL);
       revealTimers.current.push(t);
     });
-  }, [covers, clearRevealTimers]);
-
-  const toggle = (id: string) =>
-    setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
-
-  const setOffset = (id: string, dx: number, dy: number) =>
-    setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, offsetX: dx, offsetY: dy } : l)));
-
-  const resetOffsets = () =>
-    setLayers((ls) => ls.map((l) => ({ ...l, offsetX: 0, offsetY: 0 })));
+  }, [boxes, clearTimers]);
 
   const previewScale = useMemo(() => {
     if (!imgSize) return 1;
-    return Math.min(1, 700 / imgSize.w);
+    return Math.min(1, 900 / imgSize.w);
   }, [imgSize]);
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
       <div className="border-b bg-white px-6 py-4">
-        <h1 className="text-xl font-semibold">Segment Lab — Magic Layer</h1>
+        <h1 className="text-xl font-semibold">Segment Lab — Box Reveal</h1>
         <p className="text-sm text-neutral-600">
-          Generate an Excalidraw-style image from text (or upload one) → segment it into transparent layers via Grounded-SAM.
+          Generate or upload an image, detect hand-drawn boxes, then reveal them one-by-one (top → bottom, left → right).
         </p>
       </div>
 
-      <div className="grid grid-cols-[320px_1fr_320px] gap-4 p-4">
+      <div className="grid grid-cols-[320px_1fr] gap-4 p-4">
         {/* LEFT */}
         <div className="space-y-3 rounded-lg border bg-white p-4">
           <div className="space-y-2 rounded-md border border-dashed border-blue-300 bg-blue-50/50 p-2">
@@ -261,7 +146,7 @@ function SegmentLab() {
             <textarea
               value={genPrompt}
               onChange={(e) => setGenPrompt(e.target.value)}
-              placeholder="e.g. Rules for valid Python variable names: cannot start with a number"
+              placeholder="e.g. Rules for valid Python variable names"
               rows={3}
               className="w-full resize-none rounded border border-blue-200 bg-white p-2 text-xs"
             />
@@ -270,7 +155,7 @@ function SegmentLab() {
               disabled={busy || !genPrompt.trim()}
               className="w-full rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40"
             >
-              {busy ? "Working…" : "Generate image + labels"}
+              {busy ? "Working…" : "Generate image"}
             </button>
           </div>
 
@@ -300,84 +185,62 @@ function SegmentLab() {
               if (f) onFile(f);
             }}
           />
-          {knownLabels && knownLabels.length > 0 && (
-            <div className="rounded bg-green-50 p-2 text-[11px] text-green-900">
-              <div className="font-semibold">Baked-in labels ({knownLabels.length}):</div>
-              <div>{knownLabels.join(", ")}</div>
-            </div>
-          )}
-          {imageUrl && (
-            <div>
-              <img src={imageUrl} alt="source" className="w-full rounded border" />
-              <div className="mt-1 text-xs text-neutral-500">
-                {imgSize ? `${imgSize.w} × ${imgSize.h}` : ""}
-              </div>
-            </div>
-          )}
+
           <button
             onClick={analyze}
             disabled={!imageUrl || busy}
             className="w-full rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
           >
-            {busy ? "Analyzing…" : "Analyze layers"}
+            {busy ? "Detecting…" : "Detect boxes"}
           </button>
           {status && <div className="text-xs text-neutral-600">{status}</div>}
           {error && <div className="rounded bg-red-50 p-2 text-xs text-red-700">{error}</div>}
+
+          {boxes.length > 0 && (
+            <div className="rounded bg-neutral-100 p-2 text-[11px] text-neutral-700">
+              <div className="mb-1 font-semibold">Reveal order ({boxes.length}):</div>
+              <ol className="list-decimal space-y-0.5 pl-4">
+                {boxes.map((b, i) => (
+                  <li key={b.id}>
+                    y={b.bbox.y.toFixed(2)} · x={b.bbox.x.toFixed(2)} · {(b.bbox.w * 100).toFixed(0)}×{(b.bbox.h * 100).toFixed(0)}%
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
 
-        {/* CENTER — preview */}
+        {/* PREVIEW */}
         <div className="rounded-lg border bg-white p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-medium">Preview</div>
-              <div className="flex overflow-hidden rounded border text-xs">
-                <button
-                  onClick={() => setMode("reveal")}
-                  className={`px-2 py-1 ${mode === "reveal" ? "bg-neutral-900 text-white" : "hover:bg-neutral-50"}`}
-                >
-                  Reveal
-                </button>
-                <button
-                  onClick={() => setMode("reconstruct")}
-                  className={`px-2 py-1 ${mode === "reconstruct" ? "bg-neutral-900 text-white" : "hover:bg-neutral-50"}`}
-                >
-                  Reconstruct
-                </button>
-              </div>
-            </div>
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-sm font-medium">Preview</div>
             <div className="flex gap-1">
-              {mode === "reveal" && covers.length > 0 && (
+              {boxes.length > 0 && (
                 <>
                   <button
                     onClick={playReveal}
-                    className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                    className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
                   >
                     ▶ Play reveal
                   </button>
                   <button
                     onClick={resetReveal}
-                    className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
+                    className="rounded border px-3 py-1 text-xs hover:bg-neutral-50"
                   >
                     Reset
                   </button>
                 </>
               )}
-              {mode === "reconstruct" && (
-                <button
-                  onClick={resetOffsets}
-                  className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
-                >
-                  Reset offsets
-                </button>
-              )}
             </div>
           </div>
+
           {!imgSize && (
             <div className="flex h-96 items-center justify-center text-sm text-neutral-400">
-              Upload an image to begin
+              Generate or upload an image to begin
             </div>
           )}
-          {imgSize && mode === "reveal" && (
+
+          {imgSize && imageUrl && (
             <div
               className="relative mx-auto overflow-hidden rounded border bg-white"
               style={{
@@ -385,128 +248,32 @@ function SegmentLab() {
                 height: imgSize.h * previewScale,
               }}
             >
-              {imageUrl && (
-                <img
-                  src={imageUrl}
-                  alt="src"
-                  className="absolute inset-0 h-full w-full"
-                />
-              )}
-              {covers.map((c) => (
-                <img
-                  key={c.id}
-                  src={c.bitmap.pngUrl}
-                  alt={`cover-${c.label}`}
+              <img src={imageUrl} alt="src" className="absolute inset-0 h-full w-full" />
+              {boxes.map((b, i) => (
+                <div
+                  key={b.id}
                   style={{
                     position: "absolute",
-                    left: c.bitmap.bbox.x * previewScale,
-                    top: c.bitmap.bbox.y * previewScale,
-                    width: c.bitmap.bbox.w * previewScale,
-                    height: c.bitmap.bbox.h * previewScale,
-                    opacity: c.opacity,
-                    transition: "opacity 1s ease",
+                    left: `${b.bbox.x * 100}%`,
+                    top: `${b.bbox.y * 100}%`,
+                    width: `${b.bbox.w * 100}%`,
+                    height: `${b.bbox.h * 100}%`,
+                    background: "#FFFFFF",
+                    opacity: b.opacity,
+                    transition: "opacity 900ms ease",
                     pointerEvents: "none",
+                    borderRadius: 6,
                   }}
-                />
-              ))}
-              {covers.length === 0 && (
-                <div className="absolute bottom-2 right-2 rounded bg-white/80 px-2 py-1 text-[10px] text-neutral-500">
-                  Run Analyze to build white covers
-                </div>
-              )}
-            </div>
-          )}
-          {imgSize && mode === "reconstruct" && (
-            <div
-              className="relative mx-auto overflow-hidden rounded border bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px]"
-              style={{
-                width: imgSize.w * previewScale,
-                height: imgSize.h * previewScale,
-              }}
-            >
-              {layers.length === 0 && imageUrl && (
-                <img src={imageUrl} alt="src" className="absolute inset-0 h-full w-full opacity-60" />
-              )}
-              {layers.map((l) =>
-                l.visible ? (
-                  <img
-                    key={l.id}
-                    src={l.pngUrl}
-                    alt={l.label}
-                    style={{
-                      position: "absolute",
-                      left: (l.bbox.x + l.offsetX) * previewScale,
-                      top: (l.bbox.y + l.offsetY) * previewScale,
-                      width: l.bbox.w * previewScale,
-                      height: l.bbox.h * previewScale,
-                      zIndex: l.zIndex,
-                    }}
-                  />
-                ) : null,
-              )}
-            </div>
-          )}
-        </div>
-
-
-        {/* RIGHT — layer list */}
-        <div className="rounded-lg border bg-white p-4">
-          <div className="mb-2 text-sm font-medium">Layers ({layers.length})</div>
-          <div className="space-y-2">
-            {layers.map((l) => (
-              <div key={l.id} className="rounded border p-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={l.visible}
-                    onChange={() => toggle(l.id)}
-                  />
-                  <div className="flex-1 truncate text-sm font-medium">{l.label}</div>
-                  <button
-                    onClick={() => downloadDataUrl(l.pngUrl, `${l.label.replace(/\s+/g, "-")}.png`)}
-                    className="rounded border px-2 py-0.5 text-xs hover:bg-neutral-50"
-                  >
-                    PNG
-                  </button>
-                </div>
-                <div className="mt-1 flex items-start gap-2">
-                  <img
-                    src={l.pngUrl}
-                    alt={l.label}
-                    className="h-16 w-16 rounded border bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:8px_8px] object-contain"
-                  />
-                  <div className="flex-1 text-[11px] text-neutral-600">
-                    <div>bbox: {l.bbox.x},{l.bbox.y} · {l.bbox.w}×{l.bbox.h}</div>
-                    <div>z: {l.zIndex} · area: {l.area}px</div>
-                    <div className="mt-1 flex gap-1">
-                      <label className="flex-1">
-                        dx
-                        <input
-                          type="range"
-                          min={-100}
-                          max={100}
-                          value={l.offsetX}
-                          onChange={(e) => setOffset(l.id, Number(e.target.value), l.offsetY)}
-                          className="w-full"
-                        />
-                      </label>
-                      <label className="flex-1">
-                        dy
-                        <input
-                          type="range"
-                          min={-100}
-                          max={100}
-                          value={l.offsetY}
-                          onChange={(e) => setOffset(l.id, l.offsetX, Number(e.target.value))}
-                          className="w-full"
-                        />
-                      </label>
+                >
+                  {b.opacity > 0.5 && (
+                    <div className="absolute left-1 top-1 rounded bg-neutral-900/70 px-1 text-[10px] text-white">
+                      {i + 1}
                     </div>
-                  </div>
+                  )}
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
