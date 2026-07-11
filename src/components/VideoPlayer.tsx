@@ -54,6 +54,60 @@ export interface Scene {
   bgAspect?: number;
 }
 
+function RevealCoverLayer({
+  covers,
+  aspect,
+  opacity,
+}: {
+  covers: RevealCover[];
+  aspect: number;
+  opacity: number;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const compute = () => {
+      const cw = el.clientWidth;
+      const ch = el.clientHeight;
+      if (!cw || !ch) return;
+      const cr = cw / ch;
+      let w: number, h: number;
+      if (aspect > cr) { w = cw; h = cw / aspect; }
+      else { h = ch; w = ch * aspect; }
+      setRect({ x: (cw - w) / 2, y: (ch - h) / 2, w, h });
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [aspect]);
+
+  return (
+    <div ref={ref} className="pointer-events-none absolute inset-0">
+      {rect &&
+        covers.map((c) => (
+          <img
+            key={c.id}
+            src={c.pngUrl}
+            alt=""
+            style={{
+              position: "absolute",
+              left: rect.x + c.bbox.x * rect.w,
+              top: rect.y + c.bbox.y * rect.h,
+              width: c.bbox.w * rect.w,
+              height: c.bbox.h * rect.h,
+              opacity,
+            }}
+            draggable={false}
+          />
+        ))}
+    </div>
+  );
+}
+
 function ImageScene({
   scene,
   progress,
