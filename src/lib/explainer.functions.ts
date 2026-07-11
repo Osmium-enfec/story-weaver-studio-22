@@ -562,12 +562,11 @@ ${prompt}
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-image-1",
+      model: "gpt-image-2",
       prompt: styled,
       size: "1536x1024",
       n: 1,
       quality: "high",
-      background: "auto",
     }),
   });
   const text = await res.text();
