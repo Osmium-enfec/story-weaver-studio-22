@@ -114,6 +114,7 @@ function Index() {
   const [dragOver, setDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const navigate = useNavigate();
+  const runSegment = useServerFn(segmentImageLayers);
 
   const plansRef = useRef<ScenePlan[]>([]);
   
