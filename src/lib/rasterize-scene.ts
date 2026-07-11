@@ -195,21 +195,28 @@ export function drawImageSceneFrame(
       else { dh = innerH; dw = innerH * aspect; }
       const dx = innerX + (innerW - dw) / 2;
       const dy = innerY + (innerH - dh) / 2;
-      const FADE_START = 0.05, FADE_END = 0.85;
+      const durationMs = scene.durationMs || 15000;
+      const LEAD_MS = 250;
+      const IDEAL_STEP_MS = 900;
+      const IDEAL_FADE_MS = 900;
       const total = covers.length;
-      const slot = Math.max(0.01, (FADE_END - FADE_START) / total);
-      const fadeFrac = 0.35;
+      const usable = Math.max(1, durationMs - LEAD_MS - 200);
+      const idealTotal = total * IDEAL_STEP_MS + IDEAL_FADE_MS;
+      const scale = idealTotal > usable ? usable / idealTotal : 1;
+      const stepMs = IDEAL_STEP_MS * scale;
+      const fadeMs = IDEAL_FADE_MS * scale;
+      const tMs = progress * durationMs;
       covers.forEach((c, i) => {
         const img = assets.cov.get(c.pngUrl);
         if (!img) return;
-        const start = FADE_START + i * slot;
-        const end = start + slot * fadeFrac;
+        const startMs = LEAD_MS + i * stepMs;
+        const endMs = startMs + fadeMs;
         let alpha: number;
-        if (progress <= start) alpha = 1;
-        else if (progress >= end) alpha = 0;
+        if (tMs <= startMs) alpha = 1;
+        else if (tMs >= endMs) alpha = 0;
         else {
-          const tt = (progress - start) / (end - start);
-          alpha = Math.pow(1 - tt, 3);
+          const tt = (tMs - startMs) / (endMs - startMs);
+          alpha = tt < 0.5 ? 1 - 2 * tt * tt : 1 - (1 - 2 * (1 - tt) * (1 - tt));
         }
         if (alpha <= 0) return;
         ctx.save();
