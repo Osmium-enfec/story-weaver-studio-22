@@ -553,7 +553,7 @@ ${prompt}
 === HARD RULES ===
 - 16:9 single composition, pure white background.
 - Everything is HAND-DRAWN, not typed/geometric. Lines slightly wobble.
-- Every element must be inside its own rounded-rectangle box/card. No floating objects, no bare text, no loose icons.
+- Every element must be inside its own HAND-DRAWN wobbly imperfect box (wavy sketchy outline, slightly crooked corners, marker-style — NEVER a perfect rectangle). No floating objects, no bare text, no loose icons.
 - Do NOT invent extra rules or examples that aren't in the scene content. Use the exact code examples given (e.g. user1, model2, 1user).
 - No captions outside the three regions above. No page numbers, no watermarks, no logos.`;
 
