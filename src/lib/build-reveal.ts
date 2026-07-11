@@ -58,7 +58,13 @@ export async function buildSceneRevealBoxes(
     console.warn("[reveal] detect failed:", (e as any)?.message ?? e);
     return null;
   });
-  if (!res || res.fallback || !res.boxes || res.boxes.length === 0) return null;
+
+  const hasBoxes = !!res && !res.fallback && Array.isArray(res.boxes) && res.boxes.length > 0;
+  if (!hasBoxes) {
+    const reason = res?.error ?? (res ? "no boxes" : "detect returned null");
+    console.warn(`[reveal] fallback grid (${reason})`);
+    return { covers: buildFallbackGrid(), aspect };
+  }
 
   const rowTol = 0.05;
   const sorted = [...res.boxes].sort((a, b) => {
@@ -74,7 +80,36 @@ export async function buildSceneRevealBoxes(
     bbox: b.bbox,
   }));
 
+  console.log(`[reveal] detected ${covers.length} boxes`);
   return { covers, aspect };
+}
+
+/**
+ * Deterministic 2-row x 3-column reveal grid used when detection fails.
+ * Guarantees a "boxes appear one-by-one" feel even without Grounding-DINO.
+ */
+function buildFallbackGrid(): RevealCover[] {
+  const rows = 2;
+  const cols = 3;
+  const pad = 0.02;
+  const cellW = (1 - pad * (cols + 1)) / cols;
+  const cellH = (1 - pad * (rows + 1)) / rows;
+  const covers: RevealCover[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      covers.push({
+        id: `grid-${r}-${c}`,
+        pngUrl: WHITE_PIXEL_PNG,
+        bbox: {
+          x: pad + c * (cellW + pad),
+          y: pad + r * (cellH + pad),
+          w: cellW,
+          h: cellH,
+        },
+      });
+    }
+  }
+  return covers;
 }
 
 /**
