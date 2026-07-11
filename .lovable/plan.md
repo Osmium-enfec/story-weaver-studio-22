@@ -1,30 +1,36 @@
-# Plan: White-Cover Reveal via SAM Regions
-
 ## Goal
-After generating the Excalidraw image in Segment Lab, detect every non-white region and produce matching white "cover" overlays. Play these covers on top of the image, then remove them one-by-one (per label) to reveal elements in sequence — no per-element regeneration needed.
+Explainer scenes should reveal hand-drawn boxes one-by-one (identical to Segment Lab), instead of showing the whole composite image immediately.
 
-## Approach
+## Root causes
+1. `detectBoxesInImage` is fed the raw ~1–2 MB `data:image/png;base64,...` composite. Replicate's Grounding‑DINO frequently rejects data URLs that large → the server function returns `{ fallback: true }` → `revealCovers` stays empty → nothing to fade.
+2. The reveal pass runs *after* scenes are already shown. If Play starts before it finishes, or on a reloaded project (persisted payload strips `revealCovers`), there are no covers.
+3. In `VideoPlayer`, `RevealCoverLayer` is passed `scene.durationMs`, but for master‑audio scenes the on‑screen window is `endMs - startMs`. When these differ, the fade schedule runs outside the visible window and looks like "already revealed".
+4. Segment‑lab drives reveals with real setTimeouts; the explainer drives them from audio `progress`. Any mismatch in the time basis makes the boxes flash rather than sequence.
 
-**Step 1 — Segment as today.** Keep the existing GPT-labels + Grounded-SAM pipeline. Each label already returns a full-size mask URL.
+## Changes
 
-**Step 2 — Per-layer white cover.** For every mask, build a canvas the size of the source image, fill mask pixels with pure white (`#FFFFFF`), leave the rest transparent. Export as PNG. This is the "cover" for that label. Reuse the existing `extractLayer` canvas plumbing in `src/lib/layer-compose.ts` — same mask read, different fill.
+### 1. Reliable box detection for explainer composites (`src/lib/explainer.functions.ts`, `src/lib/detect-boxes.functions.ts`)
+- Reuse the existing `uploadToReplicate(dataUrl)` helper to convert the composite to a real HTTPS URL before calling Grounding‑DINO. Do this inside `detectBoxesInImage` when the input is a `data:` URL, so both explainer and segment‑lab benefit and behave identically.
+- On any Replicate error, keep the current graceful fallback but also return a `reason` string for the UI/log.
 
-**Step 3 — Residual cover (safety net).** SAM masks miss stray strokes and text. After stacking all label covers, diff against the source: any pixel where `min(r,g,b) < 240` and not already covered gets added to a "misc" white cover. Guarantees the starting frame is fully white.
+### 2. Guaranteed reveal covers (`src/lib/build-reveal.ts`)
+- If detection returns `fallback` or `boxes.length === 0`, synthesize a deterministic 2×3 (or 3×2) grid of covers over the inner card area, sorted top→bottom / left→right. This guarantees a "boxes appear one-by-one" feel even when Grounding‑DINO fails, matching the user's expectation.
+- Keep detected boxes when available (preferred path).
 
-**Step 4 — Reveal playback in Segment Lab.**
-- Render the full source image as the base layer.
-- Stack all white covers on top → screen looks blank white.
-- Sequence: fade out covers one at a time (1s ease), ordered largest-area → smallest (or by label order from GPT).
-- Reuse the timeline/preview UI already in Segment Lab; add a "Play reveal" button next to "Generate & Play".
+### 3. Sync reveal timing to the actual on-screen window (`src/components/VideoPlayer.tsx`)
+- Pass `windowDurationMs = (endMs - startMs) || scene.durationMs` into `RevealCoverLayer` and to `coverOpacityAt`, so the sequential schedule always fits inside what the user actually sees.
+- Do the same substitution in `src/lib/rasterize-scene.ts` so 720p/1080p renders keep matching the live player exactly.
 
-## Files to touch
-- `src/lib/layer-compose.ts` — add `extractWhiteCover(sourceUrl, maskUrl)` returning `{ pngUrl, bbox, area }` (mirrors `extractLayer` but fills white).
-- `src/lib/layer-compose.ts` — add `buildResidualCover(sourceUrl, existingCoverUrls)` for the safety-net white layer.
-- `src/routes/_authenticated/segment-lab.tsx` — after `analyze()` finishes, also build covers; add reveal timeline state + "Play reveal" button; render `<img>` covers positioned by bbox with animated opacity.
+### 4. Don't let the user Play before covers exist (`src/routes/index.tsx`)
+- Move the reveal pass to run **before** enabling the Play button (or block Play until `revealCovers` are attached to every image scene). Show the existing `reveal-analyze` step in the progress list as a required step, not an optional post‑pass.
+- Persist `revealCovers` (they're tiny: id + shared 1×1 PNG data URL + normalized bbox) so reloading a saved project still reveals sequentially. Remove the current strip in the save payload.
 
-## Non-goals
-- No changes to generation, SAM call, or the existing transparent-layer extraction. Covers are an additive output alongside current layers.
-- No video export in this pass — just in-browser preview playback.
+### 5. Diagnostics
+- Log `[reveal] scene <i>: detected N boxes` and `[reveal] scene <i>: fallback grid (<reason>)` so we can see in the console which path each scene took.
 
-## Open question
-Reveal order: **largest-first** (feels like the scene assembles from big shapes down to details) or **GPT label order** (matches narration flow later)? Default to largest-first unless you prefer label order.
+## Out of scope
+- No changes to prompt/style, no re-generation of images, no changes to Segment Lab.
+
+## Technical notes
+- `coverOpacityAt(progress, i, total, durationMs)` already implements the exact 250 ms lead + 900 ms step + 900 ms fade schedule Segment Lab uses; only the `durationMs` value it receives needs to be corrected.
+- `WHITE_PIXEL_PNG` is shared, so grid fallback covers add virtually zero payload.
