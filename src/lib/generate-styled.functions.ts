@@ -14,7 +14,8 @@ const STYLE_BASE = `EXCALIDRAW EDUCATIONAL INFOGRAPHIC STYLE:
   purple #8B5CF6 / #EDE9FE, orange/yellow #F59E0B / #FEF3C7.
 - Handwritten marker-style font for any text. Short phrases only.
 - Doodle icons only (check, X, star, lightbulb, robot, laptop, code window, arrow, speech bubble, tag).
-- Generous white space. No overlapping arrows / text / icons.`;
+- Generous white space. No overlapping arrows / text / icons.
+- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. Do NOT draw loose icons or floating text without a containing box. The box is part of the element.`;
 
 async function planLabels(userPrompt: string, lovableKey: string): Promise<string[]> {
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -73,6 +74,7 @@ Layout rules:
 - Bottom: a small footer or mascot pill if it fits the topic.
 - Every element must be visually separated (>=40px gap). No overlapping outlines.
 - Handwritten marker-style short labels next to each element.
+- Every visual element must be enclosed in its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. No floating objects, no loose icons, no bare text without a box.
 
 Absolutely no photorealism, no watercolor, no 3D, no dark backgrounds.`;
 
