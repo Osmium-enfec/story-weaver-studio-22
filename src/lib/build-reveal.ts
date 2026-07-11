@@ -86,13 +86,19 @@ export function coverOpacityAt(
   index: number,
   total: number,
 ): number {
-  const FADE_START = 0.03;
-  const FADE_END = 0.65;
-  const slot = Math.max(0.01, (FADE_END - FADE_START) / Math.max(1, total));
+  // Each cover gets its own start time evenly spaced across the reveal
+  // window, but the actual fade-out is a SHORT punchy transition (fadeFrac
+  // of the slot). That leaves a clear "hold" between reveals so the user
+  // sees boxes pop in one-at-a-time instead of one long continuous fade.
+  const FADE_START = 0.05;
+  const FADE_END = 0.85;
+  const n = Math.max(1, total);
+  const slot = Math.max(0.01, (FADE_END - FADE_START) / n);
+  const fadeFrac = 0.35; // fade takes 35% of a slot; 65% is a hold
   const start = FADE_START + index * slot;
-  const end = start + slot;
+  const end = start + slot * fadeFrac;
   if (progress <= start) return 1;
   if (progress >= end) return 0;
   const t = (progress - start) / (end - start);
-  return Math.pow(1 - t, 3); // easeOutCubic on the fade-OUT
+  return Math.pow(1 - t, 3); // easeOutCubic fade-out
 }
