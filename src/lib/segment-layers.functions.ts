@@ -134,11 +134,13 @@ export const segmentImageLayers = createServerFn({ method: "POST" })
     }
     const keys = { lovable, rep };
 
-    let labels: string[] = [];
-    try {
-      labels = await discoverLabels(data.imageDataUrl, lovable);
-    } catch (e: any) {
-      return { layers: [], fallback: true, error: `Label discovery: ${e?.message ?? e}` };
+    let labels: string[] = data.labels?.map((l) => l.toLowerCase().trim()).filter(Boolean) ?? [];
+    if (labels.length === 0) {
+      try {
+        labels = await discoverLabels(data.imageDataUrl, lovable);
+      } catch (e: any) {
+        return { layers: [], fallback: true, error: `Label discovery: ${e?.message ?? e}` };
+      }
     }
     if (labels.length === 0) {
       return { layers: [], fallback: true, error: "No labels discovered in image" };
