@@ -604,7 +604,10 @@ function Index() {
                 mediaUrl: await toPortableUrl(el.mediaUrl, userId, pid, extFromUrl(el.mediaUrl, "png")),
               })),
             );
-            return { ...s, audioUrl, masterAudioUrl, backgroundUrl, elements };
+            // Strip revealCovers (data URLs) from persisted payload — they'll
+            // be rebuilt on demand and would otherwise bloat JSONB.
+            const { revealCovers: _rc, ...rest } = s;
+            return { ...rest, audioUrl, masterAudioUrl, backgroundUrl, elements };
           }
           return { ...s, audioUrl, masterAudioUrl };
         }),
