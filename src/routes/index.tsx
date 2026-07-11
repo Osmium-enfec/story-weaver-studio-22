@@ -604,10 +604,9 @@ function Index() {
                 mediaUrl: await toPortableUrl(el.mediaUrl, userId, pid, extFromUrl(el.mediaUrl, "png")),
               })),
             );
-            // Strip revealCovers (data URLs) from persisted payload — they'll
-            // be rebuilt on demand and would otherwise bloat JSONB.
-            const { revealCovers: _rc, ...rest } = s;
-            return { ...rest, audioUrl, masterAudioUrl, backgroundUrl, elements };
+            // revealCovers are tiny (shared 1x1 PNG + normalized bbox); keep
+            // them so reloaded projects still reveal box-by-box on Play.
+            return { ...s, audioUrl, masterAudioUrl, backgroundUrl, elements };
           }
           return { ...s, audioUrl, masterAudioUrl };
         }),
