@@ -525,25 +525,35 @@ async function generateCompositeImage(prompt: string, title?: string): Promise<s
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  const styled = `I am building a Python-for-AI course visual system.
+  const styled = `Create a polished hand-drawn Excalidraw-style educational infographic slide for a Python-for-AI course.
 
-Visual style:
-- Clean Excalidraw-style educational infographic on a white background.
-- Hand-drawn black outlines, pastel fills, rounded cards, playful doodle icons, large readable handwritten text.
-- Beginner-friendly, classroom whiteboard feel, minimal text, more visuals.
-- No overlapping arrows, icons, or text.
-- Use blue for Python/main titles, green for correct/success, red for wrong/errors, purple for technical concepts, orange/yellow for hints.
-- Images should be easy to animate element-by-element.
+=== VISUAL STYLE (match a premium classroom whiteboard slide) ===
+- Pure white #FFFFFF background. No paper texture, no cream, no gradient, no full-canvas colored panel, no border frame around the whole canvas.
+- Hand-drawn sketchy black marker outlines (2-4px, slightly wobbly, rounded corners) on EVERY shape.
+- Flat PASTEL fills only (no watercolor, no cross-hatching, no gradients, no 3D, no drop shadows):
+    blue #DBEAFE (main/title), green #DCFCE7 (valid/correct), red #FEE2E2 (wrong/error),
+    purple/lavender #EDE9FE (summary/tip), orange/yellow #FEF3C7 (hint).
+  Stroke accents use the darker sibling: blue #2563EB, green #16A34A, red #DC2626, purple #7C3AED, amber #D97706.
+- All text is HANDWRITTEN MARKER-STYLE (like Excalidraw's Virgil / Cascadia Handwriting). Large, readable, black #111 by default; use the accent color when the word IS the accent (e.g. "Valid" in green, "Wrong" in red, "cannot start" in purple).
+- Playful doodle mascots welcome: a small smiling computer/robot, the Python snake logo (blue + yellow rounded), a lightbulb, a star, sparkles, "??" marks, a warning triangle. Draw them small and off to the side — never dominating.
+- Generous whitespace. NOTHING overlaps. One idea per card.
 
+=== REQUIRED COMPOSITION (16:9, 1536x1024) ===
+1. TOP: a hand-drawn RIBBON/BANNER (not a plain pill) centered at the top, pastel BLUE #DBEAFE fill with sketchy black outline and small blue sparkle marks on both sides. Inside, write ${title ? `"${title}"` : "the short rule/topic title"} in large handwritten marker text, blue #2563EB.
+2. Directly under the banner: a one-line handwritten SUBTITLE in black describing the rule, with a hand-drawn wavy blue underline beneath it.
+3. MIDDLE ROW: two large rounded-rectangle CARDS side by side with sketchy black outlines and a subtle sketched shadow (a second offset outline, not a real shadow):
+     - LEFT card = green #DCFCE7 fill. Header row inside: a green circle-check ✓ + the word "Valid" in green #16A34A (underlined). Below the header, show the concrete VALID examples from the scene as small rounded green code-chips (monospace-looking handwritten text, e.g. \`user1\`, \`model2\`), plus one tiny supporting doodle (smiling computer or thumbs-up) and a short handwritten caption like "numbers inside = okay".
+     - RIGHT card = red #FEE2E2 fill. Header row: a red circle-X ✗ + the word "Wrong" in red #DC2626 (underlined). Below, show the WRONG example as a red DASHED-outline code-chip (e.g. \`1user\`), a small confused Python-snake mascot with "??" and a red warning triangle nearby, and a short handwritten caption like "starts with a number = not allowed".
+3. BOTTOM: a wide rounded SUMMARY PILL, pastel LAVENDER #EDE9FE fill, sketchy black outline. Inside: a small purple star doodle on the left, a small yellow lightbulb doodle on the right, and one handwritten summary sentence in the middle in black — with the KEY verb/negation (e.g. "cannot start") emphasized in purple #7C3AED.
 
-SCENE TO DRAW: ${prompt}
+=== SCENE CONTENT (use the concrete words/examples from this) ===
+${prompt}
 
-${title ? `Use "${title}" as the top title banner text (handwritten marker-style black text inside a rounded pill with sketchy black outline and flat pastel BLUE #DBEAFE fill).` : ""}
-
-CRITICAL:
-- Single 16:9 composed illustration. Pure white (#FFFFFF) background everywhere — no cream, no paper texture, no full-canvas colored panels.
-- No photorealism, no watercolor, no cross-hatching, no drop shadows.
-- Generous whitespace between elements; nothing overlaps.`;
+=== HARD RULES ===
+- 16:9 single composition, pure white background.
+- Everything is HAND-DRAWN, not typed/geometric. Lines slightly wobble.
+- Do NOT invent extra rules or examples that aren't in the scene content. Use the exact code examples given (e.g. user1, model2, 1user).
+- No captions outside the three regions above. No page numbers, no watermarks, no logos.`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
