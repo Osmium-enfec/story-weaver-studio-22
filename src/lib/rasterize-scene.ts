@@ -195,14 +195,15 @@ export function drawImageSceneFrame(
       else { dh = innerH; dw = innerH * aspect; }
       const dx = innerX + (innerW - dw) / 2;
       const dy = innerY + (innerH - dh) / 2;
-      const FADE_START = 0.03, FADE_END = 0.65;
+      const FADE_START = 0.05, FADE_END = 0.85;
       const total = covers.length;
       const slot = Math.max(0.01, (FADE_END - FADE_START) / total);
+      const fadeFrac = 0.35;
       covers.forEach((c, i) => {
         const img = assets.cov.get(c.pngUrl);
         if (!img) return;
         const start = FADE_START + i * slot;
-        const end = start + slot;
+        const end = start + slot * fadeFrac;
         let alpha: number;
         if (progress <= start) alpha = 1;
         else if (progress >= end) alpha = 0;
