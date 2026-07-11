@@ -107,12 +107,21 @@ function ImageScene({
         }}
       >
         {scene.backgroundUrl && (
-          <img
-            src={scene.backgroundUrl}
-            alt=""
-            className="absolute inset-0 h-full w-full object-contain transition-transform duration-100 ease-linear"
-            style={{ ...bgStyle, background: "#ffffff" }}
-          />
+          <>
+            <img
+              src={scene.backgroundUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-contain transition-transform duration-100 ease-linear"
+              style={{ ...bgStyle, background: "#ffffff" }}
+            />
+            {scene.revealCovers && scene.revealCovers.length > 0 && (
+              <RevealCoverLayer
+                covers={scene.revealCovers}
+                aspect={scene.bgAspect ?? 1.5}
+                opacity={coverOpacityAt(progress)}
+              />
+            )}
+          </>
         )}
         {(() => {
           const els = scene.elements ?? [];
