@@ -132,7 +132,7 @@ function SegmentLab() {
     } finally {
       setBusy(false);
     }
-  }, [imageUrl, runSegment]);
+  }, [imageUrl, runSegment, knownLabels]);
 
   const toggle = (id: string) =>
     setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
