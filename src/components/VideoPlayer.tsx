@@ -58,10 +58,12 @@ function RevealCoverLayer({
   covers,
   aspect,
   progress,
+  durationMs,
 }: {
   covers: RevealCover[];
   aspect: number;
   progress: number;
+  durationMs: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -99,7 +101,7 @@ function RevealCoverLayer({
               top: rect.y + c.bbox.y * rect.h,
               width: c.bbox.w * rect.w,
               height: c.bbox.h * rect.h,
-              opacity: coverOpacityAt(progress, i, covers.length),
+              opacity: coverOpacityAt(progress, i, covers.length, durationMs),
             }}
             draggable={false}
           />
@@ -173,6 +175,7 @@ function ImageScene({
                 covers={scene.revealCovers}
                 aspect={scene.bgAspect ?? 1.5}
                 progress={progress}
+                durationMs={scene.durationMs || 15000}
               />
             )}
           </>
