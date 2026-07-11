@@ -3,7 +3,13 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { segmentImageLayers } from "@/lib/segment-layers.functions";
 import { generateStyledImageWithLabels } from "@/lib/generate-styled.functions";
-import { extractLayer, downloadDataUrl, type LayerBitmap } from "@/lib/layer-compose";
+import {
+  extractLayer,
+  extractWhiteCover,
+  buildResidualCover,
+  downloadDataUrl,
+  type LayerBitmap,
+} from "@/lib/layer-compose";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
