@@ -15,7 +15,7 @@ const STYLE_BASE = `EXCALIDRAW EDUCATIONAL INFOGRAPHIC STYLE:
 - Handwritten marker-style font for any text. Short phrases only.
 - Doodle icons only (check, X, star, lightbulb, robot, laptop, code window, arrow, speech bubble, tag).
 - Generous white space. No overlapping arrows / text / icons.
-- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. Do NOT draw loose icons or floating text without a containing box. The box is part of the element.`;
+- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own HAND-DRAWN IMPERFECT BOX — a wobbly, slightly wavy rounded rectangle with a sketchy black marker outline (NOT a perfect geometric rectangle). Each side should have small wiggles/kinks, corners slightly asymmetric and unevenly rounded, as if drawn quickly by hand with a marker. Occasional double stroke on one edge is fine. Flat pastel fill inside. NO floating icons or bare text without such a hand-drawn box.`;
 
 async function planLabels(userPrompt: string, lovableKey: string): Promise<string[]> {
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
