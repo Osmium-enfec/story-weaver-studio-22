@@ -166,16 +166,39 @@ function SegmentLab() {
       setLayers(bitmaps);
 
       // Reveal order: top-to-bottom, left-to-right within the same row.
-      // Residual (stray ink) always last.
-      const ROW_TOL = 60; // px tolerance to consider two elements on the same row
+      // Use bbox CENTER (not top-left) so tall/large masks don't get sorted to
+      // the top just because their bbox happens to start at y=0. Any cover
+      // that spans nearly the full image is treated as "background-like" and
+      // pushed to the end alongside the residual.
+      const imgH = imgSize?.h ?? 1024;
+      const imgW = imgSize?.w ?? 1024;
+      const isBackgroundLike = (c: (typeof coverList)[number]) =>
+        c.bitmap.bbox.h >= imgH * 0.85 && c.bitmap.bbox.w >= imgW * 0.85;
+      const ROW_TOL = Math.max(40, Math.round(imgH * 0.05));
       coverList.sort((a, b) => {
         if (a.id === "__residual__") return 1;
         if (b.id === "__residual__") return -1;
-        const ay = a.bitmap.bbox.y;
-        const by = b.bitmap.bbox.y;
+        const aBg = isBackgroundLike(a);
+        const bBg = isBackgroundLike(b);
+        if (aBg && !bBg) return 1;
+        if (!aBg && bBg) return -1;
+        const ay = a.bitmap.bbox.y + a.bitmap.bbox.h / 2;
+        const by = b.bitmap.bbox.y + b.bitmap.bbox.h / 2;
         if (Math.abs(ay - by) > ROW_TOL) return ay - by;
-        return a.bitmap.bbox.x - b.bitmap.bbox.x;
+        return (
+          a.bitmap.bbox.x + a.bitmap.bbox.w / 2 -
+          (b.bitmap.bbox.x + b.bitmap.bbox.w / 2)
+        );
       });
+      console.log(
+        "[reveal order]",
+        coverList.map((c) => ({
+          label: c.label,
+          y: c.bitmap.bbox.y,
+          cy: c.bitmap.bbox.y + c.bitmap.bbox.h / 2,
+          h: c.bitmap.bbox.h,
+        })),
+      );
       setCovers(coverList);
       setMode("reveal");
       setStatus(`Done — ${bitmaps.length} layers, ${coverList.length} covers. Hit "Play reveal".`);
