@@ -32,7 +32,8 @@ async function generateImage(prompt: string, kind: "background" | "element"): Pr
   purple #8B5CF6 / #EDE9FE, orange/yellow #F59E0B / #FEF3C7.
 - Handwritten marker-style font for any text. Short phrases only.
 - Doodle icons only (check, X, lock, star, lightbulb, snake, robot, laptop, file, folder, speech bubble, code window, tag, magnifier).
-- Generous white space. No overlapping arrows / text / icons. One idea per element.`;
+- Generous white space. No overlapping arrows / text / icons. One idea per element.
+- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. Do NOT draw loose icons or floating text without a containing box. The box is part of the element.`;
 
   if (kind === "element") {
     styled = `A SINGLE isolated Excalidraw-style hand-drawn doodle of: ${prompt}.
