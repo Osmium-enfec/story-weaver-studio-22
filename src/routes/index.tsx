@@ -476,6 +476,46 @@ function Index() {
         setResults(merged);
       }
 
+      // ---------- SAM white-cover reveal pass ----------
+      // For every image scene with a backgroundUrl, segment it and build
+      // white covers so the image reveals with a fade-in during playback.
+      const sceneList = resultsRef.current;
+      const CONC = 2;
+      let rc = 0;
+      async function revealWorker() {
+        while (true) {
+          const i = rc++;
+          if (i >= sceneList.length) return;
+          const s = sceneList[i];
+          if (!s || s.kind !== "image" || !s.backgroundUrl) continue;
+          pushStep(i, { name: "reveal-analyze", status: "running" });
+          try {
+            const build = await buildSceneRevealCovers(s.backgroundUrl, runSegment as any);
+            if (build && build.covers.length > 0) {
+              const updated: Scene = {
+                ...s,
+                revealCovers: build.covers,
+                bgAspect: build.aspect,
+              };
+              sceneList[i] = updated;
+              resultsRef.current = sceneList;
+              setResults([...sceneList]);
+              pushStep(i, {
+                name: "reveal-analyze",
+                status: "ok",
+                message: `${build.covers.length} covers`,
+              });
+            } else {
+              pushStep(i, { name: "reveal-analyze", status: "warn", message: "no covers" });
+            }
+          } catch (e: any) {
+            console.warn("[reveal] scene", i, "failed:", e?.message);
+            pushStep(i, { name: "reveal-analyze", status: "warn", message: e?.message || "failed" });
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: CONC }, revealWorker));
+
       // Final autosave with all scenes settled.
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       persist(undefined, true);
