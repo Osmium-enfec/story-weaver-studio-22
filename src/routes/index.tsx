@@ -490,7 +490,7 @@ function Index() {
           if (!s || s.kind !== "image" || !s.backgroundUrl) continue;
           pushStep(i, { name: "reveal-analyze", status: "running" });
           try {
-            const build = await buildSceneRevealCovers(s.backgroundUrl, runSegment as any);
+            const build = await buildSceneRevealBoxes(s.backgroundUrl, runDetect as any);
             if (build && build.covers.length > 0) {
               const updated: Scene = {
                 ...s,
