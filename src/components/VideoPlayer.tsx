@@ -46,6 +46,12 @@ export interface Scene {
   masterAudioUrl?: string;
   startMs?: number;
   endMs?: number;
+  /** SAM-derived white covers overlaid on backgroundUrl; fade out to reveal
+   *  the underlying image at the start of the scene. */
+  revealCovers?: RevealCover[];
+  /** Natural aspect (w/h) of backgroundUrl — needed to place covers on the
+   *  object-contain draw rect. Defaults to 1.5 (composite is 1536x1024). */
+  bgAspect?: number;
 }
 
 function ImageScene({
