@@ -175,7 +175,11 @@ function ImageScene({
                 covers={scene.revealCovers}
                 aspect={scene.bgAspect ?? 1.5}
                 progress={progress}
-                durationMs={scene.durationMs || 15000}
+                durationMs={
+                  scene.startMs != null && scene.endMs != null && scene.endMs > scene.startMs
+                    ? scene.endMs - scene.startMs
+                    : scene.durationMs || 15000
+                }
               />
             )}
           </>

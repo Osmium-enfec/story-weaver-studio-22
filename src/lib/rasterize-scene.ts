@@ -195,7 +195,11 @@ export function drawImageSceneFrame(
       else { dh = innerH; dw = innerH * aspect; }
       const dx = innerX + (innerW - dw) / 2;
       const dy = innerY + (innerH - dh) / 2;
-      const durationMs = scene.durationMs || 15000;
+      const windowMs =
+        scene.startMs != null && scene.endMs != null && scene.endMs > scene.startMs
+          ? scene.endMs - scene.startMs
+          : 0;
+      const durationMs = windowMs || scene.durationMs || 15000;
       const LEAD_MS = 250;
       const IDEAL_STEP_MS = 900;
       const IDEAL_FADE_MS = 900;
