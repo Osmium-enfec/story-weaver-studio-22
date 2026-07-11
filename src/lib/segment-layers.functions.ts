@@ -134,60 +134,50 @@ export const segmentImageLayers = createServerFn({ method: "POST" })
     }
     const keys = { lovable, rep };
 
-    let labels: string[] = data.labels?.map((l) => l.toLowerCase().trim()).filter(Boolean) ?? [];
-    if (labels.length === 0) {
-      try {
-        labels = await discoverLabels(data.imageDataUrl, lovable);
-      } catch (e: any) {
-        return { layers: [], fallback: true, error: `Label discovery: ${e?.message ?? e}` };
-      }
-    }
-    if (labels.length === 0) {
-      return { layers: [], fallback: true, error: "No labels discovered in image" };
-    }
-
-    // Grounded-SAM: text-prompted detection + SAM masks. Returns per-label masks.
-    // schananas/grounded_sam takes comma-separated `mask_prompt` and returns
-    // { masks: [urls...], detections: [urls...] } or similar. We ask for masks.
+    // SAM 2 automatic mask generation — segments EVERY distinct region instead
+    // of relying on a single text prompt (which collapsed our infographics into
+    // a few coarse card outlines). Labels are used only for naming afterwards.
     let output: any;
     try {
       output = await runReplicate(
-        "schananas",
-        "grounded_sam",
+        "meta",
+        "sam-2",
         {
           image: data.imageDataUrl,
-          mask_prompt: labels.join(","),
-          negative_mask_prompt: "",
-          adjustment_factor: 0,
+          points_per_side: 32,
+          pred_iou_thresh: 0.85,
+          stability_score_thresh: 0.9,
+          use_m2m: true,
+          multimask_output: true,
         },
         keys,
       );
     } catch (e: any) {
-      return { layers: [], fallback: true, error: e?.message ?? String(e) };
+      return { layers: [], fallback: true, error: `SAM2: ${e?.message ?? e}` };
     }
 
-    // Output shape: usually an array of mask image URLs, one per prompt (in order).
-    // Sometimes an object { masks: [...] }. Normalize.
+    // meta/sam-2 output: { combined_mask, individual_masks: [urls...] }
     let maskUrls: string[] = [];
-    if (Array.isArray(output)) {
+    if (output && Array.isArray(output.individual_masks)) {
+      maskUrls = output.individual_masks.filter((u: any) => typeof u === "string");
+    } else if (Array.isArray(output)) {
       maskUrls = output.filter((u) => typeof u === "string");
-    } else if (output && Array.isArray(output.masks)) {
-      maskUrls = output.masks.filter((u: any) => typeof u === "string");
-    } else if (typeof output === "string") {
-      maskUrls = [output];
     }
 
     if (maskUrls.length === 0) {
       return {
         layers: [],
         fallback: true,
-        error: `Grounded-SAM returned no masks. Raw: ${JSON.stringify(output).slice(0, 300)}`,
+        error: `SAM2 returned no masks. Raw: ${JSON.stringify(output).slice(0, 300)}`,
       };
     }
 
-    const layers: ReplicateSegment[] = maskUrls.map((url, i) => ({
+    const capped = maskUrls.slice(0, 50);
+    const providedLabels = data.labels?.map((l) => l.toLowerCase().trim()).filter(Boolean) ?? [];
+
+    const layers: ReplicateSegment[] = capped.map((url, i) => ({
       id: `layer-${i}`,
-      label: labels[i] ?? `element-${i + 1}`,
+      label: providedLabels[i] ?? `region-${i + 1}`,
       maskUrl: url,
     }));
 
