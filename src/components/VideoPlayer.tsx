@@ -57,11 +57,11 @@ export interface Scene {
 function RevealCoverLayer({
   covers,
   aspect,
-  opacity,
+  progress,
 }: {
   covers: RevealCover[];
   aspect: number;
-  opacity: number;
+  progress: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -88,7 +88,7 @@ function RevealCoverLayer({
   return (
     <div ref={ref} className="pointer-events-none absolute inset-0">
       {rect &&
-        covers.map((c) => (
+        covers.map((c, i) => (
           <img
             key={c.id}
             src={c.pngUrl}
@@ -99,7 +99,7 @@ function RevealCoverLayer({
               top: rect.y + c.bbox.y * rect.h,
               width: c.bbox.w * rect.w,
               height: c.bbox.h * rect.h,
-              opacity,
+              opacity: coverOpacityAt(progress, i, covers.length),
             }}
             draggable={false}
           />
