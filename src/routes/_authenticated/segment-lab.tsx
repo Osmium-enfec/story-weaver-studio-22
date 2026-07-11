@@ -87,8 +87,14 @@ function SegmentLab() {
     setError(null);
     setLayers([]);
     try {
-      setStatus("Segmenting with Gemini 2.5 Pro (10–30s)…");
-      const res = await runSegment({ data: { imageDataUrl: imageUrl } });
+      setStatus(
+        knownLabels && knownLabels.length > 0
+          ? `Segmenting with Grounded-SAM using ${knownLabels.length} known labels…`
+          : "Discovering labels (GPT) then segmenting with Grounded-SAM…",
+      );
+      const res = await runSegment({
+        data: { imageDataUrl: imageUrl, labels: knownLabels ?? undefined },
+      });
       if (res.fallback || res.error) {
         setError(res.error ?? "Segmentation failed. Please retry in a moment.");
         setStatus("");
