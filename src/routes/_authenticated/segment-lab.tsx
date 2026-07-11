@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { segmentImageLayers } from "@/lib/segment-layers.functions";
-import { extractLayerFromBboxMask, downloadDataUrl, type LayerBitmap } from "@/lib/layer-compose";
+import { extractLayer, downloadDataUrl, type LayerBitmap } from "@/lib/layer-compose";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
@@ -68,7 +68,7 @@ function SegmentLab() {
         const l = res.layers[i];
         setStatus(`Extracting layer ${i + 1}/${res.layers.length}: ${l.label}`);
         try {
-          const b = await extractLayerFromBboxMask(imageUrl, l.maskDataUrl, l.box);
+          const b = await extractLayer(imageUrl, l.maskUrl);
           bitmaps.push({
             ...b,
             id: l.id,
