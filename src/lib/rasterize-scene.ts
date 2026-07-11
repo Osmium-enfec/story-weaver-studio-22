@@ -184,6 +184,42 @@ export function drawImageSceneFrame(
     ctx.fillRect(-innerW / 2, -innerH / 2, innerW, innerH);
     drawContain(ctx, bg, -innerW / 2, -innerH / 2, innerW, innerH, "contain");
     ctx.restore();
+
+    // White covers → fade out to reveal underlying image (all covers together)
+    const covers = scene.revealCovers ?? [];
+    if (covers.length > 0) {
+      const aspect = scene.bgAspect ?? (bg.naturalWidth / Math.max(1, bg.naturalHeight));
+      const cr = innerW / innerH;
+      let dw: number, dh: number;
+      if (aspect > cr) { dw = innerW; dh = innerW / aspect; }
+      else { dh = innerH; dw = innerH * aspect; }
+      const dx = innerX + (innerW - dw) / 2;
+      const dy = innerY + (innerH - dh) / 2;
+      // Same easing as the live player.
+      const FADE_START = 0.03, FADE_END = 0.35;
+      let alpha = 1;
+      if (progress >= FADE_END) alpha = 0;
+      else if (progress > FADE_START) {
+        const tt = (progress - FADE_START) / (FADE_END - FADE_START);
+        alpha = Math.pow(1 - tt, 3);
+      }
+      if (alpha > 0) {
+        for (const c of covers) {
+          const img = assets.cov.get(c.pngUrl);
+          if (!img) continue;
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.drawImage(
+            img,
+            dx + c.bbox.x * dw,
+            dy + c.bbox.y * dh,
+            c.bbox.w * dw,
+            c.bbox.h * dh,
+          );
+          ctx.restore();
+        }
+      }
+    }
   }
 
   const rawElements = (scene.elements ?? [])
