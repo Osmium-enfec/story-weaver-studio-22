@@ -537,14 +537,15 @@ async function generateCompositeImage(prompt: string, title?: string): Promise<s
 - All text is HANDWRITTEN MARKER-STYLE (like Excalidraw's Virgil / Cascadia Handwriting). Large, readable, black #111 by default; use the accent color when the word IS the accent (e.g. "Valid" in green, "Wrong" in red, "cannot start" in purple).
 - Playful doodle mascots welcome: a small smiling computer/robot, the Python snake logo (blue + yellow rounded), a lightbulb, a star, sparkles, "??" marks, a warning triangle. Draw them small and off to the side — never dominating.
 - Generous whitespace. NOTHING overlaps. One idea per card.
+- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. This includes the title, subtitle, each example card, every code-chip, and any mascot/doodle. Do NOT draw loose icons or floating text without a containing box. The box is part of the element.
 
 === REQUIRED COMPOSITION (16:9, 1536x1024) ===
-1. TOP: a hand-drawn RIBBON/BANNER (not a plain pill) centered at the top, pastel BLUE #DBEAFE fill with sketchy black outline and small blue sparkle marks on both sides. Inside, write ${title ? `"${title}"` : "the short rule/topic title"} in large handwritten marker text, blue #2563EB.
-2. Directly under the banner: a one-line handwritten SUBTITLE in black describing the rule, with a hand-drawn wavy blue underline beneath it.
+1. TOP: a hand-drawn RIBBON/BANNER (a wide rounded-rectangle box) centered at the top, pastel BLUE #DBEAFE fill with sketchy black outline and small blue sparkle marks on both sides. Inside, write ${title ? `"${title}"` : "the short rule/topic title"} in large handwritten marker text, blue #2563EB.
+2. Directly under the banner: a one-line handwritten SUBTITLE inside a small rounded-rectangle pill/box with a soft pastel BLUE or GRAY fill, describing the rule, with a hand-drawn wavy blue underline beneath it.
 3. MIDDLE ROW: two large rounded-rectangle CARDS side by side with sketchy black outlines and a subtle sketched shadow (a second offset outline, not a real shadow):
      - LEFT card = green #DCFCE7 fill. Header row inside: a green circle-check ✓ + the word "Valid" in green #16A34A (underlined). Below the header, show the concrete VALID examples from the scene as small rounded green code-chips (monospace-looking handwritten text, e.g. \`user1\`, \`model2\`), plus one tiny supporting doodle (smiling computer or thumbs-up) and a short handwritten caption like "numbers inside = okay".
      - RIGHT card = red #FEE2E2 fill. Header row: a red circle-X ✗ + the word "Wrong" in red #DC2626 (underlined). Below, show the WRONG example as a red DASHED-outline code-chip (e.g. \`1user\`), a small confused Python-snake mascot with "??" and a red warning triangle nearby, and a short handwritten caption like "starts with a number = not allowed".
-3. BOTTOM: a wide rounded SUMMARY PILL, pastel LAVENDER #EDE9FE fill, sketchy black outline. Inside: a small purple star doodle on the left, a small yellow lightbulb doodle on the right, and one handwritten summary sentence in the middle in black — with the KEY verb/negation (e.g. "cannot start") emphasized in purple #7C3AED.
+4. BOTTOM: a wide rounded SUMMARY PILL/box, pastel LAVENDER #EDE9FE fill, sketchy black outline. Inside: a small purple star doodle on the left, a small yellow lightbulb doodle on the right, and one handwritten summary sentence in the middle in black — with the KEY verb/negation (e.g. "cannot start") emphasized in purple #7C3AED.
 
 === SCENE CONTENT (use the concrete words/examples from this) ===
 ${prompt}
@@ -552,6 +553,7 @@ ${prompt}
 === HARD RULES ===
 - 16:9 single composition, pure white background.
 - Everything is HAND-DRAWN, not typed/geometric. Lines slightly wobble.
+- Every element must be inside its own rounded-rectangle box/card. No floating objects, no bare text, no loose icons.
 - Do NOT invent extra rules or examples that aren't in the scene content. Use the exact code examples given (e.g. user1, model2, 1user).
 - No captions outside the three regions above. No page numbers, no watermarks, no logos.`;
 
