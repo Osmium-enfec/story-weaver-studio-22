@@ -74,7 +74,7 @@ Layout rules:
 - Bottom: a small footer or mascot pill if it fits the topic.
 - Every element must be visually separated (>=40px gap). No overlapping outlines.
 - Handwritten marker-style short labels next to each element.
-- Every visual element must be enclosed in its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. No floating objects, no loose icons, no bare text without a box.
+- Every visual element must be enclosed in its own HAND-DRAWN wobbly imperfect box (wavy sketchy outline, slightly crooked corners, marker-style — NEVER a perfect rectangle) with a flat pastel fill. No floating objects, no loose icons, no bare text without such a hand-drawn box.
 
 Absolutely no photorealism, no watercolor, no 3D, no dark backgrounds.`;
 
