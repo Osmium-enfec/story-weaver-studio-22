@@ -1,17 +1,17 @@
-// Build "white cover" overlays from a composite image using Grounded-SAM
-// segmentation. Covers are stored in NORMALIZED coordinates (0..1) relative
-// to the source image's natural size, so the player and rasterizer can place
-// them on top of the object-contain draw rect regardless of container size.
+// Sequential "white box" reveal covers driven by Grounding-DINO hand-drawn
+// box detection. Each cover is a plain white rectangle placed over a
+// detected box; covers fade out one-by-one during scene playback, in
+// reading order (top → bottom, then left → right).
+//
+// Covers are stored in NORMALIZED coordinates (0..1) relative to the source
+// image's natural size, so the player and rasterizer can place them on top
+// of the object-contain draw rect regardless of container size.
 
-import {
-  extractWhiteCover,
-  buildResidualCover,
-  type LayerBitmap,
-} from "./layer-compose";
-import type { segmentImageLayers } from "./segment-layers.functions";
+import type { detectBoxesInImage } from "./detect-boxes.functions";
 
 export interface RevealCover {
   id: string;
+  /** Shared 1x1 white PNG data URL — the cover is just a filled rectangle. */
   pngUrl: string;
   /** Normalized 0..1 bbox relative to the source image natural dims. */
   bbox: { x: number; y: number; w: number; h: number };
@@ -21,6 +21,10 @@ export interface RevealBuild {
   covers: RevealCover[];
   aspect: number; // width / height of the source image
 }
+
+// 1x1 pure-white PNG. Any browser/canvas can stretch this to a filled rect.
+export const WHITE_PIXEL_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 function loadImg(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -32,14 +36,17 @@ function loadImg(url: string): Promise<HTMLImageElement> {
   });
 }
 
-type SegRunner = (args: {
-  data: { imageDataUrl: string; labels?: string[] };
-}) => Promise<{ layers?: { id: string; label: string; maskUrl: string }[]; fallback?: boolean; error?: string }>;
+type DetectRunner = (args: {
+  data: { imageDataUrl: string };
+}) => ReturnType<typeof detectBoxesInImage>;
 
-export async function buildSceneRevealCovers(
+/**
+ * Detect hand-drawn boxes in the composite and return per-box white covers
+ * sorted in reading order (top → bottom, left → right within a row).
+ */
+export async function buildSceneRevealBoxes(
   imageUrl: string,
-  runSegment: SegRunner,
-  labels?: string[],
+  runDetect: DetectRunner,
 ): Promise<RevealBuild | null> {
   const img = await loadImg(imageUrl).catch(() => null);
   if (!img) return null;
@@ -47,67 +54,45 @@ export async function buildSceneRevealCovers(
   const H = img.naturalHeight || 1;
   const aspect = W / H;
 
-  const res = await runSegment({ data: { imageDataUrl: imageUrl, labels } }).catch((e) => {
-    console.warn("[reveal] segment failed:", e?.message ?? e);
+  const res = await runDetect({ data: { imageDataUrl: imageUrl } }).catch((e) => {
+    console.warn("[reveal] detect failed:", (e as any)?.message ?? e);
     return null;
   });
-  if (!res || res.fallback || !res.layers || res.layers.length === 0) return null;
+  if (!res || res.fallback || !res.boxes || res.boxes.length === 0) return null;
 
-  const covers: RevealCover[] = [];
-  for (const l of res.layers) {
-    try {
-      const cov = await extractWhiteCover(imageUrl, l.maskUrl);
-      if (cov.area > 0 && cov.pngUrl) {
-        covers.push({
-          id: l.id,
-          pngUrl: cov.pngUrl,
-          bbox: {
-            x: cov.bbox.x / W,
-            y: cov.bbox.y / H,
-            w: cov.bbox.w / W,
-            h: cov.bbox.h / H,
-          },
-        });
-      }
-    } catch (e) {
-      console.warn("[reveal] cover extract failed", l.label, e);
-    }
-  }
+  const rowTol = 0.05;
+  const sorted = [...res.boxes].sort((a, b) => {
+    const ay = a.bbox.y + a.bbox.h / 2;
+    const by = b.bbox.y + b.bbox.h / 2;
+    if (Math.abs(ay - by) > rowTol) return ay - by;
+    return a.bbox.x + a.bbox.w / 2 - (b.bbox.x + b.bbox.w / 2);
+  });
 
-  try {
-    const residual = await buildResidualCover(
-      imageUrl,
-      res.layers.map((l) => l.maskUrl),
-    );
-    if (residual.area > 0 && residual.pngUrl) {
-      covers.push({
-        id: "__residual__",
-        pngUrl: residual.pngUrl,
-        bbox: {
-          x: residual.bbox.x / W,
-          y: residual.bbox.y / H,
-          w: residual.bbox.w / W,
-          h: residual.bbox.h / H,
-        },
-      });
-    }
-  } catch (e) {
-    console.warn("[reveal] residual failed", e);
-  }
+  const covers: RevealCover[] = sorted.map((b, i) => ({
+    id: `box-${i}`,
+    pngUrl: WHITE_PIXEL_PNG,
+    bbox: b.bbox,
+  }));
 
   return { covers, aspect };
 }
 
 /**
- * Progress-driven cover opacity: fully opaque at scene start, eased out to
- * transparent by ~35% of the scene. All covers fade together.
+ * Sequential per-box opacity: each cover fades out in its own slot within
+ * the first ~65% of the scene, in the order the covers array was built.
  */
-export function coverOpacityAt(progress: number): number {
+export function coverOpacityAt(
+  progress: number,
+  index: number,
+  total: number,
+): number {
   const FADE_START = 0.03;
-  const FADE_END = 0.35;
-  if (progress <= FADE_START) return 1;
-  if (progress >= FADE_END) return 0;
-  const t = (progress - FADE_START) / (FADE_END - FADE_START);
-  const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
-  return 1 - eased;
+  const FADE_END = 0.65;
+  const slot = Math.max(0.01, (FADE_END - FADE_START) / Math.max(1, total));
+  const start = FADE_START + index * slot;
+  const end = start + slot;
+  if (progress <= start) return 1;
+  if (progress >= end) return 0;
+  const t = (progress - start) / (end - start);
+  return Math.pow(1 - t, 3); // easeOutCubic on the fade-OUT
 }

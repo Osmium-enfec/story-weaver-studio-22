@@ -185,7 +185,7 @@ export function drawImageSceneFrame(
     drawContain(ctx, bg, -innerW / 2, -innerH / 2, innerW, innerH, "contain");
     ctx.restore();
 
-    // White covers → fade out to reveal underlying image (all covers together)
+    // White box covers → fade out sequentially (top→bottom, left→right).
     const covers = scene.revealCovers ?? [];
     if (covers.length > 0) {
       const aspect = scene.bgAspect ?? (bg.naturalWidth / Math.max(1, bg.naturalHeight));
@@ -195,30 +195,33 @@ export function drawImageSceneFrame(
       else { dh = innerH; dw = innerH * aspect; }
       const dx = innerX + (innerW - dw) / 2;
       const dy = innerY + (innerH - dh) / 2;
-      // Same easing as the live player.
-      const FADE_START = 0.03, FADE_END = 0.35;
-      let alpha = 1;
-      if (progress >= FADE_END) alpha = 0;
-      else if (progress > FADE_START) {
-        const tt = (progress - FADE_START) / (FADE_END - FADE_START);
-        alpha = Math.pow(1 - tt, 3);
-      }
-      if (alpha > 0) {
-        for (const c of covers) {
-          const img = assets.cov.get(c.pngUrl);
-          if (!img) continue;
-          ctx.save();
-          ctx.globalAlpha = alpha;
-          ctx.drawImage(
-            img,
-            dx + c.bbox.x * dw,
-            dy + c.bbox.y * dh,
-            c.bbox.w * dw,
-            c.bbox.h * dh,
-          );
-          ctx.restore();
+      const FADE_START = 0.03, FADE_END = 0.65;
+      const total = covers.length;
+      const slot = Math.max(0.01, (FADE_END - FADE_START) / total);
+      covers.forEach((c, i) => {
+        const img = assets.cov.get(c.pngUrl);
+        if (!img) return;
+        const start = FADE_START + i * slot;
+        const end = start + slot;
+        let alpha: number;
+        if (progress <= start) alpha = 1;
+        else if (progress >= end) alpha = 0;
+        else {
+          const tt = (progress - start) / (end - start);
+          alpha = Math.pow(1 - tt, 3);
         }
-      }
+        if (alpha <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(
+          img,
+          dx + c.bbox.x * dw,
+          dy + c.bbox.y * dh,
+          c.bbox.w * dw,
+          c.bbox.h * dh,
+        );
+        ctx.restore();
+      });
     }
   }
 

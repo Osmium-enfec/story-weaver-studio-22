@@ -16,8 +16,8 @@ import {
   generateSceneComposite,
   type ScenePlan,
 } from "@/lib/explainer.functions";
-import { segmentImageLayers } from "@/lib/segment-layers.functions";
-import { buildSceneRevealCovers } from "@/lib/build-reveal";
+import { detectBoxesInImage } from "@/lib/detect-boxes.functions";
+import { buildSceneRevealBoxes } from "@/lib/build-reveal";
 import { findOrGenerateImage } from "@/lib/image-library.functions";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
@@ -114,7 +114,7 @@ function Index() {
   const [dragOver, setDragOver] = useState(false);
   const [running, setRunning] = useState(false);
   const navigate = useNavigate();
-  const runSegment = useServerFn(segmentImageLayers);
+  const runDetect = useServerFn(detectBoxesInImage);
 
   const plansRef = useRef<ScenePlan[]>([]);
   
@@ -490,7 +490,7 @@ function Index() {
           if (!s || s.kind !== "image" || !s.backgroundUrl) continue;
           pushStep(i, { name: "reveal-analyze", status: "running" });
           try {
-            const build = await buildSceneRevealCovers(s.backgroundUrl, runSegment as any);
+            const build = await buildSceneRevealBoxes(s.backgroundUrl, runDetect as any);
             if (build && build.covers.length > 0) {
               const updated: Scene = {
                 ...s,
