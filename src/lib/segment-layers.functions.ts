@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const Input = z.object({
   imageDataUrl: z.string().min(20),
+  labels: z.array(z.string()).optional(),
 });
 
 export interface ReplicateSegment {
