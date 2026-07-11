@@ -525,31 +525,47 @@ async function generateCompositeImage(prompt: string, title?: string): Promise<s
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  const styled = `A clean 16:9 widescreen Excalidraw-style EDUCATIONAL INFOGRAPHIC on a PURE WHITE (#FFFFFF) background, suitable for a Python-for-AI course with voiceover.
+  const styled = `I am building a Python-for-AI course visual system.
 
-STYLE (must match exactly):
-- Hand-drawn slightly wobbly BLACK marker outlines (2–5px), rounded corners, occasional double strokes — sketchy but confident.
-- FLAT PASTEL fills only (no watercolor, no cross-hatching, no gradients, no 3D, no photorealism):
-  blue #3B82F6 / #DBEAFE (Python / main titles),
-  green #22C55E / #DCFCE7 (correct / success),
-  red #EF4444 / #FEE2E2 (wrong / errors),
-  purple #8B5CF6 / #EDE9FE (technical concepts),
-  orange/yellow #F59E0B / #FEF3C7 (hints).
-- Rounded cards / pill shapes with sketchy outlines to group ideas.
-- Playful doodle icons only (check, X, lock, star, lightbulb, snake, robot, laptop, file, folder, speech bubble, code window, tag, magnifier).
-- Handwritten marker-style font for ALL text. Large, readable. Short phrases only.
-- Minimal and spacious: generous white space everywhere. NO overlapping arrows, text, icons, or cards. One idea per element.
-- Friendly, classroom-slide feel — like a modern teacher's whiteboard sketch.
+Visual style:
+- Clean Excalidraw-style educational infographic on a white background.
+- Hand-drawn black outlines, pastel fills, rounded cards, playful doodle icons, large readable handwritten text.
+- Beginner-friendly, classroom whiteboard feel, minimal text, more visuals.
+- No overlapping arrows, icons, or text.
+- Use blue for Python/main titles, green for correct/success, red for wrong/errors, purple for technical concepts, orange/yellow for hints.
+- Images should be easy to animate element-by-element.
+
+Common layout:
+- Canvas: 1600x900 or 16:9.
+- White background.
+- Use separate cards/boxes for each idea.
+- Keep enough spacing between elements.
+
+If the scene is an MCQ answer, use this MCQ answer layout:
+- Top title banner: "MCQ Answer"
+- Subtitle: topic name
+- Middle: four option cards A, B, C, D
+- Correct option: green border, green check
+- Wrong options: red X, short reason
+- Bottom banner: final correct answer
+
+Example grid positions (canvas 1659x948 px; use 3px inner margin inside each box):
+1. MCQ Answer title banner: X 339, Y 55, W 974, H 151
+2. Subtitle (topic name): X 419, Y 218, W 818, H 94
+3. Option A card: X 113, Y 315, W 327, H 458
+4. Option B card: X 478, Y 315, W 331, H 458
+5. Option C card: X 846, Y 315, W 331, H 458
+6. Option D card: X 1215, Y 315, W 321, H 458
+7. Correct answer banner: X 322, Y 790, W 1025, H 114
 
 SCENE TO DRAW: ${prompt}
 
-${title ? `At the TOP CENTER, draw the title "${title}" in large handwritten marker-style black text inside a rounded rectangle "pill" with a sketchy black outline and a flat pastel BLUE (#DBEAFE) fill.` : ""}
+${title ? `Use "${title}" as the top title banner text (handwritten marker-style black text inside a rounded pill with sketchy black outline and flat pastel BLUE #DBEAFE fill).` : ""}
 
-CRITICAL RULES:
-- SINGLE composed illustration — all elements laid out spatially with generous whitespace between them.
-- Background must be PURE WHITE (#FFFFFF) EVERYWHERE — no cream, no off-white, no paper texture, no full-canvas colored panels.
-- NO photorealism, NO watercolor, NO cross-hatching, NO drop shadows, NO scenery beyond what the scene calls for.
-- Widescreen 16:9, generous margins on all edges.`;
+CRITICAL:
+- Single 16:9 composed illustration. Pure white (#FFFFFF) background everywhere — no cream, no paper texture, no full-canvas colored panels.
+- No photorealism, no watercolor, no cross-hatching, no drop shadows.
+- Generous whitespace between elements; nothing overlaps.`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
