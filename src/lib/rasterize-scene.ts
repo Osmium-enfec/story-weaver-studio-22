@@ -57,12 +57,14 @@ export interface SceneAssets {
   bg: Map<string, HTMLImageElement>;
   el: Map<string, HTMLImageElement>;
   vid: Map<string, HTMLVideoElement>;
+  cov: Map<string, HTMLImageElement>;
 }
 
 export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> {
   const bg = new Map<string, HTMLImageElement>();
   const el = new Map<string, HTMLImageElement>();
   const vid = new Map<string, HTMLVideoElement>();
+  const cov = new Map<string, HTMLImageElement>();
 
   const jobs: Promise<void>[] = [];
   for (const s of scenes) {
@@ -81,6 +83,14 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
           );
         }
       }
+      for (const c of s.revealCovers ?? []) {
+        if (!cov.has(c.pngUrl)) {
+          const url = c.pngUrl;
+          jobs.push(
+            loadImage(url).then((img) => { cov.set(url, img); }).catch(() => {}),
+          );
+        }
+      }
     } else if (s.kind === "stock" && s.mediaUrl) {
       const url = s.mediaUrl;
       if (!vid.has(url)) {
@@ -91,7 +101,7 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
     }
   }
   await Promise.all(jobs);
-  return { bg, el, vid };
+  return { bg, el, vid, cov };
 }
 
 function drawContain(
