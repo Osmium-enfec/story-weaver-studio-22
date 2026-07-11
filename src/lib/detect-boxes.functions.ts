@@ -107,9 +107,20 @@ export const detectBoxesInImage = createServerFn({ method: "POST" })
     if (!lovable) throw new Error("LOVABLE_API_KEY missing");
     if (!rep) return { boxes: [], fallback: true, error: "Replicate connector not linked." };
 
+    // Grounding-DINO on Replicate rejects large data URLs. If we were given
+    // one, upload it to Replicate's file store first and pass the HTTPS URL.
+    let imageUrl = data.imageDataUrl;
+    if (imageUrl.startsWith("data:")) {
+      try {
+        imageUrl = await uploadDataUrlToReplicate(imageUrl, { lovable, rep });
+      } catch (e: any) {
+        return { boxes: [], fallback: true, error: `upload: ${e?.message ?? String(e)}` };
+      }
+    }
+
     let output: any;
     try {
-      output = await runGroundingDino(data.imageDataUrl, { lovable, rep });
+      output = await runGroundingDino(imageUrl, { lovable, rep });
     } catch (e: any) {
       return { boxes: [], fallback: true, error: e?.message ?? String(e) };
     }
