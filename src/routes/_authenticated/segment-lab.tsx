@@ -42,11 +42,16 @@ function SegmentLab() {
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [knownLabels, setKnownLabels] = useState<string[] | null>(null);
   const [layers, setLayers] = useState<UILayer[]>([]);
+  const [covers, setCovers] = useState<
+    Array<{ id: string; label: string; bitmap: LayerBitmap; opacity: number }>
+  >([]);
+  const [mode, setMode] = useState<"reconstruct" | "reveal">("reveal");
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [genPrompt, setGenPrompt] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const revealTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   const loadImage = useCallback((url: string) => {
     setImageUrl(url);
