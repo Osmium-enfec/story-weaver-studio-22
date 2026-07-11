@@ -97,6 +97,7 @@ function SegmentLab() {
     setBusy(true);
     setError(null);
     setLayers([]);
+    setCovers([]);
     try {
       setStatus(
         knownLabels && knownLabels.length > 0
@@ -111,14 +112,18 @@ function SegmentLab() {
         setStatus("");
         return;
       }
-      setStatus(`Got ${res.layers.length} masks. Extracting transparent PNGs…`);
+      setStatus(`Got ${res.layers.length} masks. Extracting layers + white covers…`);
 
       const bitmaps: UILayer[] = [];
+      const coverList: Array<{ id: string; label: string; bitmap: LayerBitmap; opacity: number }> = [];
       for (let i = 0; i < res.layers.length; i++) {
         const l = res.layers[i];
-        setStatus(`Extracting layer ${i + 1}/${res.layers.length}: ${l.label}`);
+        setStatus(`Layer ${i + 1}/${res.layers.length}: ${l.label}`);
         try {
-          const b = await extractLayer(imageUrl, l.maskUrl);
+          const [b, cov] = await Promise.all([
+            extractLayer(imageUrl, l.maskUrl),
+            extractWhiteCover(imageUrl, l.maskUrl),
+          ]);
           bitmaps.push({
             ...b,
             id: l.id,
@@ -128,15 +133,47 @@ function SegmentLab() {
             offsetX: 0,
             offsetY: 0,
           });
+          if (cov.area > 0 && cov.pngUrl) {
+            coverList.push({ id: l.id, label: l.label, bitmap: cov, opacity: 1 });
+          }
         } catch (e) {
           console.warn("Layer extract failed:", l.label, e);
         }
       }
+
+      // Residual cover: catches everything SAM missed (stray strokes, text bits).
+      setStatus("Building residual white cover for uncovered ink…");
+      try {
+        const residual = await buildResidualCover(
+          imageUrl,
+          res.layers.map((l) => l.maskUrl),
+        );
+        if (residual.area > 0 && residual.pngUrl) {
+          coverList.push({
+            id: "__residual__",
+            label: "misc ink",
+            bitmap: residual,
+            opacity: 1,
+          });
+        }
+      } catch (e) {
+        console.warn("Residual cover failed:", e);
+      }
+
       // z-index: smaller area = higher (on top)
       bitmaps.sort((a, b) => b.area - a.area);
       bitmaps.forEach((b, i) => (b.zIndex = i));
       setLayers(bitmaps);
-      setStatus(`Done — ${bitmaps.length} layers extracted.`);
+
+      // Reveal order: largest area first (big shapes, then details). Residual last.
+      coverList.sort((a, b) => {
+        if (a.id === "__residual__") return 1;
+        if (b.id === "__residual__") return -1;
+        return b.bitmap.area - a.bitmap.area;
+      });
+      setCovers(coverList);
+      setMode("reveal");
+      setStatus(`Done — ${bitmaps.length} layers, ${coverList.length} covers. Hit "Play reveal".`);
     } catch (e: any) {
       setError(e?.message ?? String(e));
       setStatus("");
@@ -144,6 +181,31 @@ function SegmentLab() {
       setBusy(false);
     }
   }, [imageUrl, runSegment, knownLabels]);
+
+  const clearRevealTimers = useCallback(() => {
+    revealTimers.current.forEach((t) => clearTimeout(t));
+    revealTimers.current = [];
+  }, []);
+
+  const resetReveal = useCallback(() => {
+    clearRevealTimers();
+    setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
+  }, [clearRevealTimers]);
+
+  const playReveal = useCallback(() => {
+    clearRevealTimers();
+    // Reset then fade covers out sequentially with a 400ms stagger.
+    setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
+    const STAGGER = 400;
+    covers.forEach((_, i) => {
+      const t = setTimeout(() => {
+        setCovers((cs) =>
+          cs.map((c, j) => (j === i ? { ...c, opacity: 0 } : c)),
+        );
+      }, 200 + i * STAGGER);
+      revealTimers.current.push(t);
+    });
+  }, [covers, clearRevealTimers]);
 
   const toggle = (id: string) =>
     setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
