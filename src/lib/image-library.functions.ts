@@ -33,7 +33,7 @@ async function generateImage(prompt: string, kind: "background" | "element"): Pr
 - Handwritten marker-style font for any text. Short phrases only.
 - Doodle icons only (check, X, lock, star, lightbulb, snake, robot, laptop, file, folder, speech bubble, code window, tag, magnifier).
 - Generous white space. No overlapping arrows / text / icons. One idea per element.
-- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. Do NOT draw loose icons or floating text without a containing box. The box is part of the element.`;
+- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own HAND-DRAWN IMPERFECT BOX — a wobbly, slightly wavy rounded rectangle with a sketchy black marker outline (NOT a perfect geometric rectangle). Each side has small wiggles, corners are slightly asymmetric and unevenly rounded, like drawn quickly by hand. Flat pastel fill inside. NO floating icons or bare text without such a hand-drawn box.`;
 
   if (kind === "element") {
     styled = `A SINGLE isolated Excalidraw-style hand-drawn doodle of: ${prompt}.
