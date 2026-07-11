@@ -25,7 +25,7 @@ export const generateMcqImage = createServerFn({ method: "POST" })
 
 Compose a MULTIPLE-CHOICE QUESTION laid out TOP-TO-BOTTOM with EXACTLY these 7 elements, arranged in NON-OVERLAPPING horizontal bands. Coordinates are fractions of the canvas from the top-left (canvas = 100% wide × 100% tall). Follow the positions strictly — masks will cover each element by position. Leave clean white gaps between every element; nothing must cross into a neighbouring band.
 
-CRITICAL: Every element must be drawn inside its own rounded-rectangle box/card with a sketchy black outline and a flat pastel fill. The subtitle and any inline text must also sit inside a small rounded pill or box. No floating text or loose icons without a containing box.
+CRITICAL: Every element must be drawn inside its own HAND-DRAWN IMPERFECT box — wobbly wavy rounded rectangle, sketchy black marker outline (NOT a perfect rectangle), slightly crooked corners, small wiggles on each side, flat pastel fill. The subtitle and any inline text must also sit inside a small hand-drawn wobbly pill/box. No floating text or loose icons without a containing hand-drawn box.
 
 1) MAIN TITLE BANNER (the question) — wide rounded rectangle "pill" filled with soft pastel BLUE, thick black sketchy outline, hand-drawn black marker text inside. Position: x=4%, y=3%, width=92%, height=12%.
 
