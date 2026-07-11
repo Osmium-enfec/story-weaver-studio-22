@@ -535,28 +535,6 @@ Visual style:
 - Use blue for Python/main titles, green for correct/success, red for wrong/errors, purple for technical concepts, orange/yellow for hints.
 - Images should be easy to animate element-by-element.
 
-Common layout:
-- Canvas: 1600x900 or 16:9.
-- White background.
-- Use separate cards/boxes for each idea.
-- Keep enough spacing between elements.
-
-If the scene is an MCQ answer, use this MCQ answer layout:
-- Top title banner: "MCQ Answer"
-- Subtitle: topic name
-- Middle: four option cards A, B, C, D
-- Correct option: green border, green check
-- Wrong options: red X, short reason
-- Bottom banner: final correct answer
-
-Example grid positions (canvas 1659x948 px; use 3px inner margin inside each box):
-1. MCQ Answer title banner: X 339, Y 55, W 974, H 151
-2. Subtitle (topic name): X 419, Y 218, W 818, H 94
-3. Option A card: X 113, Y 315, W 327, H 458
-4. Option B card: X 478, Y 315, W 331, H 458
-5. Option C card: X 846, Y 315, W 331, H 458
-6. Option D card: X 1215, Y 315, W 321, H 458
-7. Correct answer banner: X 322, Y 790, W 1025, H 114
 
 SCENE TO DRAW: ${prompt}
 
