@@ -304,21 +304,96 @@ function SegmentLab() {
 
         {/* CENTER — preview */}
         <div className="rounded-lg border bg-white p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium">Reconstructed preview</div>
-            <button
-              onClick={resetOffsets}
-              className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
-            >
-              Reset offsets
-            </button>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">Preview</div>
+              <div className="flex overflow-hidden rounded border text-xs">
+                <button
+                  onClick={() => setMode("reveal")}
+                  className={`px-2 py-1 ${mode === "reveal" ? "bg-neutral-900 text-white" : "hover:bg-neutral-50"}`}
+                >
+                  Reveal
+                </button>
+                <button
+                  onClick={() => setMode("reconstruct")}
+                  className={`px-2 py-1 ${mode === "reconstruct" ? "bg-neutral-900 text-white" : "hover:bg-neutral-50"}`}
+                >
+                  Reconstruct
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-1">
+              {mode === "reveal" && covers.length > 0 && (
+                <>
+                  <button
+                    onClick={playReveal}
+                    className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                  >
+                    ▶ Play reveal
+                  </button>
+                  <button
+                    onClick={resetReveal}
+                    className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
+                  >
+                    Reset
+                  </button>
+                </>
+              )}
+              {mode === "reconstruct" && (
+                <button
+                  onClick={resetOffsets}
+                  className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
+                >
+                  Reset offsets
+                </button>
+              )}
+            </div>
           </div>
           {!imgSize && (
             <div className="flex h-96 items-center justify-center text-sm text-neutral-400">
               Upload an image to begin
             </div>
           )}
-          {imgSize && (
+          {imgSize && mode === "reveal" && (
+            <div
+              className="relative mx-auto overflow-hidden rounded border bg-white"
+              style={{
+                width: imgSize.w * previewScale,
+                height: imgSize.h * previewScale,
+              }}
+            >
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt="src"
+                  className="absolute inset-0 h-full w-full"
+                />
+              )}
+              {covers.map((c) => (
+                <img
+                  key={c.id}
+                  src={c.bitmap.pngUrl}
+                  alt={`cover-${c.label}`}
+                  style={{
+                    position: "absolute",
+                    left: c.bitmap.bbox.x * previewScale,
+                    top: c.bitmap.bbox.y * previewScale,
+                    width: c.bitmap.bbox.w * previewScale,
+                    height: c.bitmap.bbox.h * previewScale,
+                    opacity: c.opacity,
+                    transition: "opacity 1s ease",
+                    pointerEvents: "none",
+                  }}
+                />
+              ))}
+              {covers.length === 0 && (
+                <div className="absolute bottom-2 right-2 rounded bg-white/80 px-2 py-1 text-[10px] text-neutral-500">
+                  Run Analyze to build white covers
+                </div>
+              )}
+            </div>
+          )}
+          {imgSize && mode === "reconstruct" && (
             <div
               className="relative mx-auto overflow-hidden rounded border bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px]"
               style={{
@@ -349,6 +424,7 @@ function SegmentLab() {
             </div>
           )}
         </div>
+
 
         {/* RIGHT — layer list */}
         <div className="rounded-lg border bg-white p-4">
