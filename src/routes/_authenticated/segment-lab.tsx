@@ -153,7 +153,7 @@ function SegmentLab() {
       <div className="border-b bg-white px-6 py-4">
         <h1 className="text-xl font-semibold">Segment Lab — Magic Layer</h1>
         <p className="text-sm text-neutral-600">
-          Upload an image → get separate transparent layers via Gemini + Grounded-SAM.
+          Generate an Excalidraw-style image from text (or upload one) → segment it into transparent layers via Grounded-SAM.
         </p>
       </div>
 
