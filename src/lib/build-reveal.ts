@@ -78,27 +78,34 @@ export async function buildSceneRevealBoxes(
 }
 
 /**
- * Sequential per-box opacity: each cover fades out in its own slot within
- * the first ~65% of the scene, in the order the covers array was built.
+ * Sequential per-box opacity — matches segment-lab timing exactly:
+ * 250ms lead-in, then each box takes a 900ms fade-out with a 900ms
+ * step between box starts (no overlap → distinct one-by-one reveals).
+ * If the scene is too short to fit all boxes at that cadence, we compress
+ * the step but keep the fade snappy so reveals still feel punchy.
  */
 export function coverOpacityAt(
   progress: number,
   index: number,
   total: number,
+  durationMs: number = 15000,
 ): number {
-  // Each cover gets its own start time evenly spaced across the reveal
-  // window, but the actual fade-out is a SHORT punchy transition (fadeFrac
-  // of the slot). That leaves a clear "hold" between reveals so the user
-  // sees boxes pop in one-at-a-time instead of one long continuous fade.
-  const FADE_START = 0.05;
-  const FADE_END = 0.85;
+  const LEAD_MS = 250;
+  const IDEAL_STEP_MS = 900;
+  const IDEAL_FADE_MS = 900;
   const n = Math.max(1, total);
-  const slot = Math.max(0.01, (FADE_END - FADE_START) / n);
-  const fadeFrac = 0.35; // fade takes 35% of a slot; 65% is a hold
-  const start = FADE_START + index * slot;
-  const end = start + slot * fadeFrac;
-  if (progress <= start) return 1;
-  if (progress >= end) return 0;
-  const t = (progress - start) / (end - start);
-  return Math.pow(1 - t, 3); // easeOutCubic fade-out
+  // Reserve at least the final 200ms fully revealed.
+  const usable = Math.max(1, durationMs - LEAD_MS - 200);
+  const idealTotal = n * IDEAL_STEP_MS + IDEAL_FADE_MS;
+  const scale = idealTotal > usable ? usable / idealTotal : 1;
+  const stepMs = IDEAL_STEP_MS * scale;
+  const fadeMs = IDEAL_FADE_MS * scale;
+  const tMs = progress * durationMs;
+  const startMs = LEAD_MS + index * stepMs;
+  const endMs = startMs + fadeMs;
+  if (tMs <= startMs) return 1;
+  if (tMs >= endMs) return 0;
+  const t = (tMs - startMs) / (endMs - startMs);
+  // easeInOut for a smoother, more perceptible fade
+  return t < 0.5 ? 1 - 2 * t * t : 1 - (1 - 2 * (1 - t) * (1 - t));
 }
