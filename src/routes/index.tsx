@@ -16,8 +16,8 @@ import {
   generateSceneComposite,
   type ScenePlan,
 } from "@/lib/explainer.functions";
-import { segmentImageLayers } from "@/lib/segment-layers.functions";
-import { buildSceneRevealCovers } from "@/lib/build-reveal";
+import { detectBoxesInImage } from "@/lib/detect-boxes.functions";
+import { buildSceneRevealBoxes } from "@/lib/build-reveal";
 import { findOrGenerateImage } from "@/lib/image-library.functions";
 import { saveProject } from "@/lib/projects.functions";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
