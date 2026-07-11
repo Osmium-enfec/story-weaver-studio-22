@@ -172,7 +172,7 @@ function ImageScene({
               <RevealCoverLayer
                 covers={scene.revealCovers}
                 aspect={scene.bgAspect ?? 1.5}
-                opacity={coverOpacityAt(progress)}
+                progress={progress}
               />
             )}
           </>
