@@ -160,6 +160,28 @@ function SegmentLab() {
       <div className="grid grid-cols-[320px_1fr_320px] gap-4 p-4">
         {/* LEFT */}
         <div className="space-y-3 rounded-lg border bg-white p-4">
+          <div className="space-y-2 rounded-md border border-dashed border-blue-300 bg-blue-50/50 p-2">
+            <div className="text-xs font-semibold text-blue-900">Generate from text</div>
+            <textarea
+              value={genPrompt}
+              onChange={(e) => setGenPrompt(e.target.value)}
+              placeholder="e.g. Rules for valid Python variable names: cannot start with a number"
+              rows={3}
+              className="w-full resize-none rounded border border-blue-200 bg-white p-2 text-xs"
+            />
+            <button
+              onClick={generateFromText}
+              disabled={busy || !genPrompt.trim()}
+              className="w-full rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white disabled:opacity-40"
+            >
+              {busy ? "Working…" : "Generate image + labels"}
+            </button>
+          </div>
+
+          <div className="text-center text-[10px] uppercase tracking-wider text-neutral-400">
+            or upload
+          </div>
+
           <div
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
@@ -168,7 +190,7 @@ function SegmentLab() {
               if (f) onFile(f);
             }}
             onClick={() => fileInputRef.current?.click()}
-            className="flex h-40 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-neutral-300 text-sm text-neutral-500 hover:bg-neutral-50"
+            className="flex h-28 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-neutral-300 text-sm text-neutral-500 hover:bg-neutral-50"
           >
             {imageUrl ? "Drop new image or click" : "Drop image or click to upload"}
           </div>
@@ -182,6 +204,12 @@ function SegmentLab() {
               if (f) onFile(f);
             }}
           />
+          {knownLabels && knownLabels.length > 0 && (
+            <div className="rounded bg-green-50 p-2 text-[11px] text-green-900">
+              <div className="font-semibold">Baked-in labels ({knownLabels.length}):</div>
+              <div>{knownLabels.join(", ")}</div>
+            </div>
+          )}
           {imageUrl && (
             <div>
               <img src={imageUrl} alt="source" className="w-full rounded border" />
