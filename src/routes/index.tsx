@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useRef } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   Loader2,
   Sparkles,
