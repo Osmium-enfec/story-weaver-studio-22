@@ -3,7 +3,13 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { segmentImageLayers } from "@/lib/segment-layers.functions";
 import { generateStyledImageWithLabels } from "@/lib/generate-styled.functions";
-import { extractLayer, downloadDataUrl, type LayerBitmap } from "@/lib/layer-compose";
+import {
+  extractLayer,
+  extractWhiteCover,
+  buildResidualCover,
+  downloadDataUrl,
+  type LayerBitmap,
+} from "@/lib/layer-compose";
 
 export const Route = createFileRoute("/_authenticated/segment-lab")({
   ssr: false,
@@ -36,11 +42,16 @@ function SegmentLab() {
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [knownLabels, setKnownLabels] = useState<string[] | null>(null);
   const [layers, setLayers] = useState<UILayer[]>([]);
+  const [covers, setCovers] = useState<
+    Array<{ id: string; label: string; bitmap: LayerBitmap; opacity: number }>
+  >([]);
+  const [mode, setMode] = useState<"reconstruct" | "reveal">("reveal");
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [genPrompt, setGenPrompt] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const revealTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
   const loadImage = useCallback((url: string) => {
     setImageUrl(url);
@@ -86,6 +97,7 @@ function SegmentLab() {
     setBusy(true);
     setError(null);
     setLayers([]);
+    setCovers([]);
     try {
       setStatus(
         knownLabels && knownLabels.length > 0
@@ -100,14 +112,18 @@ function SegmentLab() {
         setStatus("");
         return;
       }
-      setStatus(`Got ${res.layers.length} masks. Extracting transparent PNGs…`);
+      setStatus(`Got ${res.layers.length} masks. Extracting layers + white covers…`);
 
       const bitmaps: UILayer[] = [];
+      const coverList: Array<{ id: string; label: string; bitmap: LayerBitmap; opacity: number }> = [];
       for (let i = 0; i < res.layers.length; i++) {
         const l = res.layers[i];
-        setStatus(`Extracting layer ${i + 1}/${res.layers.length}: ${l.label}`);
+        setStatus(`Layer ${i + 1}/${res.layers.length}: ${l.label}`);
         try {
-          const b = await extractLayer(imageUrl, l.maskUrl);
+          const [b, cov] = await Promise.all([
+            extractLayer(imageUrl, l.maskUrl),
+            extractWhiteCover(imageUrl, l.maskUrl),
+          ]);
           bitmaps.push({
             ...b,
             id: l.id,
@@ -117,15 +133,47 @@ function SegmentLab() {
             offsetX: 0,
             offsetY: 0,
           });
+          if (cov.area > 0 && cov.pngUrl) {
+            coverList.push({ id: l.id, label: l.label, bitmap: cov, opacity: 1 });
+          }
         } catch (e) {
           console.warn("Layer extract failed:", l.label, e);
         }
       }
+
+      // Residual cover: catches everything SAM missed (stray strokes, text bits).
+      setStatus("Building residual white cover for uncovered ink…");
+      try {
+        const residual = await buildResidualCover(
+          imageUrl,
+          res.layers.map((l) => l.maskUrl),
+        );
+        if (residual.area > 0 && residual.pngUrl) {
+          coverList.push({
+            id: "__residual__",
+            label: "misc ink",
+            bitmap: residual,
+            opacity: 1,
+          });
+        }
+      } catch (e) {
+        console.warn("Residual cover failed:", e);
+      }
+
       // z-index: smaller area = higher (on top)
       bitmaps.sort((a, b) => b.area - a.area);
       bitmaps.forEach((b, i) => (b.zIndex = i));
       setLayers(bitmaps);
-      setStatus(`Done — ${bitmaps.length} layers extracted.`);
+
+      // Reveal order: largest area first (big shapes, then details). Residual last.
+      coverList.sort((a, b) => {
+        if (a.id === "__residual__") return 1;
+        if (b.id === "__residual__") return -1;
+        return b.bitmap.area - a.bitmap.area;
+      });
+      setCovers(coverList);
+      setMode("reveal");
+      setStatus(`Done — ${bitmaps.length} layers, ${coverList.length} covers. Hit "Play reveal".`);
     } catch (e: any) {
       setError(e?.message ?? String(e));
       setStatus("");
@@ -133,6 +181,31 @@ function SegmentLab() {
       setBusy(false);
     }
   }, [imageUrl, runSegment, knownLabels]);
+
+  const clearRevealTimers = useCallback(() => {
+    revealTimers.current.forEach((t) => clearTimeout(t));
+    revealTimers.current = [];
+  }, []);
+
+  const resetReveal = useCallback(() => {
+    clearRevealTimers();
+    setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
+  }, [clearRevealTimers]);
+
+  const playReveal = useCallback(() => {
+    clearRevealTimers();
+    // Reset then fade covers out sequentially with a 400ms stagger.
+    setCovers((cs) => cs.map((c) => ({ ...c, opacity: 1 })));
+    const STAGGER = 400;
+    covers.forEach((_, i) => {
+      const t = setTimeout(() => {
+        setCovers((cs) =>
+          cs.map((c, j) => (j === i ? { ...c, opacity: 0 } : c)),
+        );
+      }, 200 + i * STAGGER);
+      revealTimers.current.push(t);
+    });
+  }, [covers, clearRevealTimers]);
 
   const toggle = (id: string) =>
     setLayers((ls) => ls.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)));
@@ -231,21 +304,96 @@ function SegmentLab() {
 
         {/* CENTER — preview */}
         <div className="rounded-lg border bg-white p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium">Reconstructed preview</div>
-            <button
-              onClick={resetOffsets}
-              className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
-            >
-              Reset offsets
-            </button>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">Preview</div>
+              <div className="flex overflow-hidden rounded border text-xs">
+                <button
+                  onClick={() => setMode("reveal")}
+                  className={`px-2 py-1 ${mode === "reveal" ? "bg-neutral-900 text-white" : "hover:bg-neutral-50"}`}
+                >
+                  Reveal
+                </button>
+                <button
+                  onClick={() => setMode("reconstruct")}
+                  className={`px-2 py-1 ${mode === "reconstruct" ? "bg-neutral-900 text-white" : "hover:bg-neutral-50"}`}
+                >
+                  Reconstruct
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-1">
+              {mode === "reveal" && covers.length > 0 && (
+                <>
+                  <button
+                    onClick={playReveal}
+                    className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                  >
+                    ▶ Play reveal
+                  </button>
+                  <button
+                    onClick={resetReveal}
+                    className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
+                  >
+                    Reset
+                  </button>
+                </>
+              )}
+              {mode === "reconstruct" && (
+                <button
+                  onClick={resetOffsets}
+                  className="rounded border px-2 py-1 text-xs hover:bg-neutral-50"
+                >
+                  Reset offsets
+                </button>
+              )}
+            </div>
           </div>
           {!imgSize && (
             <div className="flex h-96 items-center justify-center text-sm text-neutral-400">
               Upload an image to begin
             </div>
           )}
-          {imgSize && (
+          {imgSize && mode === "reveal" && (
+            <div
+              className="relative mx-auto overflow-hidden rounded border bg-white"
+              style={{
+                width: imgSize.w * previewScale,
+                height: imgSize.h * previewScale,
+              }}
+            >
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt="src"
+                  className="absolute inset-0 h-full w-full"
+                />
+              )}
+              {covers.map((c) => (
+                <img
+                  key={c.id}
+                  src={c.bitmap.pngUrl}
+                  alt={`cover-${c.label}`}
+                  style={{
+                    position: "absolute",
+                    left: c.bitmap.bbox.x * previewScale,
+                    top: c.bitmap.bbox.y * previewScale,
+                    width: c.bitmap.bbox.w * previewScale,
+                    height: c.bitmap.bbox.h * previewScale,
+                    opacity: c.opacity,
+                    transition: "opacity 1s ease",
+                    pointerEvents: "none",
+                  }}
+                />
+              ))}
+              {covers.length === 0 && (
+                <div className="absolute bottom-2 right-2 rounded bg-white/80 px-2 py-1 text-[10px] text-neutral-500">
+                  Run Analyze to build white covers
+                </div>
+              )}
+            </div>
+          )}
+          {imgSize && mode === "reconstruct" && (
             <div
               className="relative mx-auto overflow-hidden rounded border bg-[repeating-conic-gradient(#eee_0_25%,#fff_0_50%)] bg-[length:16px_16px]"
               style={{
@@ -276,6 +424,7 @@ function SegmentLab() {
             </div>
           )}
         </div>
+
 
         {/* RIGHT — layer list */}
         <div className="rounded-lg border bg-white p-4">
