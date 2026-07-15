@@ -10,7 +10,6 @@ import {
   Music,
   Pencil,
   Save,
-  Trash2,
 } from "lucide-react";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import { saveProject } from "@/lib/projects.functions";
@@ -165,11 +164,6 @@ export function ComposeProjectPanel({
     void persistScenes(next);
   }
 
-  function deleteScene(index: number) {
-    if (!confirm(`Remove scene ${index + 1}?`)) return;
-    void persistScenes(scenes.filter((_, i) => i !== index));
-  }
-
   async function renameScene(index: number, subtitle: string) {
     const next = scenes.map((s, i) =>
       i === index ? { ...s, subtitle: subtitle.trim() || `Scene ${i + 1}` } : s,
@@ -247,7 +241,11 @@ export function ComposeProjectPanel({
         created_at: now,
         updated_at: now,
       };
-      await persistProject({ parts: [...savedParts, newPart], scenes: [] });
+      const editableScenes = persisted.scenes.map(stripSceneStitchMetadata);
+      await persistProject({
+        parts: [...savedParts, newPart],
+        scenes: editableScenes,
+      });
       setStitched(null);
       setStitchMasterAudio(null);
       onSelectPart(newPart.id);
@@ -257,13 +255,6 @@ export function ComposeProjectPanel({
     } finally {
       setSavingPart(false);
     }
-  }
-
-  async function handleDeletePart(partId: string) {
-    if (!confirm("Delete this saved part?")) return;
-    const next = savedParts.filter((p) => p.id !== partId);
-    await persistProject({ parts: next });
-    if (selectedPartId === partId) onSelectPart(null);
   }
 
   async function handleDownloadPart(part: ProjectPart, quality: ExportQuality) {
@@ -301,7 +292,7 @@ export function ComposeProjectPanel({
       <section className="rounded-lg border bg-card p-3">
         <p className="text-sm font-semibold">Saved parts</p>
         <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-          Click a part to load its scenes for editing. Stitch, then save or update the part.
+          Click a part to load its scenes for editing. All parts are kept on this Mac.
         </p>
 
         {!projectId ? (
@@ -370,14 +361,6 @@ export function ComposeProjectPanel({
                       <Download size={10} />
                     )}
                     HD
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePart(part.id)}
-                    className="ml-auto rounded border p-0.5 text-destructive hover:bg-destructive/10"
-                    aria-label="Delete part"
-                  >
-                    <Trash2 size={10} />
                   </button>
                 </div>
               </li>
@@ -543,15 +526,6 @@ export function ComposeProjectPanel({
                       aria-label="Move down"
                     >
                       <ArrowDown size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteScene(i)}
-                      disabled={saving}
-                      className="rounded border p-0.5 text-destructive hover:bg-destructive/10 disabled:opacity-40"
-                      aria-label="Delete"
-                    >
-                      <Trash2 size={12} />
                     </button>
                   </div>
                 </li>

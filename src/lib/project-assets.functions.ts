@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { hostProjectAssetsRoot } from "@/lib/host-storage";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireAuth } from "@/integrations/auth/auth-middleware";
@@ -12,7 +13,7 @@ const Input = z.object({
 });
 
 function assetsRoot(): string {
-  return path.join(process.cwd(), ".data", "project-assets");
+  return hostProjectAssetsRoot();
 }
 
 function decodeAssetUrl(url: string): { buffer: Buffer; contentType: string } {

@@ -836,15 +836,19 @@ function ComposePage() {
       return;
     }
     const currentScenes = (project.scenes as unknown[]) ?? [];
+    const parts = getProjectParts(project);
+    if (currentScenes.length > 0 && parts.length === 0) {
+      setError("Stitch and save this part first. Nothing is removed until it is saved on this Mac.");
+      return;
+    }
     if (
       currentScenes.length > 0 &&
       !confirm(
-        `Start a new part? ${currentScenes.length} scene(s) in "${partTitle || "this part"}" will be cleared.`,
+        `Start a new part? The ${currentScenes.length} scene(s) in the builder will be cleared. Saved parts on this Mac are kept.`,
       )
     ) {
       return;
     }
-    const parts = getProjectParts(project);
     const nextPartTitle = defaultPartTitle(parts);
     try {
       await runSave({

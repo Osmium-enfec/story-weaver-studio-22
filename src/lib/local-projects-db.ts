@@ -1,6 +1,7 @@
+import path from "node:path";
+import { hostProjectsDbPath } from "@/lib/host-storage";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 export interface LocalProjectRow {
@@ -29,7 +30,7 @@ export interface LocalProjectListItem {
 let db: Database.Database | null = null;
 
 function dbPath(): string {
-  return process.env.LOCAL_PROJECTS_DB ?? path.join(process.cwd(), ".data", "projects.db");
+  return hostProjectsDbPath();
 }
 
 function getDb(): Database.Database {
@@ -191,14 +192,6 @@ export function localListProjects(userId: string): LocalProjectListItem[] {
   });
 }
 
-export function localDeleteProject(userId: string, id: string): void {
-  getDb().prepare("DELETE FROM projects WHERE id = ? AND user_id = ?").run(id, userId);
-}
-
-/** Keep one project per user; delete all others from local SQLite. */
-export function localPruneProjectsExcept(userId: string, keepId: string): number {
-  const result = getDb()
-    .prepare("DELETE FROM projects WHERE user_id = ? AND id != ?")
-    .run(userId, keepId);
-  return result.changes;
+export function localDeleteProject(_userId: string, _id: string): void {
+  throw new Error("Project deletion is disabled. All projects are kept on the host machine.");
 }

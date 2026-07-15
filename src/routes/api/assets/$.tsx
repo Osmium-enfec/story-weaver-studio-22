@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { contentTypeForExt } from "@/lib/asset-mime";
+import { hostProjectAssetsRoot } from "@/lib/host-storage";
 
 function assetsRoot(): string {
-  return path.join(process.cwd(), ".data", "project-assets");
+  return hostProjectAssetsRoot();
 }
 
 export const Route = createFileRoute("/api/assets/$")({

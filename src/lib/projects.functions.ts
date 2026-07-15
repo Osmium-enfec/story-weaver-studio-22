@@ -6,7 +6,6 @@ import {
   localDeleteProject,
   localGetProject,
   localListProjects,
-  localPruneProjectsExcept,
   localSaveProject,
 } from "@/lib/local-projects-db";
 import { getProjectParts } from "@/lib/project-parts";
@@ -39,29 +38,14 @@ function normalizeProjectRecord(p: Record<string, unknown>): Record<string, unkn
   return { ...p, parts };
 }
 
-function pickLatestProjectId(items: ProjectListItem[]): string | null {
-  if (items.length === 0) return null;
-  const sorted = [...items].sort(
-    (a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime() ||
-      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
-  );
-  return sorted[0]?.id ?? null;
-}
-
 export const saveProject = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .inputValidator((d: unknown) => SaveInput.parse(d))
   .handler(async ({ data, context }) => {
     const { userId } = context;
-    const isNew = !data.id;
     const id = data.id ?? randomUUID();
 
     localSaveProject(userId, { ...data, id });
-
-    if (isNew) {
-      localPruneProjectsExcept(userId, id);
-    }
 
     return { id, store: "sqlite" as const };
   });
@@ -69,20 +53,7 @@ export const saveProject = createServerFn({ method: "POST" })
 export const listProjects = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    const { userId } = context;
-    const all = localListProjects(userId);
-
-    if (all.length === 0) return [];
-
-    const keepId = pickLatestProjectId(all);
-    if (!keepId) return [];
-
-    if (all.length > 1) {
-      localPruneProjectsExcept(userId, keepId);
-    }
-
-    const latest = all.find((p) => p.id === keepId);
-    return latest ? [latest] : [];
+    return localListProjects(context.userId);
   });
 
 export const getProject = createServerFn({ method: "POST" })

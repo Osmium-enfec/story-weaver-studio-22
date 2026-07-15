@@ -3,7 +3,6 @@
 
 const PLAN_PREFIX = "gen:plan:";
 const STT_PREFIX = "gen:stt:";
-const MAX_ENTRIES = 20;
 
 async function sha256(input: ArrayBuffer | string): Promise<string> {
   const buf =
@@ -22,24 +21,8 @@ export async function hashFile(f: File): Promise<string> {
   return sha256(await f.arrayBuffer());
 }
 
-function trim(prefix: string) {
-  try {
-    const keys = Object.keys(localStorage).filter((k) => k.startsWith(prefix));
-    if (keys.length <= MAX_ENTRIES) return;
-    // drop oldest by stored `t` timestamp
-    keys
-      .map((k) => {
-        try {
-          const v = JSON.parse(localStorage.getItem(k) || "{}");
-          return { k, t: v.t || 0 };
-        } catch {
-          return { k, t: 0 };
-        }
-      })
-      .sort((a, b) => a.t - b.t)
-      .slice(0, keys.length - MAX_ENTRIES)
-      .forEach(({ k }) => localStorage.removeItem(k));
-  } catch {}
+function trim(_prefix: string) {
+  /* Keep all cached entries — nothing is auto-deleted from browser cache. */
 }
 
 export function getCachedPlan<T>(key: string): T | null {

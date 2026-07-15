@@ -13,7 +13,6 @@ import {
   ArrowLeft,
   ArrowUp,
   ArrowDown,
-  Trash2,
   Film,
   Plus,
 } from "lucide-react";
@@ -97,12 +96,6 @@ function ProjectDetail() {
     const j = index + dir;
     if (j < 0 || j >= next.length) return;
     [next[index], next[j]] = [next[j]!, next[index]!];
-    void persistScenes(next);
-  }
-
-  function deleteScene(index: number) {
-    if (!confirm(`Remove scene ${index + 1}?`)) return;
-    const next = displayScenes.filter((_, i) => i !== index);
     void persistScenes(next);
   }
 
@@ -239,15 +232,6 @@ function ProjectDetail() {
                         aria-label="Move down"
                       >
                         <ArrowDown size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteScene(i)}
-                        disabled={saving}
-                        className="rounded border p-1 text-destructive hover:bg-destructive/10 disabled:opacity-40"
-                        aria-label="Delete"
-                      >
-                        <Trash2 size={14} />
                       </button>
                     </div>
                   </li>
