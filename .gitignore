@@ -18,6 +18,11 @@ dist-ssr
 
 # Local SQLite project store
 .data/
+.data-backup-*/
+story-weaver-data-import.zip
+story-weaver-data-import.tar.gz
+story-weaver-data-*.zip
+story-weaver-data-*.tar.gz
 
 # Wrangler / Cloudflare
 .wrangler/

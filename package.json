@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite dev",
     "dev:lan": "vite dev --host 0.0.0.0",
+    "data:export": "bash scripts/sync-data-export.sh",
+    "data:import": "bash scripts/sync-data-import.sh",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
