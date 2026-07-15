@@ -8,7 +8,13 @@ export type SceneBackground =
   | { kind: "gradient"; from: string; to: string; angle?: number }
   | { kind: "video"; url: string };
 
-export const DEFAULT_BACKGROUND: SceneBackground = { kind: "whiteboard" };
+export const LOOP_VIDEO_BACKGROUND: SceneBackground = {
+  kind: "video",
+  url: "/bg-loop.mp4",
+};
+
+/** Default scene canvas: looping background video + inset white card for content. */
+export const DEFAULT_BACKGROUND: SceneBackground = LOOP_VIDEO_BACKGROUND;
 
 export function backgroundToCss(bg: SceneBackground): string {
   if (bg.kind === "solid") return bg.color;

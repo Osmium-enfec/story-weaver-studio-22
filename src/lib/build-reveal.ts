@@ -1,28 +1,28 @@
-// Sequential "white box" reveal covers driven by Grounding-DINO hand-drawn
-// box detection. Each cover is a plain white rectangle placed over a
-// detected box; covers fade out one-by-one during scene playback, in
-// reading order (top → bottom, then left → right).
-//
-// Covers are stored in NORMALIZED coordinates (0..1) relative to the source
-// image's natural size, so the player and rasterizer can place them on top
-// of the object-contain draw rect regardless of container size.
+// Box reveal covers — same Grounding-DINO path as segment-lab.
 
 import type { detectBoxesInImage } from "./detect-boxes.functions";
+import { bboxArea, bboxIou, filterOutNestedBoxes } from "./bbox-utils";
+
+export type BoxRole = "title" | "subtitle" | "footer" | "content" | "hub";
 
 export interface RevealCover {
   id: string;
-  /** Shared 1x1 white PNG data URL — the cover is just a filled rectangle. */
   pngUrl: string;
-  /** Normalized 0..1 bbox relative to the source image natural dims. */
   bbox: { x: number; y: number; w: number; h: number };
+  revealStartMs?: number;
+  revealFadeMs?: number;
+  role?: BoxRole;
+  label?: string;
+  matchTerms?: string[];
+  revealMatchPhrase?: string;
+  revealMatchSource?: "speech" | "interpolated" | "fixed" | "fallback";
 }
 
 export interface RevealBuild {
   covers: RevealCover[];
-  aspect: number; // width / height of the source image
+  aspect: number;
 }
 
-// 1x1 pure-white PNG. Any browser/canvas can stretch this to a filled rect.
 export const WHITE_PIXEL_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -37,33 +37,21 @@ function loadImg(url: string): Promise<HTMLImageElement> {
 }
 
 type DetectRunner = (args: {
-  data: { imageDataUrl: string };
+  data: { imageDataUrl: string; boxThreshold?: number; textThreshold?: number };
 }) => ReturnType<typeof detectBoxesInImage>;
 
-/**
- * Detect hand-drawn boxes in the composite and return per-box white covers
- * sorted in reading order (top → bottom, left → right within a row).
- */
+/** Detect boxes + sort reading order (segment-lab analyze()). */
 export async function buildSceneRevealBoxes(
   imageUrl: string,
   runDetect: DetectRunner,
 ): Promise<RevealBuild | null> {
   const img = await loadImg(imageUrl).catch(() => null);
   if (!img) return null;
-  const W = img.naturalWidth || 1;
-  const H = img.naturalHeight || 1;
-  const aspect = W / H;
+  const aspect = (img.naturalWidth || 1) / (img.naturalHeight || 1);
 
-  const res = await runDetect({ data: { imageDataUrl: imageUrl } }).catch((e) => {
-    console.warn("[reveal] detect failed:", (e as any)?.message ?? e);
-    return null;
-  });
-
-  const hasBoxes = !!res && !res.fallback && Array.isArray(res.boxes) && res.boxes.length > 0;
-  if (!hasBoxes) {
-    const reason = res?.error ?? (res ? "no boxes" : "detect returned null");
-    console.warn(`[reveal] fallback grid (${reason})`);
-    return { covers: buildFallbackGrid(), aspect };
+  const res = await runDetect({ data: { imageDataUrl: imageUrl } }).catch(() => null);
+  if (!res || res.fallback || !res.boxes?.length) {
+    return { covers: [], aspect };
   }
 
   const rowTol = 0.05;
@@ -80,45 +68,57 @@ export async function buildSceneRevealBoxes(
     bbox: b.bbox,
   }));
 
-  console.log(`[reveal] detected ${covers.length} boxes`);
   return { covers, aspect };
 }
 
-/**
- * Deterministic 2-row x 3-column reveal grid used when detection fails.
- * Guarantees a "boxes appear one-by-one" feel even without Grounding-DINO.
- */
-function buildFallbackGrid(): RevealCover[] {
-  const rows = 2;
-  const cols = 3;
-  const pad = 0.02;
-  const cellW = (1 - pad * (cols + 1)) / cols;
-  const cellH = (1 - pad * (rows + 1)) / rows;
-  const covers: RevealCover[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      covers.push({
-        id: `grid-${r}-${c}`,
-        pngUrl: WHITE_PIXEL_PNG,
-        bbox: {
-          x: pad + c * (cellW + pad),
-          y: pad + r * (cellH + pad),
-          w: cellW,
-          h: cellH,
-        },
-      });
-    }
-  }
-  return covers;
+function normLabelKey(label?: string): string {
+  return (label ?? "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
- * Sequential per-box opacity — matches segment-lab timing exactly:
- * 250ms lead-in, then each box takes a 900ms fade-out with a 900ms
- * step between box starts (no overlap → distinct one-by-one reveals).
- * If the scene is too short to fit all boxes at that cadence, we compress
- * the step but keep the fade snappy so reveals still feel punchy.
+ * Drop nested / duplicate detections so each card syncs once (avoids duplicate Integer/Float @ 22s).
  */
+export function dedupeRevealCovers(covers: RevealCover[]): RevealCover[] {
+  if (covers.length <= 1) return covers;
+
+  let list = filterOutNestedBoxes(covers);
+
+  const iouKept: RevealCover[] = [];
+  for (const c of [...list].sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox))) {
+    if (iouKept.some((k) => bboxIou(k.bbox, c.bbox) > 0.42)) continue;
+    iouKept.push(c);
+  }
+  list = iouKept;
+
+  const seenLabels = new Set<string>();
+  const out: RevealCover[] = [];
+  for (const c of [...list].sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox))) {
+    const role = c.role ?? "content";
+    const label = normLabelKey(c.label);
+    const isStructural = role === "title" || role === "subtitle" || role === "footer";
+    if (!isStructural && label.length > 1 && !/^box \d+$/.test(label)) {
+      const key = `${role}:${label}`;
+      if (seenLabels.has(key)) continue;
+      seenLabels.add(key);
+    }
+    out.push(c);
+  }
+
+  const rowTol = 0.05;
+  out.sort((a, b) => {
+    const ay = a.bbox.y + a.bbox.h / 2;
+    const by = b.bbox.y + b.bbox.h / 2;
+    if (Math.abs(ay - by) > rowTol) return ay - by;
+    return a.bbox.x + a.bbox.w / 2 - (b.bbox.x + b.bbox.w / 2);
+  });
+
+  return out.map((c, i) => ({ ...c, id: `box-${i}` }));
+}
+
 export function coverOpacityAt(
   progress: number,
   index: number,
@@ -129,7 +129,6 @@ export function coverOpacityAt(
   const IDEAL_STEP_MS = 900;
   const IDEAL_FADE_MS = 900;
   const n = Math.max(1, total);
-  // Reserve at least the final 200ms fully revealed.
   const usable = Math.max(1, durationMs - LEAD_MS - 200);
   const idealTotal = n * IDEAL_STEP_MS + IDEAL_FADE_MS;
   const scale = idealTotal > usable ? usable / idealTotal : 1;
@@ -141,6 +140,14 @@ export function coverOpacityAt(
   if (tMs <= startMs) return 1;
   if (tMs >= endMs) return 0;
   const t = (tMs - startMs) / (endMs - startMs);
-  // easeInOut for a smoother, more perceptible fade
   return t < 0.5 ? 1 - 2 * t * t : 1 - (1 - 2 * (1 - t) * (1 - t));
+}
+
+export function coverRevealOpacity(
+  progress: number,
+  index: number,
+  total: number,
+  durationMs: number = 15000,
+): number {
+  return 1 - coverOpacityAt(progress, index, total, durationMs);
 }

@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireAuth } from "@/integrations/auth/auth-middleware";
+import { OPENAI_API, openAIHeaders, requireOpenAIKey } from "@/lib/openai-env";
+import { replicateFetch, requireReplicateKey } from "@/lib/replicate-client";
 
 const Input = z.object({
   imageDataUrl: z.string().min(20),
@@ -17,36 +19,25 @@ type SegmentImageLayersResult =
   | { layers: ReplicateSegment[]; error?: never; fallback?: never }
   | { layers: ReplicateSegment[]; error: string; fallback: true };
 
-const GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
-
-async function gatewayFetch(path: string, init: RequestInit, keys: { lovable: string; rep: string }) {
-  return fetch(`${GATEWAY}${path}`, {
-    ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      Authorization: `Bearer ${keys.lovable}`,
-      "X-Connection-Api-Key": keys.rep,
-      "Content-Type": "application/json",
-    },
-  });
+async function gatewayFetch(path: string, init: RequestInit) {
+  return replicateFetch(path, init);
 }
 
 async function runReplicate(
   owner: string,
   name: string,
   input: Record<string, unknown>,
-  keys: { lovable: string; rep: string },
   timeoutMs = 180_000,
 ): Promise<any> {
   // Try official model endpoint first, fall back to community version endpoint.
   let create = await gatewayFetch(`/models/${owner}/${name}/predictions`, {
     method: "POST",
     body: JSON.stringify({ input }),
-  }, keys);
+  });
 
   if (create.status === 404) {
     // community: need version hash
-    const mv = await gatewayFetch(`/models/${owner}/${name}`, { method: "GET" }, keys);
+    const mv = await gatewayFetch(`/models/${owner}/${name}`, { method: "GET" });
     if (!mv.ok) throw new Error(`Replicate model lookup failed [${mv.status}]: ${await mv.text()}`);
     const meta = await mv.json();
     const version = meta?.latest_version?.id;
@@ -54,7 +45,7 @@ async function runReplicate(
     create = await gatewayFetch(`/predictions`, {
       method: "POST",
       body: JSON.stringify({ version, input }),
-    }, keys);
+    });
   }
 
   if (create.status === 402) {
@@ -75,7 +66,7 @@ async function runReplicate(
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(delay + 1000, 5000);
-    const pr = await gatewayFetch(`/predictions/${id}`, { method: "GET" }, keys);
+    const pr = await gatewayFetch(`/predictions/${id}`, { method: "GET" });
     if (!pr.ok) continue;
     const p = await pr.json();
     if (p.status === "succeeded") return p.output;
@@ -86,16 +77,14 @@ async function runReplicate(
   throw new Error("Replicate prediction timed out");
 }
 
-async function discoverLabels(
-  imageDataUrl: string,
-  lovableKey: string,
-): Promise<string[]> {
+async function discoverLabels(imageDataUrl: string): Promise<string[]> {
+  requireOpenAIKey();
   const prompt = `List every distinct visual element/object in this image as short lowercase noun phrases (1-3 words each), comma separated. Include characters, icons, titles/text-blocks, cards, arrows, footer, robots/mascots, etc. Merge tiny sub-parts into their parent. Max 15 items. Output ONLY the comma-separated list, no prose.`;
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch(`${OPENAI_API}/chat/completions`, {
     method: "POST",
-    headers: { "Lovable-API-Key": lovableKey, "Content-Type": "application/json" },
+    headers: openAIHeaders(),
     body: JSON.stringify({
-      model: "openai/gpt-5",
+      model: "gpt-4o",
       messages: [
         {
           role: "user",
@@ -119,20 +108,18 @@ async function discoverLabels(
 }
 
 export const segmentImageLayers = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAuth])
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }): Promise<SegmentImageLayersResult> => {
-    const lovable = process.env.LOVABLE_API_KEY;
-    const rep = process.env.LOVABLE_CONNECTOR_REPLICATE_API_KEY ?? process.env.REPLICATE_API_KEY;
-    if (!lovable) throw new Error("LOVABLE_API_KEY missing");
-    if (!rep) {
+    try {
+      requireReplicateKey();
+    } catch {
       return {
         layers: [],
         fallback: true,
-        error: "Replicate connector not linked. Connect Replicate in project connectors.",
+        error: "REPLICATE_API_KEY not configured.",
       };
     }
-    const keys = { lovable, rep };
 
     // SAM 2 automatic mask generation — segments EVERY distinct region instead
     // of relying on a single text prompt (which collapsed our infographics into
@@ -150,7 +137,6 @@ export const segmentImageLayers = createServerFn({ method: "POST" })
           use_m2m: true,
           multimask_output: true,
         },
-        keys,
       );
     } catch (e: any) {
       return { layers: [], fallback: true, error: `SAM2: ${e?.message ?? e}` };

@@ -12,6 +12,24 @@ export interface SttResult {
   words: SttWord[];
 }
 
+/** Shift STT words into a scene clip window (e.g. one scene from a long upload). */
+export function clipSttWords(
+  words: SttWord[],
+  clipStartMs?: number,
+  clipEndMs?: number,
+): SttWord[] {
+  if (clipStartMs == null || clipEndMs == null || clipEndMs <= clipStartMs) return words;
+  const startSec = clipStartMs / 1000;
+  const endSec = clipEndMs / 1000;
+  return words
+    .filter((w) => w.end != null && w.start != null && w.end >= startSec && w.start <= endSec)
+    .map((w) => ({
+      ...w,
+      start: Math.max(0, w.start! - startSec),
+      end: Math.min(endSec - startSec, w.end! - startSec),
+    }));
+}
+
 function normalize(s: string) {
   return s
     .toLowerCase()

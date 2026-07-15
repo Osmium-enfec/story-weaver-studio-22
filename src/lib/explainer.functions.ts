@@ -1,8 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { OPENAI_API, openAIHeaders, requireOpenAIKey } from "@/lib/openai-env";
+import { generateOpenAIImageDataUrl } from "@/lib/openai-image";
+import {
+  buildCompositeImagePrompt,
+  COURSE_VISUAL_STYLE,
+} from "@/lib/course-visual-style";
+import { replicateFetch, requireReplicateKey } from "@/lib/replicate-client";
 
-const AI_URL = "https://ai.gateway.lovable.dev/v1";
-const REPLICATE_GATEWAY = "https://connector-gateway.lovable.dev/replicate/v1";
 const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
 const ELEVEN_MODEL = "eleven_v3";
 
@@ -28,6 +33,8 @@ export interface CompositionElement {
   /** fraction of scene duration when element appears, 0..1 */
   appearAt: number;
   anim: ElementAnim;
+  /** Optional one-shot SFX when this element appears (compose timeline placements). */
+  sfxUrl?: string;
 }
 
 export interface SceneComposition {
@@ -104,8 +111,7 @@ function parseManualScenes(script: string): ManualScene[] | null {
 export const planScript = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => PlanInput.parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("LOVABLE_API_KEY missing");
+    requireOpenAIKey();
 
     const preserveWords = !!data.preserveWords;
     const manual = parseManualScenes(data.script);
@@ -157,9 +163,10 @@ STEP 1 — Enhance and CHUNK the script:
     "code"  — ONLY when the scene explicitly discusses source code, syntax,
       a specific function/file/command, or a code snippet the viewer should read.
     "image" — the default for narrative, marketing, explanatory content.
-      Use ONE Excalidraw-style whiteboard drawing that captures the WHOLE scene
-      (multiple sentences), with characters, boxes, arrows, and hand-lettered
-      labels all drawn together — like a teacher sketching on a whiteboard.`;
+      Use ONE clean Excalidraw-style whiteboard infographic per scene — beginner-friendly,
+      minimal text, more visuals, separate rounded cards for each element (easy to animate
+      one-by-one). Follow the Python-for-AI course visual system:
+      ${COURSE_VISUAL_STYLE.replace(/\n/g, " ")}`;
 
     const sys = `${intro}
 
@@ -168,15 +175,9 @@ STEP 2 — For each SCENE, produce a scene object:
 ${narrationRule}
 ${kindRule}
 - If kind = "image": composition object with:
-    compositePrompt: ONE rich prompt (60–200 words) describing the ENTIRE
-      whiteboard illustration for this scene. Include:
-        * the characters/objects/icons to draw (be specific — "a small dog",
-          "a laptop", "a magnifying glass"),
-        * their spatial arrangement (left, center, right, above, below),
-        * any BOXES/CONTAINERS around them,
-        * any ARROWS connecting them (with direction),
-        * any hand-lettered LABEL text inside/next to elements.
-      This should read like directions to an illustrator drawing one poster.
+    compositePrompt: ONE illustrator brief (40–150 words) describing what to draw.
+      Follow the Python-for-AI Excalidraw visual style (white background, hand-drawn
+      outlines, pastel cards, doodle icons, color semantics). Write freely — no fixed layout.
     title: short hand-drawn TITLE (2-5 words) rendered at the TOP by the player.
     elements: array of 2–6 REVEAL steps. Each step is one distinct visual piece
       in the composite that should FADE IN one-by-one as narration reaches it.
@@ -215,14 +216,11 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         )}`
       : data.script;
 
-    const res = await fetch(`${AI_URL}/chat/completions`, {
+    const res = await fetch(`${OPENAI_API}/chat/completions`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
+      headers: openAIHeaders(),
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gpt-4o",
         messages: [
           { role: "system", content: sys },
           { role: "user", content: userMessage },
@@ -290,7 +288,7 @@ Return ONLY strict JSON: { "scenes": [ ... ] }. No prose.`;
         sentence: s,
         narrationText: s,
         composition: {
-          compositePrompt: `A hand-drawn whiteboard illustration about: ${s}`,
+          compositePrompt: `Excalidraw whiteboard infographic about: ${s}. ${COURSE_VISUAL_STYLE.replace(/\n/g, " ")}`,
           title: s.split(/\s+/).slice(0, 4).join(" "),
           elements: [],
         },
@@ -521,63 +519,23 @@ Rules:
   return out;
 }
 
-async function generateCompositeImage(prompt: string, title?: string): Promise<string> {
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
+export { COMPOSITE_BOX_RETRY_SUFFIX } from "@/lib/course-visual-style";
 
-  const styled = `Create a polished hand-drawn Excalidraw-style educational infographic slide for a Python-for-AI course.
-
-=== VISUAL STYLE (match a premium classroom whiteboard slide) ===
-- Pure white #FFFFFF background. No paper texture, no cream, no gradient, no full-canvas colored panel, no border frame around the whole canvas.
-- Hand-drawn sketchy black marker outlines (2-4px, slightly wobbly, rounded corners) on EVERY shape.
-- Flat PASTEL fills only (no watercolor, no cross-hatching, no gradients, no 3D, no drop shadows):
-    blue #DBEAFE (main/title), green #DCFCE7 (valid/correct), red #FEE2E2 (wrong/error),
-    purple/lavender #EDE9FE (summary/tip), orange/yellow #FEF3C7 (hint).
-  Stroke accents use the darker sibling: blue #2563EB, green #16A34A, red #DC2626, purple #7C3AED, amber #D97706.
-- All text is HANDWRITTEN MARKER-STYLE (like Excalidraw's Virgil / Cascadia Handwriting). Large, readable, black #111 by default; use the accent color when the word IS the accent (e.g. "Valid" in green, "Wrong" in red, "cannot start" in purple).
-- Playful doodle mascots welcome: a small smiling computer/robot, the Python snake logo (blue + yellow rounded), a lightbulb, a star, sparkles, "??" marks, a warning triangle. Draw them small and off to the side — never dominating.
-- Generous whitespace. NOTHING overlaps. One idea per card.
-- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own HAND-DRAWN IMPERFECT box — a wobbly, slightly wavy rounded rectangle with a sketchy black marker outline (NEVER a perfect geometric rectangle). Each side has small wiggles/kinks, corners slightly asymmetric and unevenly rounded, occasional double stroke on one edge — like drawn quickly by hand with a marker. Flat pastel fill inside. This includes the title, subtitle, each example card, every code-chip, and any mascot/doodle. Do NOT draw loose icons or floating text without such a hand-drawn box.
-
-=== SCENE CONTENT (this is the ONLY source of truth for what to draw) ===
-${title ? `Title: ${title}\n` : ""}${prompt}
-
-=== REQUIRED COMPOSITION (16:9, 1536x1024) ===
-1. TOP: a hand-drawn RIBBON/BANNER (wide rounded-rectangle box) centered at the top, pastel BLUE #DBEAFE fill with sketchy black outline and small blue sparkle marks on both sides. Inside, write ${title ? `"${title}"` : "a SHORT title derived from the scene content above (max 5 words)"} in large handwritten marker text, blue #2563EB.
-2. Directly under the banner: a one-line handwritten SUBTITLE inside a small rounded-rectangle pill/box with a soft pastel BLUE or GRAY fill, summarizing the scene content in ONE short sentence, with a hand-drawn wavy blue underline beneath it.
-3. MIDDLE: 2–4 hand-drawn rounded-rectangle CARDS arranged in a clean row or 2x2 grid with generous whitespace. Each card visualizes ONE concrete idea, example, or contrast taken DIRECTLY from the scene content above. Pick pastel fills that match meaning: green #DCFCE7 for positive/correct/valid, red #FEE2E2 for negative/wrong/error, yellow #FEF3C7 for hint/warning, blue #DBEAFE for neutral/info, purple #EDE9FE for summary/tip. Each card has a short handwritten header, a tiny relevant doodle icon, and a short handwritten caption or code-chip — all describing THIS specific scene, never a generic Python-variable-name example.
-4. BOTTOM: a wide rounded SUMMARY PILL/box, pastel LAVENDER #EDE9FE fill, sketchy black outline. Inside: a small purple star doodle on the left, a small yellow lightbulb doodle on the right, and ONE handwritten takeaway sentence in the middle that paraphrases the scene content — with the KEY word emphasized in purple #7C3AED.
-
-=== HARD RULES ===
-- 16:9 single composition, pure white background.
-- Everything is HAND-DRAWN, not typed/geometric. Lines slightly wobble.
-- Every element must be inside its own HAND-DRAWN wobbly imperfect box. No floating objects, no bare text, no loose icons.
-- The words, examples, icons and colors MUST reflect the SCENE CONTENT above. Do NOT default to Python variable-name rules, "Valid / Wrong", user1 / model2 / 1user, or any other example that is not literally in the scene content.
-- No captions outside the four regions above. No page numbers, no watermarks, no logos.`;
-
-  const res = await fetch("https://api.openai.com/v1/images/generations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openaiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "gpt-image-2",
-      prompt: styled,
-      size: "1536x1024",
-      n: 1,
-      quality: "high",
-    }),
+export async function generateCompositeImage(prompt: string, title?: string): Promise<string> {
+  return generateOpenAIImageDataUrl({
+    prompt: buildCompositeImagePrompt(prompt, title),
+    quality: process.env.OPENAI_IMAGE_QUALITY ?? "high",
+    timeoutMs: 150_000,
   });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`OpenAI composite failed: ${res.status} ${text.slice(0, 400)}`);
-  let j: any;
-  try { j = JSON.parse(text); } catch {
-    throw new Error(`OpenAI composite parse failed: ${text.slice(0, 300)}`);
-  }
-  const b64 = j?.data?.[0]?.b64_json;
-  if (!b64) throw new Error(`OpenAI composite returned no data: ${text.slice(0, 300)}`);
-  return `data:image/png;base64,${b64}`;
+}
+
+/** Send the prompt exactly as given — no style wrapper or brief step. */
+export async function generateCompositeImageDirect(imagePrompt: string): Promise<string> {
+  return generateOpenAIImageDataUrl({
+    prompt: imagePrompt,
+    quality: process.env.OPENAI_IMAGE_QUALITY ?? "high",
+    timeoutMs: 150_000,
+  });
 }
 
 /**
@@ -585,9 +543,7 @@ ${title ? `Title: ${title}\n` : ""}${prompt}
  * that Replicate models can read.
  */
 async function uploadToReplicate(dataUrl: string): Promise<string> {
-  const lovableKey = process.env.LOVABLE_API_KEY;
-  const replicateKey = process.env.REPLICATE_API_KEY;
-  if (!lovableKey || !replicateKey) throw new Error("Replicate connector env vars missing");
+  requireReplicateKey();
 
   const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!m) throw new Error("uploadToReplicate: expected data URL");
@@ -597,12 +553,8 @@ async function uploadToReplicate(dataUrl: string): Promise<string> {
   const form = new FormData();
   form.append("content", new Blob([bytes], { type: mime }), "composite.png");
 
-  const res = await fetch(`${REPLICATE_GATEWAY}/files`, {
+  const res = await replicateFetch("/files", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${lovableKey}`,
-      "X-Connection-Api-Key": replicateKey,
-    },
     body: form,
   });
   if (!res.ok) throw new Error(`Replicate upload failed: ${res.status} ${await res.text()}`);
@@ -620,14 +572,7 @@ async function getModelVersion(owner: string, name: string): Promise<string> {
   const key = `${owner}/${name}`;
   const cached = versionCache.get(key);
   if (cached) return cached;
-  const lovableKey = process.env.LOVABLE_API_KEY!;
-  const replicateKey = process.env.REPLICATE_API_KEY!;
-  const res = await fetch(`${REPLICATE_GATEWAY}/models/${owner}/${name}`, {
-    headers: {
-      Authorization: `Bearer ${lovableKey}`,
-      "X-Connection-Api-Key": replicateKey,
-    },
-  });
+  const res = await replicateFetch(`/models/${owner}/${name}`, { method: "GET" });
   if (!res.ok) throw new Error(`Model lookup failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
   const version = j?.latest_version?.id;
@@ -644,9 +589,7 @@ async function detectWithGroundingDino(
   imageUrl: string,
   labels: string[],
 ): Promise<Array<{ label: string; bbox: { x: number; y: number; w: number; h: number }; confidence: number }>> {
-  const lovableKey = process.env.LOVABLE_API_KEY;
-  const replicateKey = process.env.REPLICATE_API_KEY;
-  if (!lovableKey || !replicateKey) throw new Error("Replicate connector env vars missing");
+  requireReplicateKey();
 
   // adirik/grounding-dino accepts labels separated by " . " (period+space).
   const query = labels.join(" . ");
@@ -657,14 +600,9 @@ async function detectWithGroundingDino(
   let createRes: Response | null = null;
   let lastBody = "";
   for (let attempt = 0; attempt < 6; attempt++) {
-    createRes = await fetch(`${REPLICATE_GATEWAY}/predictions`, {
+    createRes = await replicateFetch("/predictions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        "X-Connection-Api-Key": replicateKey,
-        "Content-Type": "application/json",
-        Prefer: "wait=60",
-      },
+      headers: { Prefer: "wait=60" },
       body: JSON.stringify({
         version,
         input: {
@@ -699,12 +637,7 @@ async function detectWithGroundingDino(
   // Poll if still running.
   for (let i = 0; i < 60 && (pred.status === "starting" || pred.status === "processing"); i++) {
     await new Promise((r) => setTimeout(r, i < 5 ? 1500 : 3000));
-    const pollRes = await fetch(`${REPLICATE_GATEWAY}/predictions/${pred.id}`, {
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        "X-Connection-Api-Key": replicateKey,
-      },
-    });
+    const pollRes = await replicateFetch(`/predictions/${pred.id}`, { method: "GET" });
     if (!pollRes.ok) throw new Error(`GroundingDINO poll failed: ${pollRes.status}`);
     pred = await pollRes.json();
   }
@@ -792,21 +725,14 @@ export type CompositeStep = { name: string; status: "ok" | "warn" | "error"; mes
  * Returns null if segmentation fails or nothing is detected.
  */
 async function segmentOneWithGroundedSam(imageUrl: string, label: string): Promise<string | null> {
-  const lovableKey = process.env.LOVABLE_API_KEY!;
-  const replicateKey = process.env.REPLICATE_API_KEY!;
   const version = await getModelVersion("schananas", "grounded_sam");
 
   let createRes: Response | null = null;
   let lastBody = "";
   for (let attempt = 0; attempt < 5; attempt++) {
-    createRes = await fetch(`${REPLICATE_GATEWAY}/predictions`, {
+    createRes = await replicateFetch("/predictions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        "X-Connection-Api-Key": replicateKey,
-        "Content-Type": "application/json",
-        Prefer: "wait=60",
-      },
+      headers: { Prefer: "wait=60" },
       body: JSON.stringify({
         version,
         input: {
@@ -830,9 +756,7 @@ async function segmentOneWithGroundedSam(imageUrl: string, label: string): Promi
   let pred = await createRes.json();
   for (let i = 0; i < 40 && (pred.status === "starting" || pred.status === "processing"); i++) {
     await new Promise((r) => setTimeout(r, i < 5 ? 1500 : 3000));
-    const pollRes = await fetch(`${REPLICATE_GATEWAY}/predictions/${pred.id}`, {
-      headers: { Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": replicateKey },
-    });
+    const pollRes = await replicateFetch(`/predictions/${pred.id}`, { method: "GET" });
     if (!pollRes.ok) return null;
     pred = await pollRes.json();
   }
@@ -852,7 +776,7 @@ export const generateSceneComposite = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const steps: CompositeStep[] = [];
 
-    // 1) Generate ONE composite image (OpenAI gpt-image-1)
+    // 1) Generate ONE composite image (OpenAI gpt-image-1, quality high for hand-drawn detail)
     let compositeUrl: string;
     try {
       compositeUrl = await generateCompositeImage(data.compositePrompt, data.title);
@@ -905,8 +829,7 @@ async function detectWithGemini(
   imageDataUrl: string,
   granularity: "fine" | "coarse",
 ): Promise<RawDet[]> {
-  const key = process.env.LOVABLE_API_KEY;
-  if (!key) throw new Error("LOVABLE_API_KEY missing");
+  requireOpenAIKey();
 
   const granRule =
     granularity === "fine"
@@ -927,14 +850,11 @@ Rules:
 - confidence: your certainty this is a real distinct element, 0.4–1.0.
 - Do NOT return the whole image as one element. Do NOT return duplicates.`;
 
-  const res = await fetch(`${AI_URL}/chat/completions`, {
+  const res = await fetch(`${OPENAI_API}/chat/completions`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    headers: openAIHeaders(),
     body: JSON.stringify({
-      // gemini-2.5-flash: non-reasoning, follows JSON schema reliably.
-      // 2.5-pro burns most of the token budget on hidden reasoning tokens and
-      // routinely returns an empty content string here.
-      model: "google/gemini-2.5-flash",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: sys },
         {
@@ -949,7 +869,7 @@ Rules:
       max_tokens: 8000,
     }),
   });
-  if (!res.ok) throw new Error(`gemini-detect: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`vision-detect: ${res.status} ${await res.text()}`);
   const j = await res.json();
   const raw = j.choices?.[0]?.message?.content ?? "{}";
   let parsed: any = {};
@@ -995,21 +915,14 @@ async function runFlorence(
   imageUrl: string,
   task: "<DENSE_REGION_CAPTION>" | "<OCR_WITH_REGION>",
 ): Promise<any> {
-  const lovableKey = process.env.LOVABLE_API_KEY!;
-  const replicateKey = process.env.REPLICATE_API_KEY!;
   const version = await getModelVersion("lucataco", "florence-2-large");
 
   let createRes: Response | null = null;
   let lastBody = "";
   for (let attempt = 0; attempt < 5; attempt++) {
-    createRes = await fetch(`${REPLICATE_GATEWAY}/predictions`, {
+    createRes = await replicateFetch("/predictions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        "X-Connection-Api-Key": replicateKey,
-        "Content-Type": "application/json",
-        Prefer: "wait=60",
-      },
+      headers: { Prefer: "wait=60" },
       body: JSON.stringify({
         version,
         input: { image: imageUrl, task_input: task },
@@ -1027,9 +940,7 @@ async function runFlorence(
   let pred = await createRes.json();
   for (let i = 0; i < 40 && (pred.status === "starting" || pred.status === "processing"); i++) {
     await new Promise((r) => setTimeout(r, i < 5 ? 1500 : 3000));
-    const pollRes = await fetch(`${REPLICATE_GATEWAY}/predictions/${pred.id}`, {
-      headers: { Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": replicateKey },
-    });
+    const pollRes = await replicateFetch(`/predictions/${pred.id}`, { method: "GET" });
     if (!pollRes.ok) throw new Error(`florence poll: ${pollRes.status}`);
     pred = await pollRes.json();
   }
@@ -1320,7 +1231,22 @@ export const generateNarration = createServerFn({ method: "POST" })
       if (res.ok) break;
       if (res.status !== 429 && res.status < 500) {
         lastErr = await res.text();
-        throw new Error(`TTS failed: ${res.status} ${lastErr}`);
+        try {
+          const j = JSON.parse(lastErr) as { detail?: { code?: string; type?: string } };
+          if (
+            j?.detail?.code === "payment_issue" ||
+            (res.status === 401 && j?.detail?.type === "payment_required")
+          ) {
+            throw new Error(
+              "ElevenLabs billing issue — complete your invoice at elevenlabs.io to resume narration.",
+            );
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message.includes("ElevenLabs billing")) {
+            throw parseErr;
+          }
+        }
+        throw new Error(`TTS failed: ${res.status} ${lastErr.slice(0, 240)}`);
       }
       lastErr = await res.text();
       const delay = Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 400;

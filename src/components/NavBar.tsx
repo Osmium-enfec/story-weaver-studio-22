@@ -1,33 +1,43 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useServerFn } from "@tanstack/react-start";
+import { logout } from "@/lib/auth.functions";
+import {
+  clearAuthSession,
+  getStoredSession,
+  subscribeAuth,
+} from "@/lib/auth-client";
 import { Sparkles, LogOut, FolderOpen } from "lucide-react";
 
 export function NavBar() {
   const [email, setEmail] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const navigate = useNavigate();
+  const runLogout = useServerFn(logout);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null);
+    function sync() {
+      setEmail(getStoredSession()?.user.email ?? null);
       setLoaded(true);
-    });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      setEmail(s?.user?.email ?? null);
-    });
-    return () => sub.subscription.unsubscribe();
+    }
+    sync();
+    return subscribeAuth(sync);
   }, []);
 
   async function signOut() {
-    await supabase.auth.signOut();
-    navigate({ to: "/", replace: true });
+    try {
+      await runLogout();
+    } catch {
+      /* clear local session even if server logout fails */
+    }
+    clearAuthSession();
+    navigate({ to: "/compose", replace: true });
   }
 
   return (
     <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-40">
-      <div className="mx-auto max-w-5xl px-6 py-3 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2 font-semibold">
+      <div className="flex w-full items-center justify-between px-4 py-3 xl:px-8">
+        <Link to="/compose" className="flex items-center gap-2 font-semibold">
           <Sparkles size={18} className="text-primary" />
           <span>Explainer Studio</span>
         </Link>
@@ -35,10 +45,16 @@ export function NavBar() {
           {loaded && email ? (
             <>
               <Link
+                to="/compose"
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
+              >
+                Compose
+              </Link>
+              <Link
                 to="/projects"
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
               >
-                <FolderOpen size={14} /> My Projects
+                <FolderOpen size={14} /> My Project
               </Link>
               <span className="text-xs text-muted-foreground hidden sm:inline">{email}</span>
               <button

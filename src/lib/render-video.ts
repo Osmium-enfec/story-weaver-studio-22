@@ -1,5 +1,16 @@
 import type { Scene } from "@/components/VideoPlayer";
+import { canvasFont } from "./scene-font";
 import fixWebmDuration from "fix-webm-duration";
+import { speechProgressInScene } from "./reveal-schedule";
+import { drawCodeEditor } from "./code-scene-canvas";
+import { drawQuestionSceneFrame } from "./rasterize-scene";
+import {
+  questionMarkGapMs,
+  questionMarkCountdownMs,
+  questionPostSpeechVisualMs,
+  QUESTION_POST_COUNTDOWN_GAP_MS,
+} from "./question-scene-layout";
+import { DEFAULT_BACKGROUND, backgroundToCanvasFill, CARD_PADDING_FRAC } from "./scene-background";
 
 export type RenderQuality = "preview" | "hd";
 
@@ -79,7 +90,7 @@ function drawSubtitle(
   ctx.fillStyle = grad;
   ctx.fillRect(0, H * 0.7, W, H * 0.3);
   ctx.fillStyle = "#fff";
-  ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
+  ctx.font = canvasFont(600, fontSize);
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
   ctx.shadowColor = "rgba(0,0,0,0.5)";
@@ -168,36 +179,33 @@ function drawCodeScene(
   W: number,
   H: number,
 ) {
-  ctx.fillStyle = "#0f172a";
-  ctx.fillRect(0, 0, W, H);
-  const pad = Math.round(W * 0.06);
-  const boxX = pad;
-  const boxY = pad;
-  const boxW = W - pad * 2;
-  const boxH = H - pad * 2;
-  ctx.fillStyle = "#1e293b";
-  const r = 16;
-  ctx.beginPath();
-  ctx.moveTo(boxX + r, boxY);
-  ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + boxH, r);
-  ctx.arcTo(boxX + boxW, boxY + boxH, boxX, boxY + boxH, r);
-  ctx.arcTo(boxX, boxY + boxH, boxX, boxY, r);
-  ctx.arcTo(boxX, boxY, boxX + boxW, boxY, r);
-  ctx.closePath();
-  ctx.fill();
+  const background = DEFAULT_BACKGROUND;
+  const customBg = background.kind !== "whiteboard";
+  if (customBg) backgroundToCanvasFill(ctx, background, W, H);
+  else {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+  }
 
-  const code = scene.code ?? "";
-  const chars = Math.floor(code.length * Math.min(1, progress * 1.4));
-  const shown = code.slice(0, chars);
-  const fontSize = Math.round(H * 0.028);
-  ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
-  ctx.fillStyle = "#e2e8f0";
-  ctx.textBaseline = "top";
-  const lines = shown.split("\n");
-  const lineH = fontSize * 1.5;
-  lines.forEach((line, i) => {
-    ctx.fillText(line, boxX + 24, boxY + 24 + i * lineH);
-  });
+  const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : Math.round(W * 0.06);
+  const padY = customBg ? Math.round(H * CARD_PADDING_FRAC) : Math.round(H * 0.06);
+  const innerX = padX;
+  const innerY = padY;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+  const editorPad = customBg
+    ? Math.round(Math.min(innerW, innerH) * 0.05)
+    : Math.round(Math.min(W, H) * 0.06);
+
+  drawCodeEditor(
+    ctx,
+    scene,
+    progress,
+    innerX + editorPad,
+    innerY + editorPad,
+    (customBg ? innerW : W) - editorPad * 2,
+    (customBg ? innerH : H) - editorPad * 2,
+  );
 }
 
 export async function renderVideo(
@@ -260,6 +268,12 @@ export async function renderVideo(
         const arr = await fetch(s.audioUrl).then((r) => r.arrayBuffer());
         audioBuffers.set(s.audioUrl, await audioCtx.decodeAudioData(arr));
       } catch {}
+      if (s.kind === "question" && s.questionMarkAudioUrl && !audioBuffers.has(s.questionMarkAudioUrl)) {
+        try {
+          const arr = await fetch(s.questionMarkAudioUrl).then((r) => r.arrayBuffer());
+          audioBuffers.set(s.questionMarkAudioUrl, await audioCtx.decodeAudioData(arr));
+        } catch {}
+      }
     }
   }
 
@@ -293,10 +307,13 @@ export async function renderVideo(
   });
   const totalDuration = masterMode
     ? sceneDurations.reduce((a, b) => a + b, 0)
-    : sceneDurations.reduce(
-        (a, d, i) => a + d + (i < scenes.length - 1 ? INTER_SCENE_GAP_MS : 0),
-        0,
-      );
+    : scenes.reduce((acc, s, i) => {
+        const d = s.durationMs / PLAYBACK_RATE;
+        const markHold =
+          s.kind === "question" ? questionPostSpeechVisualMs(s) / PLAYBACK_RATE : 0;
+        const gap = i < scenes.length - 1 ? INTER_SCENE_GAP_MS : 0;
+        return acc + d + markHold + gap;
+      }, 0);
   const recordStart = performance.now();
   let elapsed = 0;
   const frameInterval = 1000 / fps;
@@ -354,7 +371,10 @@ export async function renderVideo(
       video.play().catch(() => {});
     }
 
-    await runPhase(durMs, (progress) => {
+    await runPhase(durMs, (windowProgress) => {
+      const progress = masterMode
+        ? speechProgressInScene(windowProgress * durMs, scene)
+        : windowProgress;
       if (scene.kind === "image") {
         const bg = scene.backgroundUrl ? bgCache.get(scene.backgroundUrl) ?? null : null;
         const els = (scene.elements ?? [])
@@ -366,6 +386,8 @@ export async function renderVideo(
         drawImageScene(ctx, scene, progress, W, H, bg, els);
       } else if (scene.kind === "code") {
         drawCodeScene(ctx, scene, progress, W, H);
+      } else if (scene.kind === "question") {
+        drawQuestionSceneFrame(ctx, scene, progress, W, H, { questionPhase: "question" });
       } else if (video) {
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, W, H);
@@ -379,6 +401,45 @@ export async function renderVideo(
 
     if (video) video.pause();
     elapsed += durMs;
+
+    if (!masterMode && scene.kind === "question") {
+      const gapMs = questionMarkGapMs(scene);
+      await runPhase(gapMs / PLAYBACK_RATE, () => {
+        drawQuestionSceneFrame(ctx, scene, 1, W, H, { questionPhase: "mark-gap" });
+        onProgress?.(Math.min(1, elapsed / totalDuration));
+      });
+      elapsed += gapMs / PLAYBACK_RATE;
+
+      const countdownMs = questionMarkCountdownMs(scene);
+      const markBuf = scene.questionMarkAudioUrl
+        ? audioBuffers.get(scene.questionMarkAudioUrl)
+        : null;
+      if (markBuf) {
+        const src = audioCtx.createBufferSource();
+        src.buffer = markBuf;
+        src.connect(dest);
+        src.start(audioCtx.currentTime);
+      }
+      await runPhase(countdownMs / PLAYBACK_RATE, (holdProgress) => {
+        const markElapsed = holdProgress * countdownMs;
+        drawQuestionSceneFrame(ctx, scene, 1, W, H, {
+          questionPhase: "mark",
+          markHoldElapsedMs: markElapsed,
+        });
+        onProgress?.(Math.min(1, elapsed / totalDuration));
+      });
+      elapsed += countdownMs / PLAYBACK_RATE;
+
+      const postHoldMs = QUESTION_POST_COUNTDOWN_GAP_MS;
+      await runPhase(postHoldMs / PLAYBACK_RATE, () => {
+        drawQuestionSceneFrame(ctx, scene, 1, W, H, {
+          questionPhase: "mark",
+          markHoldElapsedMs: countdownMs,
+        });
+        onProgress?.(Math.min(1, elapsed / totalDuration));
+      });
+      elapsed += postHoldMs / PLAYBACK_RATE;
+    }
 
     if (!masterMode && i < scenes.length - 1) {
       // Silent gap ONLY in per-scene mode. Master mode has continuous audio.

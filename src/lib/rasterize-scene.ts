@@ -3,6 +3,7 @@
 // ffmpeg rasterizer can share the same drawing code.
 
 import type { Scene } from "@/components/VideoPlayer";
+import { isCropOnlyScene } from "@/lib/compose-scene";
 import {
   CARD_PADDING_FRAC,
   DEFAULT_BACKGROUND,
@@ -10,6 +11,20 @@ import {
   type SceneBackground,
 } from "./scene-background";
 import { layoutFor } from "./scene-layouts";
+import { expandBboxForReveal } from "./bbox-utils";
+import { boxRevealOpacityAtMs, revealSpeechDurationMs } from "./reveal-schedule";
+import { masterVisualAt, slideOffset } from "./scene-transition";
+import { drawCodeEditor } from "./code-scene-canvas";
+import { drawQuestionBoard, drawMarkYourAnswersScreen, drawQuestionIntroScreen } from "./question-scene-canvas";
+import { canvasFont, ensureExcalifontLoaded } from "./scene-font";
+import {
+  sceneToQuestionContent,
+  questionMarkSettingsFromScene,
+  questionIntroSettingsFromScene,
+  questionMarkCountdownMs,
+  questionTimelineAt,
+  markCountdownSeconds,
+} from "./question-scene-layout";
 
 export interface DrawOptions {
   background?: SceneBackground;
@@ -17,6 +32,10 @@ export interface DrawOptions {
   /** For background.kind === "video". Caller must seek/advance the element
    *  before calling drawSceneFrame; we just draw its current frame. */
   videoBg?: HTMLVideoElement;
+  /** Question scenes: intro → question → mark-gap → mark */
+  questionPhase?: "intro" | "intro-gap" | "question" | "mark-gap" | "mark";
+  /** Elapsed ms within the mark-your-answers hold (for countdown). */
+  markHoldElapsedMs?: number;
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -100,7 +119,7 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
       }
     }
   }
-  await Promise.all(jobs);
+  await Promise.all([...jobs, ensureExcalifontLoaded()]);
   return { bg, el, vid, cov };
 }
 
@@ -168,72 +187,61 @@ export function drawImageSceneFrame(
     ctx.clip();
   }
 
-  const bg = scene.backgroundUrl ? assets.bg.get(scene.backgroundUrl) ?? null : null;
-  if (bg) {
-    const t = progress;
-    let scale = 1.02;
-    let tx = 0;
-    if (scene.animation === "kenburns-in") scale = 1 + 0.08 * t;
-    else if (scene.animation === "kenburns-out") scale = 1.08 - 0.08 * t;
-    else if (scene.animation === "slide-left") { scale = 1.04; tx = (0.5 - t) * 20; }
-    ctx.save();
-    ctx.translate(innerX + innerW / 2 + tx, innerY + innerH / 2);
-    ctx.scale(scale, scale);
-    // Match live player: object-contain over a white card background.
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-innerW / 2, -innerH / 2, innerW, innerH);
-    drawContain(ctx, bg, -innerW / 2, -innerH / 2, innerW, innerH, "contain");
-    ctx.restore();
-
-    // White box covers → fade out sequentially (top→bottom, left→right).
+  const cropOnly = isCropOnlyScene(scene);
+  const bg =
+    scene.backgroundUrl && !cropOnly
+      ? assets.bg.get(scene.backgroundUrl) ?? null
+      : null;
+  if (bg || cropOnly) {
     const covers = scene.revealCovers ?? [];
+    const aspect =
+      scene.bgAspect ??
+      (bg ? bg.naturalWidth / Math.max(1, bg.naturalHeight) : 1536 / 1024);
+    const cr = innerW / innerH;
+    let dw: number;
+    let dh: number;
+    if (aspect > cr) {
+      dw = innerW;
+      dh = innerW / aspect;
+    } else {
+      dh = innerH;
+      dw = innerH * aspect;
+    }
+    const dx = innerX + (innerW - dw) / 2;
+    const dy = innerY + (innerH - dh) / 2;
+    const durationMs = revealSpeechDurationMs(scene);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(dx, dy, dw, dh);
+
     if (covers.length > 0) {
-      const aspect = scene.bgAspect ?? (bg.naturalWidth / Math.max(1, bg.naturalHeight));
-      const cr = innerW / innerH;
-      let dw: number, dh: number;
-      if (aspect > cr) { dw = innerW; dh = innerW / aspect; }
-      else { dh = innerH; dw = innerH * aspect; }
-      const dx = innerX + (innerW - dw) / 2;
-      const dy = innerY + (innerH - dh) / 2;
-      const windowMs =
-        scene.startMs != null && scene.endMs != null && scene.endMs > scene.startMs
-          ? scene.endMs - scene.startMs
-          : 0;
-      const durationMs = windowMs || scene.durationMs || 15000;
-      const LEAD_MS = 250;
-      const IDEAL_STEP_MS = 900;
-      const IDEAL_FADE_MS = 900;
-      const total = covers.length;
-      const usable = Math.max(1, durationMs - LEAD_MS - 200);
-      const idealTotal = total * IDEAL_STEP_MS + IDEAL_FADE_MS;
-      const scale = idealTotal > usable ? usable / idealTotal : 1;
-      const stepMs = IDEAL_STEP_MS * scale;
-      const fadeMs = IDEAL_FADE_MS * scale;
-      const tMs = progress * durationMs;
+      const iw = bg.naturalWidth || 1;
+      const ih = bg.naturalHeight || 1;
       covers.forEach((c, i) => {
-        const img = assets.cov.get(c.pngUrl);
-        if (!img) return;
-        const startMs = LEAD_MS + i * stepMs;
-        const endMs = startMs + fadeMs;
-        let alpha: number;
-        if (tMs <= startMs) alpha = 1;
-        else if (tMs >= endMs) alpha = 0;
-        else {
-          const tt = (tMs - startMs) / (endMs - startMs);
-          alpha = tt < 0.5 ? 1 - 2 * tt * tt : 1 - (1 - 2 * (1 - tt) * (1 - tt));
-        }
+        const alpha = boxRevealOpacityAtMs(progress * durationMs, i, covers);
         if (alpha <= 0) return;
+        const box = expandBboxForReveal(c.bbox);
+        const bx = dx + box.x * dw;
+        const by = dy + box.y * dh;
+        const bw = box.w * dw;
+        const bh = box.h * dh;
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.drawImage(
-          img,
-          dx + c.bbox.x * dw,
-          dy + c.bbox.y * dh,
-          c.bbox.w * dw,
-          c.bbox.h * dh,
+          bg,
+          box.x * iw,
+          box.y * ih,
+          box.w * iw,
+          box.h * ih,
+          bx,
+          by,
+          bw,
+          bh,
         );
         ctx.restore();
       });
+    } else if (bg) {
+      drawContain(ctx, bg, dx, dy, dw, dh, "contain");
     }
   }
 
@@ -265,18 +273,36 @@ export function drawImageSceneFrame(
     const p = Math.min(1, (progress - el.appearAt) / revealWindow);
     const eased = easeOutCubic(p);
 
-    const boxW = innerW * pos.w;
-    const boxH = pos.h != null ? innerH * pos.h : boxW;
+    const useAspectLayout = cropOnly && !!scene.bgAspect;
+    let layoutW = innerW;
+    let layoutH = innerH;
+    let originX = innerX;
+    let originY = innerY;
+    if (useAspectLayout) {
+      const aspect = scene.bgAspect ?? 1536 / 1024;
+      const cr = innerW / innerH;
+      if (aspect > cr) {
+        layoutW = innerW;
+        layoutH = innerW / aspect;
+      } else {
+        layoutH = innerH;
+        layoutW = innerH * aspect;
+      }
+      originX = innerX + (innerW - layoutW) / 2;
+      originY = innerY + (innerH - layoutH) / 2;
+    }
+
+    const boxW = layoutW * pos.w;
+    const boxH = pos.h != null ? layoutH * pos.h : boxW;
     const iw = img.naturalWidth || 1;
     const ih = img.naturalHeight || 1;
     const ratio = ih / iw;
-    // Fit-contain into box
     const boxRatio = boxH / boxW;
     let targetW: number, targetH: number;
     if (ratio > boxRatio) { targetH = boxH; targetW = boxH / ratio; }
     else { targetW = boxW; targetH = boxW * ratio; }
-    const cx = innerX + pos.x * innerW;
-    const cy = innerY + pos.y * innerH;
+    const cx = originX + pos.x * layoutW;
+    const cy = originY + pos.y * layoutH;
 
     let scale = 1, dx = 0, dy = 0;
     switch (el.anim) {
@@ -294,11 +320,11 @@ export function drawImageSceneFrame(
     ctx.drawImage(img, -targetW / 2, -targetH / 2, targetW, targetH);
     ctx.restore();
 
-    if (el.label) {
+    if (el.label && !el.bbox) {
       const labelSize = Math.max(18, Math.round(targetW * 0.09));
       ctx.save();
       ctx.globalAlpha = eased;
-      ctx.font = `700 ${labelSize}px Caveat, Kalam, cursive`;
+      ctx.font = canvasFont(700, labelSize);
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       const labelY = cy + dy + targetH / 2 - 4;
@@ -320,36 +346,132 @@ export function drawCodeSceneFrame(
   scene: Scene,
   progress: number,
   W: number, H: number,
+  opts: DrawOptions = {},
 ) {
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, W, H);
-  const pad = Math.round(W * 0.06);
-  const boxX = pad, boxY = pad;
-  const boxW = W - pad * 2, boxH = H - pad * 2;
-  ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#e2e8f0";
-  ctx.lineWidth = 2;
-  const r = 16;
-  ctx.beginPath();
-  ctx.moveTo(boxX + r, boxY);
-  ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + boxH, r);
-  ctx.arcTo(boxX + boxW, boxY + boxH, boxX, boxY + boxH, r);
-  ctx.arcTo(boxX, boxY + boxH, boxX, boxY, r);
-  ctx.arcTo(boxX, boxY, boxX + boxW, boxY, r);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  const background = opts.background ?? DEFAULT_BACKGROUND;
+  const customBg = background.kind !== "whiteboard";
 
-  const code = scene.code ?? "";
-  const chars = Math.floor(code.length * Math.min(1, progress * 1.4));
-  const shown = code.slice(0, chars);
-  const fontSize = Math.round(H * 0.028);
-  ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
-  ctx.fillStyle = "#1e293b";
-  ctx.textBaseline = "top";
-  shown.split("\n").forEach((line, i) => {
-    ctx.fillText(line, boxX + 24, boxY + 24 + i * (fontSize * 1.5));
-  });
+  if (background.kind === "video" && opts.videoBg) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    drawContain(ctx, opts.videoBg, 0, 0, W, H, "cover");
+  } else if (customBg) {
+    backgroundToCanvasFill(ctx, background, W, H);
+  } else {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
+  const padY = customBg ? Math.round(H * CARD_PADDING_FRAC) : 0;
+  const innerX = padX;
+  const innerY = padY;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+
+  ctx.save();
+  if (customBg) {
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = Math.round(H * 0.03);
+    ctx.shadowOffsetY = Math.round(H * 0.012);
+    ctx.fillStyle = "#ffffff";
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.clip();
+  }
+
+  const editorPad = customBg
+    ? Math.round(Math.min(innerW, innerH) * 0.05)
+    : Math.round(Math.min(W, H) * 0.06);
+  const editorX = innerX + editorPad;
+  const editorY = innerY + editorPad;
+  const editorW = (customBg ? innerW : W) - editorPad * 2;
+  const editorH = (customBg ? innerH : H) - editorPad * 2;
+
+  drawCodeEditor(ctx, scene, progress, editorX, editorY, editorW, editorH);
+  ctx.restore();
+}
+
+export function drawQuestionSceneFrame(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  progress: number,
+  W: number,
+  H: number,
+  opts: DrawOptions = {},
+) {
+  const content = sceneToQuestionContent(scene);
+  if (!content) {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, W, H);
+    return;
+  }
+
+  const background = opts.background ?? DEFAULT_BACKGROUND;
+  const customBg = background.kind !== "whiteboard";
+
+  if (background.kind === "video" && opts.videoBg) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    drawContain(ctx, opts.videoBg, 0, 0, W, H, "cover");
+  } else if (customBg) {
+    backgroundToCanvasFill(ctx, background, W, H);
+  } else {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
+  const padY = customBg ? Math.round(H * CARD_PADDING_FRAC) : 0;
+  const innerX = padX;
+  const innerY = padY;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+
+  ctx.save();
+  if (customBg) {
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = Math.round(H * 0.03);
+    ctx.shadowOffsetY = Math.round(H * 0.012);
+    ctx.fillStyle = "#ffffff";
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.clip();
+  }
+
+  const boardPad = customBg
+    ? Math.round(Math.min(innerW, innerH) * 0.04)
+    : Math.round(Math.min(W, H) * 0.04);
+  const boardX = innerX + boardPad;
+  const boardY = innerY + boardPad;
+  const boardW = (customBg ? innerW : W) - boardPad * 2;
+  const boardH = (customBg ? innerH : H) - boardPad * 2;
+
+  if (opts.questionPhase === "mark") {
+    const settings = questionMarkSettingsFromScene(scene);
+    const elapsed = opts.markHoldElapsedMs ?? 0;
+    const secondsLeft = markCountdownSeconds(elapsed, settings.countdownMs);
+    drawMarkYourAnswersScreen(
+      ctx,
+      boardX,
+      boardY,
+      boardW,
+      boardH,
+      secondsLeft,
+      settings.countdownMs / 1000,
+      settings.text,
+    );
+  } else if (opts.questionPhase === "intro" || opts.questionPhase === "intro-gap") {
+    const intro = questionIntroSettingsFromScene(scene);
+    drawQuestionIntroScreen(ctx, boardX, boardY, boardW, boardH, intro.text);
+  } else {
+    drawQuestionBoard(ctx, content, opts.questionPhase === "mark-gap" ? 1 : progress, boardX, boardY, boardW, boardH);
+  }
+  ctx.restore();
 }
 
 export function drawStockFrame(
@@ -380,7 +502,9 @@ export function drawSceneFrame(
   opts: DrawOptions = {},
 ) {
   if (scene.kind === "code") {
-    drawCodeSceneFrame(ctx, scene, progress, W, H);
+    drawCodeSceneFrame(ctx, scene, progress, W, H, opts);
+  } else if (scene.kind === "question") {
+    drawQuestionSceneFrame(ctx, scene, progress, W, H, opts);
   } else if (scene.kind === "image") {
     drawImageSceneFrame(ctx, scene, progress, W, H, assets, opts);
   } else if (scene.kind === "stock" && scene.mediaUrl) {
@@ -391,5 +515,99 @@ export function drawSceneFrame(
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, W, H);
   }
+}
+
+function drawSceneFrameToLayer(
+  scene: Scene,
+  progress: number,
+  W: number,
+  H: number,
+  assets: SceneAssets,
+  opts: DrawOptions,
+): HTMLCanvasElement {
+  const layer = document.createElement("canvas");
+  layer.width = W;
+  layer.height = H;
+  const lctx = layer.getContext("2d")!;
+  drawSceneFrame(lctx, scene, progress, W, H, assets, opts);
+  return layer;
+}
+
+/** Draw the correct frame for an absolute master-timeline position. */
+export function drawMasterVisualFrame(
+  ctx: CanvasRenderingContext2D,
+  scenes: Scene[],
+  tMs: number,
+  W: number,
+  H: number,
+  assets: SceneAssets,
+  opts: DrawOptions = {},
+) {
+  const vis = masterVisualAt(tMs, scenes);
+  if (!vis) {
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, W, H);
+    return;
+  }
+
+  if (vis.phase === "transition" && vis.fromIndex !== vis.toIndex) {
+    const t = slideOffset(vis.slideT);
+    const fromScene = scenes[vis.fromIndex];
+    const fromOpts = {
+      ...opts,
+      questionPhase:
+        fromScene.kind === "question" ? ("mark" as const) : opts.questionPhase,
+      markHoldElapsedMs:
+        fromScene.kind === "question"
+          ? questionMarkCountdownMs(fromScene)
+          : opts.markHoldElapsedMs,
+    };
+    const fromLayer = drawSceneFrameToLayer(
+      fromScene,
+      1,
+      W,
+      H,
+      assets,
+      fromOpts,
+    );
+    const toLayer = drawSceneFrameToLayer(
+      scenes[vis.toIndex],
+      0,
+      W,
+      H,
+      assets,
+      opts,
+    );
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(fromLayer, -t * W, 0, W, H);
+    ctx.drawImage(toLayer, (1 - t) * W, 0, W, H);
+    return;
+  }
+
+  const activeScene = scenes[vis.sceneIndex];
+  const sceneStart = activeScene.startMs ?? 0;
+  const speechDur = revealSpeechDurationMs(activeScene);
+  let drawOpts = opts;
+  let drawProgress = vis.progress;
+  if (activeScene.kind === "question") {
+    const elapsed = Math.max(0, tMs - sceneStart);
+    const timeline = questionTimelineAt(elapsed, activeScene, speechDur);
+    drawOpts = {
+      ...opts,
+      questionPhase: timeline.phase,
+      markHoldElapsedMs: timeline.markElapsedMs,
+    };
+    drawProgress = timeline.questionProgress;
+  }
+  drawSceneFrame(ctx, activeScene, drawProgress, W, H, assets, drawOpts);
+}
+
+export function masterTimelineDurationMs(scenes: Scene[]): number {
+  if (scenes.length === 0) return 0;
+  const last = scenes[scenes.length - 1];
+  if (last.endMs != null) return last.endMs;
+  const start = last.startMs ?? 0;
+  return start + revealSpeechDurationMs(last);
 }
 

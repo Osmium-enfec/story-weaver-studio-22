@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { typingVisibleChars } from "@/lib/code-scene-sfx";
 
 export type CodeVariant = "typing" | "morph" | "scroll" | "flight";
 
@@ -9,6 +10,8 @@ export interface CodeSceneProps {
   variant: CodeVariant;
   progress: number; // 0..1
   title?: string;
+  /** When true, fills the parent card (loop-video compose layout). */
+  embedded?: boolean;
 }
 
 /** ---------- Minimal token highlighter (no deps) ---------- */
@@ -104,7 +107,7 @@ function Highlighted({ text }: { text: string }) {
 
 function TypingCode({ code, progress }: { code: string; progress: number }) {
   const total = code.length;
-  const shown = Math.floor(total * Math.min(1, progress * 1.15));
+  const shown = typingVisibleChars(code, progress);
   const visible = code.slice(0, shown);
   const showCaret = shown < total;
   return (
@@ -236,29 +239,46 @@ export function CodeScene({
   variant,
   progress,
   title,
+  embedded = false,
 }: CodeSceneProps) {
+  const windowTitle = title ?? `example.${language}`;
+
+  const editor = (
+    <div
+      className={
+        embedded
+          ? "flex h-full w-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+          : "w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+      }
+    >
+      <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+        <span className="h-3 w-3 rounded-full bg-red-400" />
+        <span className="h-3 w-3 rounded-full bg-yellow-400" />
+        <span className="h-3 w-3 rounded-full bg-green-400" />
+        <span className="ml-3 truncate text-xs text-slate-600">{windowTitle}</span>
+      </div>
+      <div className={`relative overflow-hidden p-4 ${embedded ? "min-h-0 flex-1" : "h-[360px]"}`}>
+        {variant === "typing" && <TypingCode code={code} progress={progress} />}
+        {variant === "morph" && (
+          <MorphCode from={code} to={codeTo ?? code} progress={progress} />
+        )}
+        {variant === "scroll" && <ScrollCode code={code} progress={progress} />}
+        {variant === "flight" && <FlightCode code={code} progress={progress} />}
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex h-full w-full items-center justify-center p-4 md:p-6">
+        {editor}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full w-full items-center justify-center bg-white p-6">
-      <div className="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-        {/* window chrome */}
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
-          <span className="h-3 w-3 rounded-full bg-red-400" />
-          <span className="h-3 w-3 rounded-full bg-yellow-400" />
-          <span className="h-3 w-3 rounded-full bg-green-400" />
-          <span className="ml-3 text-xs text-slate-600">
-            {title ?? `example.${language}`}
-          </span>
-        </div>
-        {/* code viewport */}
-        <div className="relative h-[360px] overflow-hidden p-4">
-          {variant === "typing" && <TypingCode code={code} progress={progress} />}
-          {variant === "morph" && (
-            <MorphCode from={code} to={codeTo ?? code} progress={progress} />
-          )}
-          {variant === "scroll" && <ScrollCode code={code} progress={progress} />}
-          {variant === "flight" && <FlightCode code={code} progress={progress} />}
-        </div>
-      </div>
+      {editor}
     </div>
   );
 }

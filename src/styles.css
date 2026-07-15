@@ -1,4 +1,5 @@
 @import "tailwindcss" source(none);
+@import "../public/fonts/excalifont.css";
 @source "../src";
 @import "tw-animate-css";
 
@@ -140,5 +141,9 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+
+  .font-excalifont {
+    font-family: Excalifont, cursive;
   }
 }

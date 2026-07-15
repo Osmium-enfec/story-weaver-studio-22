@@ -16,6 +16,9 @@ dist-ssr
 .nitro
 *.local
 
+# Local SQLite project store
+.data/
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars

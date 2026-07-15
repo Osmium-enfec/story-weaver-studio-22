@@ -60,6 +60,17 @@ const mcq: MaskTemplate = {
   ].map((r) => ({ ...r, padX: 0.005, padY: 0.008 } as TemplateRegion)),
 };
 
+/** Same layout as MCQ; generation prompt differs (checkboxes + multiple correct answers). */
+const msq: MaskTemplate = {
+  id: "msq-four-card",
+  label: "MSQ · four cards",
+  aspect: 1536 / 1024,
+  regions: mcq.regions.map((r) => ({
+    ...r,
+    label: r.id === "answer" ? "Answers banner" : r.label,
+  })),
+};
+
 const comparison: MaskTemplate = {
   id: "comparison-two-column",
   label: "Comparison · two columns",
@@ -95,7 +106,7 @@ const titleThree: MaskTemplate = {
   ].map((r) => ({ ...r, padX: 0.015, padY: 0.02 } as TemplateRegion)),
 };
 
-export const TEMPLATES: MaskTemplate[] = [mcq, comparison, threeStep, titleThree];
+export const TEMPLATES: MaskTemplate[] = [mcq, msq, comparison, threeStep, titleThree];
 
 export function getTemplate(id: string): MaskTemplate {
   return TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];

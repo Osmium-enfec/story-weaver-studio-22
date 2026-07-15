@@ -15,6 +15,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as AuthenticatedSegmentLabRouteImport } from './routes/_authenticated/segment-lab'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as AuthenticatedComposeRouteImport } from './routes/_authenticated/compose'
+import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
+import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 
 const AuthRoute = AuthRouteImport.update({
@@ -46,6 +49,21 @@ const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedComposeRoute = AuthenticatedComposeRouteImport.update({
+  id: '/compose',
+  path: '/compose',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiAssetsSplatRoute = ApiAssetsSplatRouteImport.update({
+  id: '/api/assets/$',
+  path: '/api/assets/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAppAssetsSplatRoute = ApiAppAssetsSplatRouteImport.update({
+  id: '/api/app-assets/$',
+  path: '/api/app-assets/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedProjectIdRoute = AuthenticatedProjectIdRouteImport.update({
   id: '/project/$id',
   path: '/project/$id',
@@ -55,55 +73,73 @@ const AuthenticatedProjectIdRoute = AuthenticatedProjectIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/compose': typeof AuthenticatedComposeRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
+  '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
+  '/api/assets/$': typeof ApiAssetsSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/compose': typeof AuthenticatedComposeRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/project/$id': typeof AuthenticatedProjectIdRoute
+  '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
+  '/api/assets/$': typeof ApiAssetsSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/compose': typeof AuthenticatedComposeRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/_authenticated/project/$id': typeof AuthenticatedProjectIdRoute
+  '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
+  '/api/assets/$': typeof ApiAssetsSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
+    | '/compose'
     | '/projects'
     | '/segment-lab'
     | '/api/transcribe'
     | '/project/$id'
+    | '/api/app-assets/$'
+    | '/api/assets/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/compose'
     | '/projects'
     | '/segment-lab'
     | '/api/transcribe'
     | '/project/$id'
+    | '/api/app-assets/$'
+    | '/api/assets/$'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/compose'
     | '/_authenticated/projects'
     | '/_authenticated/segment-lab'
     | '/api/transcribe'
     | '/_authenticated/project/$id'
+    | '/api/app-assets/$'
+    | '/api/assets/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -111,6 +147,8 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
+  ApiAppAssetsSplatRoute: typeof ApiAppAssetsSplatRoute
+  ApiAssetsSplatRoute: typeof ApiAssetsSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -157,6 +195,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/compose': {
+      id: '/_authenticated/compose'
+      path: '/compose'
+      fullPath: '/compose'
+      preLoaderRoute: typeof AuthenticatedComposeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/assets/$': {
+      id: '/api/assets/$'
+      path: '/api/assets/$'
+      fullPath: '/api/assets/$'
+      preLoaderRoute: typeof ApiAssetsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/app-assets/$': {
+      id: '/api/app-assets/$'
+      path: '/api/app-assets/$'
+      fullPath: '/api/app-assets/$'
+      preLoaderRoute: typeof ApiAppAssetsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/project/$id': {
       id: '/_authenticated/project/$id'
       path: '/project/$id'
@@ -168,12 +227,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedComposeRoute: typeof AuthenticatedComposeRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedSegmentLabRoute: typeof AuthenticatedSegmentLabRoute
   AuthenticatedProjectIdRoute: typeof AuthenticatedProjectIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedComposeRoute: AuthenticatedComposeRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedSegmentLabRoute: AuthenticatedSegmentLabRoute,
   AuthenticatedProjectIdRoute: AuthenticatedProjectIdRoute,
@@ -187,7 +248,19 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
+  ApiAppAssetsSplatRoute: ApiAppAssetsSplatRoute,
+  ApiAssetsSplatRoute: ApiAssetsSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

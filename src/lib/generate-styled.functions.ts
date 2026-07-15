@@ -1,37 +1,28 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireAuth } from "@/integrations/auth/auth-middleware";
+import { OPENAI_API, openAIHeaders, requireOpenAIKey } from "@/lib/openai-env";
+import {
+  buildCompositeImagePrompt,
+  COMPOSITE_IMAGE_SIZE,
+  COURSE_VISUAL_STYLE,
+} from "@/lib/course-visual-style";
 
 const Input = z.object({
   prompt: z.string().min(3).max(2000),
 });
 
-const STYLE_BASE = `EXCALIDRAW EDUCATIONAL INFOGRAPHIC STYLE:
-- Pure white background #FFFFFF. No textures, no gradients.
-- Hand-drawn sketchy black outlines #111111, 2-5px, slightly wobbly, rounded corners.
-- Flat PASTEL fills only (no watercolor, no cross-hatching, no photorealism, no 3D):
-  blue #3B82F6 / #DBEAFE, green #22C55E / #DCFCE7, red #EF4444 / #FEE2E2,
-  purple #8B5CF6 / #EDE9FE, orange/yellow #F59E0B / #FEF3C7.
-- Handwritten marker-style font for any text. Short phrases only.
-- Doodle icons only (check, X, star, lightbulb, robot, laptop, code window, arrow, speech bubble, tag).
-- Generous white space. No overlapping arrows / text / icons.
-- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own HAND-DRAWN IMPERFECT BOX — a wobbly, slightly wavy rounded rectangle with a sketchy black marker outline (NOT a perfect geometric rectangle). Each side should have small wiggles/kinks, corners slightly asymmetric and unevenly rounded, as if drawn quickly by hand with a marker. Occasional double stroke on one edge is fine. Flat pastel fill inside. NO floating icons or bare text without such a hand-drawn box.`;
-
-async function planLabels(userPrompt: string, lovableKey: string): Promise<string[]> {
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+async function planLabels(userPrompt: string): Promise<string[]> {
+  const res = await fetch(`${OPENAI_API}/chat/completions`, {
     method: "POST",
-    headers: {
-      "Lovable-API-Key": lovableKey,
-      "X-Lovable-AIG-SDK": "direct-fetch",
-      "Content-Type": "application/json",
-    },
+    headers: openAIHeaders(),
     body: JSON.stringify({
-      model: "openai/gpt-5",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
           content:
-            "You plan Excalidraw-style educational infographics. Output ONLY a JSON array of 3-10 short lowercase noun phrases (1-3 words) naming every DISTINCT visual element that should appear in the image (title banner, cards, mascots, arrows, footer, icons, code blocks). No prose, no code fences.",
+            `You plan Excalidraw-style educational infographics for a Python-for-AI course. ${COURSE_VISUAL_STYLE.replace(/\n/g, " ")} Output ONLY a JSON array of 3-10 short lowercase noun phrases (1-3 words) naming distinct visual elements. No prose, no code fences.`,
         },
         { role: "user", content: userPrompt },
       ],
@@ -59,24 +50,10 @@ async function generateImage(prompt: string, labels: string[]): Promise<string> 
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  const styled = `A 16:9 Excalidraw-style whiteboard EDUCATIONAL INFOGRAPHIC.
+  const styled = `${buildCompositeImagePrompt(prompt, undefined)}
 
-Topic: ${prompt}
-
-${STYLE_BASE}
-
-The infographic MUST clearly include these distinct visual elements (each one placed with generous whitespace between it and every other element, non-overlapping, easy to segment later):
-${labels.map((l, i) => `${i + 1}. ${l}`).join("\n")}
-
-Layout rules:
-- Top: a title pill/banner.
-- Middle: the main content elements arranged in a clean grid or row (2-4 columns) with clear gaps.
-- Bottom: a small footer or mascot pill if it fits the topic.
-- Every element must be visually separated (>=40px gap). No overlapping outlines.
-- Handwritten marker-style short labels next to each element.
-- Every visual element must be enclosed in its own HAND-DRAWN wobbly imperfect box (wavy sketchy outline, slightly crooked corners, marker-style — NEVER a perfect rectangle) with a flat pastel fill. No floating objects, no loose icons, no bare text without such a hand-drawn box.
-
-Absolutely no photorealism, no watercolor, no 3D, no dark backgrounds.`;
+Include these visual ideas naturally in the composition:
+${labels.map((l, i) => `${i + 1}. ${l}`).join("\n")}`;
 
   const res = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -87,7 +64,7 @@ Absolutely no photorealism, no watercolor, no 3D, no dark backgrounds.`;
     body: JSON.stringify({
       model: "gpt-image-1",
       prompt: styled,
-      size: "1536x1024",
+      size: COMPOSITE_IMAGE_SIZE,
       n: 1,
       quality: "high",
       background: "auto",
@@ -102,13 +79,12 @@ Absolutely no photorealism, no watercolor, no 3D, no dark backgrounds.`;
 }
 
 export const generateStyledImageWithLabels = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAuth])
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data }) => {
-    const lovable = process.env.LOVABLE_API_KEY;
-    if (!lovable) throw new Error("LOVABLE_API_KEY missing");
+    requireOpenAIKey();
 
-    const labels = await planLabels(data.prompt, lovable);
+    const labels = await planLabels(data.prompt);
     if (labels.length === 0) throw new Error("Planner returned no labels");
 
     const imageDataUrl = await generateImage(data.prompt, labels);

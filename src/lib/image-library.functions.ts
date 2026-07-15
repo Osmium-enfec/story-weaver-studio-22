@@ -1,16 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-const AI_URL = "https://ai.gateway.lovable.dev/v1";
+import { requireAuth } from "@/integrations/auth/auth-middleware";
+import {
+  localBumpImageAssetUsage,
+  localInsertImageAsset,
+  localMatchImageAsset,
+} from "@/lib/local-image-assets";
+import { OPENAI_API, openAIHeaders, requireOpenAIKey } from "@/lib/openai-env";
+import { COURSE_VISUAL_STYLE } from "@/lib/course-visual-style";
 
 async function embed(prompt: string): Promise<number[]> {
-  const key = process.env.LOVABLE_API_KEY!;
-  const res = await fetch(`${AI_URL}/embeddings`, {
+  requireOpenAIKey();
+  const res = await fetch(`${OPENAI_API}/embeddings`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    headers: openAIHeaders(),
     body: JSON.stringify({
-      model: "openai/text-embedding-3-small",
+      model: "text-embedding-3-small",
       input: prompt.slice(0, 2000),
     }),
   });
@@ -24,16 +29,7 @@ async function generateImage(prompt: string, kind: "background" | "element"): Pr
   if (!openaiKey) throw new Error("OPENAI_API_KEY not configured");
 
   let styled: string;
-  const STYLE_BASE = `EXCALIDRAW EDUCATIONAL INFOGRAPHIC STYLE (Python-for-AI course context):
-- Pure white background #FFFFFF. No textures, no gradients, no dark background.
-- Hand-drawn sketchy black outlines #111111, 2-5px, slightly wobbly / organic, rounded corners.
-- Flat PASTEL fills only (no watercolor, no cross-hatching, no photorealism, no 3D):
-  blue #3B82F6 / #DBEAFE, green #22C55E / #DCFCE7, red #EF4444 / #FEE2E2,
-  purple #8B5CF6 / #EDE9FE, orange/yellow #F59E0B / #FEF3C7.
-- Handwritten marker-style font for any text. Short phrases only.
-- Doodle icons only (check, X, lock, star, lightbulb, snake, robot, laptop, file, folder, speech bubble, code window, tag, magnifier).
-- Generous white space. No overlapping arrows / text / icons. One idea per element.
-- CRITICAL BOX RULE: Every distinct visual element must be drawn INSIDE its own HAND-DRAWN IMPERFECT BOX — a wobbly, slightly wavy rounded rectangle with a sketchy black marker outline (NOT a perfect geometric rectangle). Each side has small wiggles, corners are slightly asymmetric and unevenly rounded, like drawn quickly by hand. Flat pastel fill inside. NO floating icons or bare text without such a hand-drawn box.`;
+  const STYLE_BASE = COURSE_VISUAL_STYLE;
 
   if (kind === "element") {
     styled = `A SINGLE isolated Excalidraw-style hand-drawn doodle of: ${prompt}.
@@ -130,37 +126,32 @@ const Input = z.object({
  * Requires auth so we can attribute created_by and enforce fair use.
  */
 export const findOrGenerateImage = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAuth])
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
+    const { userId } = context;
 
     const embedding = await embed(`${data.kind}: ${data.prompt}`);
 
     const threshold = data.kind === "background" ? 0.85 : 0.9;
 
-    const { data: match, error: matchErr } = await supabase.rpc("match_image_asset", {
-      query_embedding: embedding as any,
-      match_kind: data.kind,
-      match_threshold: threshold,
-    });
-
-    if (!matchErr && match && match.length > 0) {
-      const hit = match[0];
-      await supabase.rpc("bump_image_asset_usage", { asset_id: hit.id });
+    const hit = localMatchImageAsset(embedding, data.kind, threshold);
+    if (hit) {
+      localBumpImageAssetUsage(hit.id);
       return { dataUrl: hit.public_url, cached: true };
     }
 
-    // Miss: generate + insert
     const dataUrl = await generateImage(data.prompt, data.kind);
-    const { error: insErr } = await supabase.from("image_assets").insert({
-      prompt: data.prompt,
-      kind: data.kind,
-      storage_path: "inline",
-      public_url: dataUrl,
-      embedding: embedding as any,
-      created_by: userId,
-    });
-    if (insErr) console.warn("Failed to cache image asset:", insErr.message);
+    try {
+      localInsertImageAsset({
+        prompt: data.prompt,
+        kind: data.kind,
+        public_url: dataUrl,
+        embedding,
+        created_by: userId,
+      });
+    } catch (e) {
+      console.warn("Failed to cache image asset:", e);
+    }
     return { dataUrl, cached: false };
   });
