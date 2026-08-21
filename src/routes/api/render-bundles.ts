@@ -72,7 +72,7 @@ export const Route = createFileRoute("/api/render-bundles")({
         if (
           !admin &&
           project.user_id !== user.id &&
-          !userCanAccessPart(part, user.id, user.email)
+          !userCanAccessPart(part, { userId: user.id, userEmail: user.email })
         ) {
           return jsonError("Not allowed", 403);
         }
