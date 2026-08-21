@@ -545,6 +545,67 @@ function AdminPage() {
                 />
               </>
             )}
+
+            {tab === "bundles" && (
+              <>
+                {bundlesError && (
+                  <p className="mb-2 text-sm text-destructive">{bundlesError}</p>
+                )}
+                <ul className="space-y-2">
+                  {bundles == null ? (
+                    <p className="text-sm text-muted-foreground">Loading…</p>
+                  ) : bundles.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No parts marked “Ready for HD” yet.
+                    </p>
+                  ) : (
+                    bundles.map((b) => (
+                      <li key={b.id} className="rounded-lg border bg-card p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium">
+                              {b.episodeTitle} — {b.partTitle}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {b.ownerEmail} · {b.sceneCount} scenes ·{" "}
+                              {Math.round(b.durationMs / 1000)}s · {b.status} ·{" "}
+                              {new Date(b.readyAt).toLocaleString()}
+                            </p>
+                            {b.error && (
+                              <p className="mt-1 text-xs text-destructive">{b.error}</p>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {b.outputUrl && (
+                              <a
+                                href={b.outputUrl}
+                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+                              >
+                                Download MP4
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5"
+                              onClick={() =>
+                                void apiDeleteBundle(b.id)
+                                  .then(() => refreshBundles())
+                                  .catch((e) =>
+                                    alert(e instanceof Error ? e.message : String(e)),
+                                  )
+                              }
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </>
+            )}
+
           </>
         ) : null}
       </main>
