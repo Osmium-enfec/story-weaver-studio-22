@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  CloudUpload,
   Download,
   Film,
   Loader2,
@@ -18,7 +19,9 @@ import {
 } from "lucide-react";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import { apiPersistAsset } from "@/lib/compose-api";
+import { apiFreezeBundle } from "@/lib/render-bundles-api";
 import { apiGetProject, apiSaveProject } from "@/lib/projects-api";
+
 import { startNativeExportJob } from "@/lib/native-export-client";
 import type { ExportQuality } from "@/lib/ffmpeg-stitcher";
 import {
@@ -112,6 +115,9 @@ export function ComposeProjectPanel({
 
   const [saving, setSaving] = useState(false);
   const [savingPart, setSavingPart] = useState(false);
+  const [readyBusy, setReadyBusy] = useState(false);
+  const [readyMsg, setReadyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   const [deletingSceneId, setDeletingSceneId] = useState<string | null>(null);
   const [deletingPartId, setDeletingPartId] = useState<string | null>(null);
   const [stitching, setStitching] = useState(false);
@@ -536,7 +542,30 @@ export function ComposeProjectPanel({
     }
   }
 
+  async function handleReadyForHd() {
+    if (!projectId || !selectedPartId) return;
+    setReadyBusy(true);
+    setReadyMsg(null);
+    try {
+      const { bundle } = await apiFreezeBundle(projectId, selectedPartId);
+      setReadyMsg({
+        ok: true,
+        text: `Frozen for HD render — ${bundle.sceneCount} scenes, ${Math.round(
+          bundle.durationMs / 1000,
+        )}s. It is now in the render queue.`,
+      });
+    } catch (e) {
+      setReadyMsg({
+        ok: false,
+        text: e instanceof Error ? e.message : "Could not mark ready for HD",
+      });
+    } finally {
+      setReadyBusy(false);
+    }
+  }
+
   async function handleSavePart() {
+
     if (!stitched?.length || !stitchMasterAudio || !projectId || !project) return;
     setSavingPart(true);
     setStitchError(null);
@@ -859,6 +888,35 @@ export function ComposeProjectPanel({
                 : "Save part"}
             </button>
           )}
+
+          {selectedPartId && savedParts.some((p) => p.id === selectedPartId) && (
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={handleReadyForHd}
+                disabled={readyBusy || savingPart || saving}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-600/40 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-500/15 disabled:opacity-50"
+                title="Freeze this saved part as an HD render job for the render Mac"
+              >
+                {readyBusy ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <CloudUpload size={14} />
+                )}
+                Ready for HD
+              </button>
+              {readyMsg && (
+                <p
+                  className={`whitespace-pre-line text-xs ${
+                    readyMsg.ok ? "text-emerald-700" : "text-destructive"
+                  }`}
+                >
+                  {readyMsg.text}
+                </p>
+              )}
+            </div>
+          )}
+
 
           {stitchError && (
             <p className="whitespace-pre-line text-xs text-destructive">{stitchError}</p>

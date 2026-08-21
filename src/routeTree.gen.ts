@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
+import { Route as ApiRenderBundlesRouteImport } from './routes/api/render-bundles'
 import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
 import { Route as ApiPersistAssetRouteImport } from './routes/api/persist-asset'
@@ -35,12 +36,15 @@ import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/
 import { Route as ApiSyncFeedSplatRouteImport } from './routes/api/sync-feed.$'
 import { Route as ApiRenderAgentUpdatesSplatRouteImport } from './routes/api/render-agent-updates.$'
 import { Route as ApiPublicRuntimeInfoRouteImport } from './routes/api/public/runtime-info'
+import { Route as ApiPublicBundlesRouteImport } from './routes/api/public/bundles'
 import { Route as ApiDivStudioUpdatesSplatRouteImport } from './routes/api/div-studio-updates.$'
 import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
 import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 import { Route as AuthenticatedEpisodeIdRouteImport } from './routes/_authenticated/episode.$id'
 import { Route as AuthenticatedCourseIdRouteImport } from './routes/_authenticated/course.$id'
+import { Route as ApiPublicBundlesSplatRouteImport } from './routes/api/public/bundles.$'
+import { Route as ApiPublicAssetsSplatRouteImport } from './routes/api/public/assets/$'
 
 const ExportRunnerRoute = ExportRunnerRouteImport.update({
   id: '/export-runner',
@@ -74,6 +78,11 @@ const ApiTranscribeRoute = ApiTranscribeRouteImport.update({
 const ApiSyncRoute = ApiSyncRouteImport.update({
   id: '/api/sync',
   path: '/api/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRenderBundlesRoute = ApiRenderBundlesRouteImport.update({
+  id: '/api/render-bundles',
+  path: '/api/render-bundles',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRecording2VoiceReplaceRoute =
@@ -173,6 +182,11 @@ const ApiPublicRuntimeInfoRoute = ApiPublicRuntimeInfoRouteImport.update({
   path: '/api/public/runtime-info',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBundlesRoute = ApiPublicBundlesRouteImport.update({
+  id: '/api/public/bundles',
+  path: '/api/public/bundles',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDivStudioUpdatesSplatRoute =
   ApiDivStudioUpdatesSplatRouteImport.update({
     id: '/api/div-studio-updates/$',
@@ -204,6 +218,16 @@ const AuthenticatedCourseIdRoute = AuthenticatedCourseIdRouteImport.update({
   path: '/course/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicBundlesSplatRoute = ApiPublicBundlesSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => ApiPublicBundlesRoute,
+} as any)
+const ApiPublicAssetsSplatRoute = ApiPublicAssetsSplatRouteImport.update({
+  id: '/api/public/assets/$',
+  path: '/api/public/assets/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -225,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
+  '/api/render-bundles': typeof ApiRenderBundlesRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -234,9 +259,12 @@ export interface FileRoutesByFullPath {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
+  '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
+  '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
+  '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -258,6 +286,7 @@ export interface FileRoutesByTo {
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
+  '/api/render-bundles': typeof ApiRenderBundlesRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -267,9 +296,12 @@ export interface FileRoutesByTo {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
+  '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
+  '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
+  '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -293,6 +325,7 @@ export interface FileRoutesById {
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
+  '/api/render-bundles': typeof ApiRenderBundlesRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -302,9 +335,12 @@ export interface FileRoutesById {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
+  '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
+  '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
+  '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -328,6 +364,7 @@ export interface FileRouteTypes {
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
+    | '/api/render-bundles'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -337,9 +374,12 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
+    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
+    | '/api/public/assets/$'
+    | '/api/public/bundles/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -361,6 +401,7 @@ export interface FileRouteTypes {
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
+    | '/api/render-bundles'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -370,9 +411,12 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
+    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
+    | '/api/public/assets/$'
+    | '/api/public/bundles/$'
   id:
     | '__root__'
     | '/'
@@ -395,6 +439,7 @@ export interface FileRouteTypes {
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
+    | '/api/render-bundles'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -404,9 +449,12 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
+    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
+    | '/api/public/assets/$'
+    | '/api/public/bundles/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -424,15 +472,18 @@ export interface RootRouteChildren {
   ApiPersistAssetRoute: typeof ApiPersistAssetRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiRecording2VoiceReplaceRoute: typeof ApiRecording2VoiceReplaceRoute
+  ApiRenderBundlesRoute: typeof ApiRenderBundlesRoute
   ApiSyncRoute: typeof ApiSyncRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
   ApiTtsRoute: typeof ApiTtsRoute
   ApiAppAssetsSplatRoute: typeof ApiAppAssetsSplatRoute
   ApiAssetsSplatRoute: typeof ApiAssetsSplatRoute
   ApiDivStudioUpdatesSplatRoute: typeof ApiDivStudioUpdatesSplatRoute
+  ApiPublicBundlesRoute: typeof ApiPublicBundlesRouteWithChildren
   ApiPublicRuntimeInfoRoute: typeof ApiPublicRuntimeInfoRoute
   ApiRenderAgentUpdatesSplatRoute: typeof ApiRenderAgentUpdatesSplatRoute
   ApiSyncFeedSplatRoute: typeof ApiSyncFeedSplatRoute
+  ApiPublicAssetsSplatRoute: typeof ApiPublicAssetsSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -484,6 +535,13 @@ declare module '@tanstack/react-router' {
       path: '/api/sync'
       fullPath: '/api/sync'
       preLoaderRoute: typeof ApiSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/render-bundles': {
+      id: '/api/render-bundles'
+      path: '/api/render-bundles'
+      fullPath: '/api/render-bundles'
+      preLoaderRoute: typeof ApiRenderBundlesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/recording2-voice-replace': {
@@ -619,6 +677,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRuntimeInfoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/bundles': {
+      id: '/api/public/bundles'
+      path: '/api/public/bundles'
+      fullPath: '/api/public/bundles'
+      preLoaderRoute: typeof ApiPublicBundlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/div-studio-updates/$': {
       id: '/api/div-studio-updates/$'
       path: '/api/div-studio-updates/$'
@@ -661,6 +726,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCourseIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/bundles/$': {
+      id: '/api/public/bundles/$'
+      path: '/$'
+      fullPath: '/api/public/bundles/$'
+      preLoaderRoute: typeof ApiPublicBundlesSplatRouteImport
+      parentRoute: typeof ApiPublicBundlesRoute
+    }
+    '/api/public/assets/$': {
+      id: '/api/public/assets/$'
+      path: '/api/public/assets/$'
+      fullPath: '/api/public/assets/$'
+      preLoaderRoute: typeof ApiPublicAssetsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -691,6 +770,17 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface ApiPublicBundlesRouteChildren {
+  ApiPublicBundlesSplatRoute: typeof ApiPublicBundlesSplatRoute
+}
+
+const ApiPublicBundlesRouteChildren: ApiPublicBundlesRouteChildren = {
+  ApiPublicBundlesSplatRoute: ApiPublicBundlesSplatRoute,
+}
+
+const ApiPublicBundlesRouteWithChildren =
+  ApiPublicBundlesRoute._addFileChildren(ApiPublicBundlesRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
@@ -706,15 +796,18 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPersistAssetRoute: ApiPersistAssetRoute,
   ApiProjectsRoute: ApiProjectsRoute,
   ApiRecording2VoiceReplaceRoute: ApiRecording2VoiceReplaceRoute,
+  ApiRenderBundlesRoute: ApiRenderBundlesRoute,
   ApiSyncRoute: ApiSyncRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
   ApiTtsRoute: ApiTtsRoute,
   ApiAppAssetsSplatRoute: ApiAppAssetsSplatRoute,
   ApiAssetsSplatRoute: ApiAssetsSplatRoute,
   ApiDivStudioUpdatesSplatRoute: ApiDivStudioUpdatesSplatRoute,
+  ApiPublicBundlesRoute: ApiPublicBundlesRouteWithChildren,
   ApiPublicRuntimeInfoRoute: ApiPublicRuntimeInfoRoute,
   ApiRenderAgentUpdatesSplatRoute: ApiRenderAgentUpdatesSplatRoute,
   ApiSyncFeedSplatRoute: ApiSyncFeedSplatRoute,
+  ApiPublicAssetsSplatRoute: ApiPublicAssetsSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
