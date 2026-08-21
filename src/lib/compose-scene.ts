@@ -52,7 +52,6 @@ export function placementSfxUrl(key: PlacementSfxKey): string | null {
   return PLACEMENT_SFX[key];
 }
 
-import type { QuestionKind } from "@/lib/compose-scene";
 
 export interface ComposeDraft {
   script: string;

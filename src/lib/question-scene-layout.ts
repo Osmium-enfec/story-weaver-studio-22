@@ -166,7 +166,11 @@ export function questionIntroSettingsFromScene(scene: {
   };
 }
 
-export function questionIntroGapMs(scene: { kind?: string; questionIntroGapMs?: number }): number {
+export function questionIntroGapMs(scene: {
+  kind?: string;
+  questionIntroGapMs?: number;
+  questionIntroAudioUrl?: string;
+}): number {
   if (scene.kind !== "question") return 0;
   if (!scene.questionIntroAudioUrl) return 0;
   return scene.questionIntroGapMs ?? QUESTION_INTRO_GAP_MS;

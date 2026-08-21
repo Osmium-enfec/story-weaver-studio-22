@@ -31,13 +31,13 @@ export function NavBar() {
       /* clear local session even if server logout fails */
     }
     clearAuthSession();
-    navigate({ to: "/compose", replace: true });
+    navigate({ to: "/compose", search: {}, replace: true });
   }
 
   return (
     <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-40">
       <div className="flex w-full items-center justify-between px-4 py-3 xl:px-8">
-        <Link to="/compose" className="flex items-center gap-2 font-semibold">
+        <Link to="/compose" search={{}} className="flex items-center gap-2 font-semibold">
           <Sparkles size={18} className="text-primary" />
           <span>Explainer Studio</span>
         </Link>
@@ -46,6 +46,7 @@ export function NavBar() {
             <>
               <Link
                 to="/compose"
+                search={{}}
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
               >
                 Compose

@@ -402,6 +402,7 @@ function QuestionSceneStage({
   background: SceneBackground;
   questionPhase?: QuestionDisplayPhase;
   markHoldElapsedMs?: number;
+  postSpeechElapsedMs?: number;
 }) {
   const content = sceneToQuestionContent(scene);
   const markSettings = questionMarkSettingsFromScene(scene);

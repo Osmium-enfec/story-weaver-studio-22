@@ -319,7 +319,7 @@ function tryMatchBox(
   const binding = bindingForCover(cover, bindings);
   const contentFirst = isContentRole(binding.role) && !footerSearch;
 
-  let hit: PhraseAnchor | null = null;
+  const found: { hit: PhraseAnchor | null } = { hit: null };
   let usedPhrase = "";
   let source: "speech" | "keyword" = "speech";
 
@@ -329,7 +329,7 @@ function tryMatchBox(
         ? alignKeywordFromEnd(kw, words, fromWordIdx)
         : alignKeywordSequential(kw, words, fromWordIdx, usedWordIndices);
       if (anchor) {
-        hit = anchor;
+        found.hit = anchor;
         usedPhrase = kw;
         source = "keyword";
         return;
@@ -343,7 +343,7 @@ function tryMatchBox(
         ? alignPhraseFromEnd(phrase, words, fromWordIdx)
         : alignPhraseSequential(phrase, words, fromWordIdx);
       if (anchor) {
-        hit = anchor;
+        found.hit = anchor;
         usedPhrase = phrase;
         source = "speech";
         return;
@@ -353,26 +353,27 @@ function tryMatchBox(
 
   if (contentFirst) {
     tryKeywords(contentKeywordsForBinding(binding, cover));
-    if (!hit) tryKeywords(keywordsForBinding(binding, cover));
-    if (!hit) tryPhrases();
+    if (!found.hit) tryKeywords(keywordsForBinding(binding, cover));
+    if (!found.hit) tryPhrases();
   } else {
     tryPhrases();
-    if (!hit) tryKeywords(keywordsForBinding(binding, cover));
+    if (!found.hit) tryKeywords(keywordsForBinding(binding, cover));
   }
 
-  if (!hit) return { match: null, nextCursor: fromWordIdx };
+  const anchor = found.hit;
+  if (!anchor) return { match: null, nextCursor: fromWordIdx };
 
-  usedWordIndices?.add(hit.endWordIdx);
+  usedWordIndices?.add(anchor.endWordIdx);
 
   return {
     match: {
       boxIndex,
-      startSec: hit.startSec,
+      startSec: anchor.startSec,
       phrase: usedPhrase,
       source,
-      endWordIdx: hit.endWordIdx,
+      endWordIdx: anchor.endWordIdx,
     },
-    nextCursor: Math.max(fromWordIdx, hit.endWordIdx + 1),
+    nextCursor: Math.max(fromWordIdx, anchor.endWordIdx + 1),
   };
 }
 

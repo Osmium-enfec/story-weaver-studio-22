@@ -33,9 +33,23 @@ export type ProjectListItem = {
   scene_count: number;
 };
 
-function normalizeProjectRecord(p: Record<string, unknown>): Record<string, unknown> {
+export type ProjectRecord = {
+  id: string;
+  user_id?: string;
+  title: string;
+  script?: string | null;
+  audio_mode: string;
+  thumbnail_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  scenes?: any;
+  parts?: any;
+  workshop_draft?: any;
+};
+
+function normalizeProjectRecord(p: Record<string, any>): ProjectRecord {
   const parts = getProjectParts(p as { parts?: unknown; workshop_draft?: unknown });
-  return { ...p, parts };
+  return { ...p, parts } as ProjectRecord;
 }
 
 export const saveProject = createServerFn({ method: "POST" })
@@ -45,7 +59,7 @@ export const saveProject = createServerFn({ method: "POST" })
     const { userId } = context;
     const id = data.id ?? randomUUID();
 
-    localSaveProject(userId, { ...data, id });
+    localSaveProject(userId, { ...data, id, scenes: data.scenes ?? [] });
 
     return { id, store: "sqlite" as const };
   });
@@ -62,7 +76,7 @@ export const getProject = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const local = localGetProject(context.userId, data.id);
     if (!local) throw new Error("Project not found.");
-    return normalizeProjectRecord(local as unknown as Record<string, unknown>);
+    return normalizeProjectRecord(local as unknown as Record<string, any>);
   });
 
 export const deleteProject = createServerFn({ method: "POST" })

@@ -67,20 +67,20 @@ export async function concatAudioClips(
 ): Promise<ConcatResult> {
   const defaultHold = SCENE_HOLD_MS;
   const gapCount = Math.max(0, urls.length - 1);
+  const holdOption = options.holdMs;
+  const singleHold: number = typeof holdOption === "number" ? holdOption : defaultHold;
+  const holdList: number[] = Array.isArray(holdOption) ? holdOption : [];
   const gapHolds: number[] =
     gapCount === 0
       ? []
-      : Array.isArray(options.holdMs)
-        ? options.holdMs.length >= gapCount
-          ? options.holdMs.slice(0, gapCount)
+      : Array.isArray(holdOption)
+        ? holdList.length >= gapCount
+          ? holdList.slice(0, gapCount)
           : [
-              ...options.holdMs,
-              ...Array.from(
-                { length: gapCount - options.holdMs.length },
-                () => defaultHold,
-              ),
+              ...holdList,
+              ...Array.from({ length: gapCount - holdList.length }, () => defaultHold),
             ]
-        : Array.from({ length: gapCount }, () => options.holdMs ?? defaultHold);
+        : Array.from({ length: gapCount }, () => singleHold);
   const holdMs = gapHolds.length > 0 ? Math.max(...gapHolds) : defaultHold;
   const AC = window.AudioContext || (window as any).webkitAudioContext;
   const ctx: AudioContext = new AC();

@@ -27,7 +27,7 @@ function AuthPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getStoredSession()) navigate({ to: "/compose", replace: true });
+    if (getStoredSession()) navigate({ to: "/compose", search: {}, replace: true });
   }, [navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -40,7 +40,7 @@ function AuthPage() {
           ? await runLogin({ data: { email, password } })
           : await runRegister({ data: { email, password } });
       persistAuthSession({ token: result.token, user: result.user });
-      navigate({ to: "/compose" });
+      navigate({ to: "/compose", search: {} });
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally {
