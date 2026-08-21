@@ -903,7 +903,9 @@ async function prepareRecordingVideoFrames(
         "-i",
         src,
         "-vf",
-        `setpts=PTS-STARTPTS,fps=${bakeFps}`,
+        [`setpts=PTS-STARTPTS`, cropFilter, `fps=${bakeFps}`]
+          .filter(Boolean)
+          .join(","),
         "-vsync",
         "cfr",
         "-q:v",
