@@ -339,3 +339,51 @@ export async function localEpisodeTotalCount(...args: any[]): Promise<any> {
   }
   return sqliteEpisodeTotalCount();
 }
+
+/** Upsert a course row from an admin assignment snapshot. */
+function sqliteApplySyncedCourse(course: Record<string, any>): void {
+  const conn = getDb();
+  const id = String(course?.id ?? "");
+  if (!id) throw new Error("Course id required.");
+  const now = new Date().toISOString();
+  const exists = conn.prepare("SELECT id FROM courses WHERE id = ?").get(id) as
+    | { id: string }
+    | undefined;
+
+  if (exists) {
+    conn
+      .prepare(
+        `UPDATE courses SET title = ?, description = ?, thumbnail_url = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(
+        String(course.title ?? "Untitled"),
+        course.description ?? null,
+        course.thumbnail_url ?? null,
+        now,
+        id,
+      );
+    return;
+  }
+
+  conn
+    .prepare(
+      `INSERT INTO courses (id, user_id, title, description, thumbnail_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      String(course.user_id ?? ""),
+      String(course.title ?? "Untitled"),
+      course.description ?? null,
+      course.thumbnail_url ?? null,
+      String(course.created_at ?? now),
+      now,
+    );
+}
+
+export async function applySyncedCourse(...args: any[]): Promise<any> {
+  if (usePostgres()) {
+    throw new Error("Assignment sync is only supported on local SQLite (desktop / LAN Mac).");
+  }
+  return sqliteApplySyncedCourse(...(args as [any]));
+}

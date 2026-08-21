@@ -836,3 +836,74 @@ export async function applySubmitterParts(...args: any[]): Promise<any> {
   }
   return sqliteApplySubmitterParts(...(args as [any, any]));
 }
+
+/**
+ * Upsert an episode row exactly as delivered by an admin assignment snapshot.
+ * Used by work-sync when pulling assignments onto a collaborator machine.
+ */
+function sqliteApplySyncedEpisode(input: {
+  episode: Record<string, any>;
+  parts: unknown;
+  isNew?: boolean;
+}): void {
+  const conn = getDb();
+  const ep = input.episode ?? {};
+  const id = String(ep.id ?? "");
+  if (!id) throw new Error("Episode id required.");
+  const now = new Date().toISOString();
+  const partsJson = JSON.stringify(input.parts ?? []);
+  const exists = conn.prepare("SELECT id FROM projects WHERE id = ?").get(id) as
+    | { id: string }
+    | undefined;
+
+  if (exists) {
+    conn
+      .prepare(
+        `UPDATE projects
+           SET title = ?, parts = ?, course_id = ?, thumbnail_url = ?,
+               assigned_user_id = ?, assigned_user_email = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        String(ep.title ?? "Untitled"),
+        partsJson,
+        ep.course_id ?? null,
+        ep.thumbnail_url ?? null,
+        ep.assigned_user_id ?? null,
+        ep.assigned_user_email ?? null,
+        now,
+        id,
+      );
+    return;
+  }
+
+  conn
+    .prepare(
+      `INSERT INTO projects
+         (id, user_id, title, script, audio_mode, scenes, parts, thumbnail_url,
+          course_id, assigned_user_id, assigned_user_email, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      String(ep.user_id ?? ""),
+      String(ep.title ?? "Untitled"),
+      ep.script ?? null,
+      String(ep.audio_mode ?? "tts"),
+      JSON.stringify(ep.scenes ?? []),
+      partsJson,
+      ep.thumbnail_url ?? null,
+      ep.course_id ?? null,
+      ep.assigned_user_id ?? null,
+      ep.assigned_user_email ?? null,
+      String(ep.created_at ?? now),
+      now,
+    );
+}
+
+export async function applySyncedEpisode(...args: any[]): Promise<any> {
+  if (usePostgres()) {
+    throw new Error("Assignment sync is only supported on local SQLite (desktop / LAN Mac).");
+  }
+  return sqliteApplySyncedEpisode(...(args as [any]));
+}
