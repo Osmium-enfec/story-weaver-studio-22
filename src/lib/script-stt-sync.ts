@@ -329,7 +329,7 @@ function tryMatchBox(
         ? alignKeywordFromEnd(kw, words, fromWordIdx)
         : alignKeywordSequential(kw, words, fromWordIdx, usedWordIndices);
       if (anchor) {
-        hit = anchor;
+        found.hit = anchor;
         usedPhrase = kw;
         source = "keyword";
         return;
@@ -343,7 +343,7 @@ function tryMatchBox(
         ? alignPhraseFromEnd(phrase, words, fromWordIdx)
         : alignPhraseSequential(phrase, words, fromWordIdx);
       if (anchor) {
-        hit = anchor;
+        found.hit = anchor;
         usedPhrase = phrase;
         source = "speech";
         return;
@@ -353,14 +353,14 @@ function tryMatchBox(
 
   if (contentFirst) {
     tryKeywords(contentKeywordsForBinding(binding, cover));
-    if (!hit) tryKeywords(keywordsForBinding(binding, cover));
-    if (!hit) tryPhrases();
+    if (!found.hit) tryKeywords(keywordsForBinding(binding, cover));
+    if (!found.hit) tryPhrases();
   } else {
     tryPhrases();
-    if (!hit) tryKeywords(keywordsForBinding(binding, cover));
+    if (!found.hit) tryKeywords(keywordsForBinding(binding, cover));
   }
 
-  const anchor: PhraseAnchor | null = hit;
+  const anchor = found.hit;
   if (!anchor) return { match: null, nextCursor: fromWordIdx };
 
   usedWordIndices?.add(anchor.endWordIdx);
