@@ -7,18 +7,25 @@ import {
 import { sceneGapMs } from "@/lib/scene-transition";
 
 /** Brand bumper for Script Intro scenes. */
-export const COMMON_INTRO_VIDEO_URL = "/common-intro.mp4";
+export const COMMON_INTRO_VIDEO_URL = commonIntroAsset.url;
 export const COMMON_INTRO_AUDIO_URL = "/common-intro.mp3";
-/** Matches `public/common-intro.mp4` (~12.22s brand open). */
+/** Matches the brand open video (~12.22s). */
 export const COMMON_INTRO_DURATION_MS = 12_217;
 
 /** Brand bumper for Script Outro scenes. */
-export const COMMON_OUTRO_VIDEO_URL = "/common-outro.mp4";
+export const COMMON_OUTRO_VIDEO_URL = commonOutroAsset.url;
 export const COMMON_OUTRO_AUDIO_URL = "/common-outro.mp3";
 export const COMMON_OUTRO_DURATION_MS = 12_221;
 
 /** @deprecated Legacy shared bumper — still recognized for existing projects. */
-export const COMMON_INTRO_OUTRO_VIDEO_URL = "/common-intro-outro.mp4";
+export const COMMON_INTRO_OUTRO_VIDEO_URL = commonIntroOutroAsset.url;
+
+/** Legacy `/public` paths kept so already-saved projects still resolve. */
+const LEGACY_BUMPER_URLS = [
+  "/common-intro.mp4",
+  "/common-outro.mp4",
+  "/common-intro-outro.mp4",
+];
 /** @deprecated */
 export const COMMON_INTRO_OUTRO_AUDIO_URL = "/common-intro-outro.mp3";
 /** @deprecated Prefer COMMON_INTRO_DURATION_MS / COMMON_OUTRO_DURATION_MS. */
