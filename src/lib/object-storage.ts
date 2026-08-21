@@ -2,9 +2,23 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from
 import { Readable } from "node:stream";
 import path from "node:path";
 import { hostAppAssetsRoot, hostProjectAssetsRoot } from "@/lib/host-storage";
-import { useSpaces } from "@/lib/runtime-backends";
+import { useCloudStorage, useSpaces } from "@/lib/runtime-backends";
 
 export type AssetKind = "project" | "app";
+
+/** Cloud bucket layout mirrors the disk layout: `<kind>/<relPath>`. */
+const CLOUD_BUCKET = "project-assets";
+
+function cloudObjectUrl(kind: AssetKind, rel: string): string {
+  const base = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
+  const prefix = kind === "app" ? "app-assets" : "project-assets";
+  return `${base}/storage/v1/object/${CLOUD_BUCKET}/${prefix}/${rel}`;
+}
+
+function cloudHeaders(): Record<string, string> {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!.trim();
+  return { apikey: key, Authorization: `Bearer ${key}` };
+}
 
 type S3Like = {
   send: (command: unknown) => Promise<any>;
@@ -69,7 +83,20 @@ export async function putAsset(opts: {
   const rel = opts.relPath.replace(/^\/+/, "");
   if (!rel || rel.includes("..")) throw new Error("Invalid asset path");
 
-  if (useSpaces()) {
+  if (useCloudStorage()) {
+    const res = await fetch(cloudObjectUrl(opts.kind, rel), {
+      method: "POST",
+      headers: {
+        ...cloudHeaders(),
+        "Content-Type": opts.contentType ?? "application/octet-stream",
+        "x-upsert": "true",
+      },
+      body: new Uint8Array(opts.body),
+    });
+    if (!res.ok) {
+      throw new Error(`Asset upload failed [${res.status}]: ${await res.text()}`);
+    }
+  } else if (useSpaces()) {
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await spacesClient();
     await client.send(
@@ -140,6 +167,27 @@ export async function readAsset(opts: {
     "Accept-Ranges": "bytes",
     "Cache-Control": "public, max-age=31536000, immutable",
   };
+
+  if (useCloudStorage()) {
+    const res = await fetch(cloudObjectUrl(opts.kind, rel), {
+      headers: {
+        ...cloudHeaders(),
+        ...(opts.rangeHeader ? { Range: opts.rangeHeader } : {}),
+      },
+    });
+    if (!res.ok || !res.body) return null;
+    const len = res.headers.get("content-length");
+    const contentRange = res.headers.get("content-range");
+    return {
+      status: res.status === 206 ? 206 : 200,
+      body: res.body,
+      headers: {
+        ...common,
+        ...(len ? { "Content-Length": len } : {}),
+        ...(contentRange ? { "Content-Range": contentRange } : {}),
+      },
+    };
+  }
 
   if (useSpaces()) {
     const { GetObjectCommand, HeadObjectCommand } = await import("@aws-sdk/client-s3");
