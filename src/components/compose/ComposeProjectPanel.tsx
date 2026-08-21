@@ -536,7 +536,30 @@ export function ComposeProjectPanel({
     }
   }
 
+  async function handleReadyForHd() {
+    if (!projectId || !selectedPartId) return;
+    setReadyBusy(true);
+    setReadyMsg(null);
+    try {
+      const { bundle } = await apiFreezeBundle(projectId, selectedPartId);
+      setReadyMsg({
+        ok: true,
+        text: `Frozen for HD render — ${bundle.sceneCount} scenes, ${Math.round(
+          bundle.durationMs / 1000,
+        )}s. It is now in the render queue.`,
+      });
+    } catch (e) {
+      setReadyMsg({
+        ok: false,
+        text: e instanceof Error ? e.message : "Could not mark ready for HD",
+      });
+    } finally {
+      setReadyBusy(false);
+    }
+  }
+
   async function handleSavePart() {
+
     if (!stitched?.length || !stitchMasterAudio || !projectId || !project) return;
     setSavingPart(true);
     setStitchError(null);
