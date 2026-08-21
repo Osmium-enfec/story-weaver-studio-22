@@ -203,10 +203,7 @@ export async function withHybridExportEnv<T>(
     enabled: true,
     baseUrl,
     loadImage: nodeLoadImage,
-    createCanvas: (w, h) => {
-      const c = createCanvas(w, h);
-      return c;
-    },
+    createCanvas: (w, h) => createCanvas(w, h) as unknown as HTMLCanvasElement,
   });
   try {
     return await fn();

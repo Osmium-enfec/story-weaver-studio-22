@@ -139,7 +139,7 @@ export const Route = createFileRoute("/api/export")({
             try {
               const idx = Number(bgFrame);
               const { bytes, contentType } = readJobBgFrame(jobId, token, idx);
-              return new Response(bytes, {
+              return new Response(new Uint8Array(bytes), {
                 status: 200,
                 headers: {
                   "Content-Type": contentType,
@@ -160,7 +160,7 @@ export const Route = createFileRoute("/api/export")({
                 Number(recVideo),
                 Number(recFrame),
               );
-              return new Response(bytes, {
+              return new Response(new Uint8Array(bytes), {
                 status: 200,
                 headers: {
                   "Content-Type": contentType,
@@ -216,7 +216,7 @@ export const Route = createFileRoute("/api/export")({
           }
           const stat = statSync(job.outputPath);
           const bytes = readFileSync(job.outputPath);
-          return new Response(bytes, {
+          return new Response(new Uint8Array(bytes), {
             status: 200,
             headers: {
               "Content-Type": "video/mp4",

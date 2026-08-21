@@ -362,17 +362,18 @@ function tryMatchBox(
 
   if (!hit) return { match: null, nextCursor: fromWordIdx };
 
-  usedWordIndices?.add(hit.endWordIdx);
+  const anchor = hit as PhraseAnchor;
+  usedWordIndices?.add(anchor.endWordIdx);
 
   return {
     match: {
       boxIndex,
-      startSec: hit.startSec,
+      startSec: anchor.startSec,
       phrase: usedPhrase,
       source,
-      endWordIdx: hit.endWordIdx,
+      endWordIdx: anchor.endWordIdx,
     },
-    nextCursor: Math.max(fromWordIdx, hit.endWordIdx + 1),
+    nextCursor: Math.max(fromWordIdx, anchor.endWordIdx + 1),
   };
 }
 
