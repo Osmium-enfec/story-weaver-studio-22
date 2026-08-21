@@ -860,6 +860,35 @@ export function ComposeProjectPanel({
             </button>
           )}
 
+          {selectedPartId && savedParts.some((p) => p.id === selectedPartId) && (
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={handleReadyForHd}
+                disabled={readyBusy || savingPart || saving}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-600/40 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-500/15 disabled:opacity-50"
+                title="Freeze this saved part as an HD render job for the render Mac"
+              >
+                {readyBusy ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <CloudUpload size={14} />
+                )}
+                Ready for HD
+              </button>
+              {readyMsg && (
+                <p
+                  className={`whitespace-pre-line text-xs ${
+                    readyMsg.ok ? "text-emerald-700" : "text-destructive"
+                  }`}
+                >
+                  {readyMsg.text}
+                </p>
+              )}
+            </div>
+          )}
+
+
           {stitchError && (
             <p className="whitespace-pre-line text-xs text-destructive">{stitchError}</p>
           )}
