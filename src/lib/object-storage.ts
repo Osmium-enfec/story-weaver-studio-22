@@ -168,6 +168,27 @@ export async function readAsset(opts: {
     "Cache-Control": "public, max-age=31536000, immutable",
   };
 
+  if (useCloudStorage()) {
+    const res = await fetch(cloudObjectUrl(opts.kind, rel), {
+      headers: {
+        ...cloudHeaders(),
+        ...(opts.rangeHeader ? { Range: opts.rangeHeader } : {}),
+      },
+    });
+    if (!res.ok || !res.body) return null;
+    const len = res.headers.get("content-length");
+    const contentRange = res.headers.get("content-range");
+    return {
+      status: res.status === 206 ? 206 : 200,
+      body: res.body,
+      headers: {
+        ...common,
+        ...(len ? { "Content-Length": len } : {}),
+        ...(contentRange ? { "Content-Range": contentRange } : {}),
+      },
+    };
+  }
+
   if (useSpaces()) {
     const { GetObjectCommand, HeadObjectCommand } = await import("@aws-sdk/client-s3");
     const key = spacesKey(opts.kind, rel);
