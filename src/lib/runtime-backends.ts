@@ -21,39 +21,28 @@ export function isEdgeRuntime(): boolean {
   }
 }
 
-let diskWritable: boolean | null = null;
-
 /**
- * Can we actually create/write the SQLite data directory? Published hosts run on
- * a read-only filesystem, which is what surfaces as "operation not permitted".
+ * True on the hosted/published build. Published hosting has no writable disk and
+ * no native SQLite, so the cloud Postgres must be used there.
  */
-export function isDiskWritable(): boolean {
-  if (diskWritable !== null) return diskWritable;
-  if (isEdgeRuntime()) return (diskWritable = false);
-  try {
-    // Lazy require so browser/edge bundles never touch node:fs at module scope.
-    const fs = require("node:fs") as typeof import("node:fs");
-    const dir =
-      process.env.ENFEC_DATA_ROOT?.trim() || `${process.cwd()}/.data`;
-    fs.mkdirSync(dir, { recursive: true });
-    const probe = `${dir}/.write-probe`;
-    fs.writeFileSync(probe, "ok");
-    fs.rmSync(probe, { force: true });
-    diskWritable = true;
-  } catch {
-    diskWritable = false;
-  }
-  return diskWritable;
+export function isHostedBuild(): boolean {
+  if ((process.env.ENFEC_FORCE_SQLITE ?? "").trim() === "1") return false;
+  if (isEdgeRuntime()) return true;
+  return (
+    process.env.NODE_ENV === "production" &&
+    !process.env.ENFEC_SELF_HOSTED?.trim()
+  );
 }
 
 /** Postgres connection string: explicit DATABASE_URL, else the cloud database. */
 export function postgresUrl(): string {
   const explicit = process.env.DATABASE_URL?.trim();
   if (explicit) return explicit;
-  // Hosted runtime with no writable disk → SQLite is impossible; use cloud Postgres.
-  if (!isDiskWritable()) return process.env.SUPABASE_DB_URL?.trim() || "";
+  // Hosted runtime → SQLite/disk is unavailable; use the cloud Postgres.
+  if (isHostedBuild()) return process.env.SUPABASE_DB_URL?.trim() || "";
   return "";
 }
+
 
 
 export function usePostgres(): boolean {
