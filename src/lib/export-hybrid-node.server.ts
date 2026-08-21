@@ -225,6 +225,7 @@ export async function withHybridExportEnv<T>(
   baseUrl: string,
   fn: () => Promise<T>,
 ): Promise<T> {
+  await loadNativeModules();
   const bag = installNodeGlobals();
   setExportNodeRuntime({
     enabled: true,
