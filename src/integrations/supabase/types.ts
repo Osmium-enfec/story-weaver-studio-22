@@ -61,7 +61,6 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
-          workshop_draft: Json | null
         }
         Insert: {
           audio_mode?: string
@@ -73,7 +72,6 @@ export type Database = {
           title: string
           updated_at?: string
           user_id: string
-          workshop_draft?: Json | null
         }
         Update: {
           audio_mode?: string
@@ -85,7 +83,6 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
-          workshop_draft?: Json | null
         }
         Relationships: []
       }
