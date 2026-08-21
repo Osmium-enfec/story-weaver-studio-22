@@ -1,4 +1,5 @@
 import { DEFAULT_ADMIN_EMAILS } from "@/lib/admin";
+import { usePostgres } from "@/lib/runtime-backends";
 import { localEnsureUser } from "@/lib/local-auth-db";
 
 let bootstrapped = false;
@@ -13,7 +14,7 @@ export async function ensureBootstrapAdmins(): Promise<void> {
   if (bootstrapped) return;
   if (bootstrapPromise) return bootstrapPromise;
   bootstrapPromise = (async () => {
-    if (process.env.DATABASE_URL?.trim()) {
+    if (usePostgres()) {
       const { ensurePgSchema } = await import("@/lib/pg");
       await ensurePgSchema();
     }

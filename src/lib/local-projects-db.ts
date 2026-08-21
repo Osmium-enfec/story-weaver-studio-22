@@ -383,6 +383,13 @@ function sqliteListProjects(
 ): LocalProjectListItem[] {
   const conn = getDb();
   let rows: Record<string, unknown>[];
+  /** Natural sort so "Episode 2" comes before "Episode 10". */
+  const naturalByTitle = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+    String(a.title ?? "").localeCompare(String(b.title ?? ""), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+
 
   if (opts?.asAdmin) {
     if (opts && "courseId" in opts) {
@@ -402,6 +409,7 @@ function sqliteListProjects(
              FROM projects WHERE course_id = ? ORDER BY title ASC`,
           )
           .all(opts.courseId) as Record<string, unknown>[];
+        rows.sort(naturalByTitle);
       }
     } else if (opts?.requireCourse) {
       rows = conn
@@ -436,6 +444,7 @@ function sqliteListProjects(
          FROM projects WHERE course_id = ? ORDER BY title ASC`,
       )
       .all(opts.courseId) as Record<string, unknown>[];
+    rows.sort(naturalByTitle);
   } else {
     // Non-admins never browse unassigned episodes.
     rows = conn

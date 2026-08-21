@@ -1,4 +1,10 @@
 import pg from "pg";
+import { postgresUrl } from "@/lib/runtime-backends";
+
+/** Cloud fallback (published app) keeps app tables in the private `app` schema. */
+function usingCloudFallback(): boolean {
+  return !process.env.DATABASE_URL?.trim() && Boolean(postgresUrl());
+}
 
 let pool: pg.Pool | null = null;
 let schemaPromise: Promise<void> | null = null;
@@ -95,13 +101,14 @@ export function pgConnectionOptions(connectionString: string): pg.PoolConfig {
 
 /** Shared pool — only used when DATABASE_URL is set (prod / Docker). */
 export function getPgPool(): pg.Pool {
-  const url = process.env.DATABASE_URL?.trim();
+  const url = postgresUrl();
   if (!url) {
     throw new Error("DATABASE_URL is not set — Postgres backend is inactive.");
   }
   if (!pool) {
     pool = new pg.Pool({
       ...pgConnectionOptions(url),
+      ...(usingCloudFallback() ? { options: "-c search_path=app,public" } : {}),
       max: Number(process.env.PG_POOL_MAX ?? 10),
     });
   }
@@ -110,7 +117,9 @@ export function getPgPool(): pg.Pool {
 
 /** Create tables/indexes if missing. Safe to call repeatedly. */
 export async function ensurePgSchema(): Promise<void> {
-  if (!process.env.DATABASE_URL?.trim()) return;
+  if (!postgresUrl()) return;
+  // Cloud fallback: schema is provisioned by migration; the app role cannot DDL.
+  if (usingCloudFallback()) return;
   if (!schemaPromise) {
     schemaPromise = (async () => {
       await getPgPool().query(PG_SCHEMA_SQL);

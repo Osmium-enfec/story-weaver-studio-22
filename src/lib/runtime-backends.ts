@@ -5,8 +5,48 @@
  * Droplet / Docker: set DATABASE_URL + Spaces vars → Postgres + object storage.
  */
 
+/**
+ * True when running in a serverless edge worker (published app): no writable
+ * filesystem and no native modules, so SQLite/disk backends cannot be used.
+ */
+export function isEdgeRuntime(): boolean {
+  try {
+    return (
+      typeof navigator !== "undefined" &&
+      typeof navigator.userAgent === "string" &&
+      navigator.userAgent.includes("Cloudflare-Workers")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True on the hosted/published build. Published hosting has no writable disk and
+ * no native SQLite, so the cloud Postgres must be used there.
+ */
+export function isHostedBuild(): boolean {
+  if ((process.env.ENFEC_FORCE_SQLITE ?? "").trim() === "1") return false;
+  if (isEdgeRuntime()) return true;
+  return (
+    process.env.NODE_ENV === "production" &&
+    !process.env.ENFEC_SELF_HOSTED?.trim()
+  );
+}
+
+/** Postgres connection string: explicit DATABASE_URL, else the cloud database. */
+export function postgresUrl(): string {
+  const explicit = process.env.DATABASE_URL?.trim();
+  if (explicit) return explicit;
+  // Hosted runtime → SQLite/disk is unavailable; use the cloud Postgres.
+  if (isHostedBuild()) return process.env.SUPABASE_DB_URL?.trim() || "";
+  return "";
+}
+
+
+
 export function usePostgres(): boolean {
-  return Boolean(process.env.DATABASE_URL?.trim());
+  return Boolean(postgresUrl());
 }
 
 export function useSpaces(): boolean {
