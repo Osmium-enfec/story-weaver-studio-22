@@ -132,6 +132,25 @@ function AdminPage() {
     return () => clearInterval(t);
   }, [tab, refresh]);
 
+  const refreshBundles = useCallback(async () => {
+    try {
+      setBundlesError(null);
+      const { bundles: rows } = await apiListBundles({ all: true });
+      setBundles(rows);
+    } catch (e: unknown) {
+      setBundlesError(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "bundles") return;
+    void refreshBundles();
+    const t = setInterval(() => void refreshBundles(), 8000);
+    return () => clearInterval(t);
+  }, [tab, refreshBundles]);
+
+
+
   async function onDeleteUser(userId: string, email: string) {
     if (
       !confirm(
