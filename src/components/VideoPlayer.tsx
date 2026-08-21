@@ -830,10 +830,8 @@ function RecordingSceneStage({
   const videoBg = background.kind === "video" ? background.url : null;
   /** Stretch over loop BG after cropping baked black/white mattes. */
   const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
-  /** Video clip: contain (no stretch). Screen recordings keep fill. */
-  const isVideoClip =
-    scene.recordingUseEmbeddedAudio === true && scene.recordingVoiceReplace !== true;
-  const cameraFit = isVideoClip ? "contain" : "fill";
+  /** All recordings/clips: crop baked mattes, then stretch edge-to-edge (no black bars). */
+  const cameraFit = "fill" as const;
   const cam = recordingCameraAt(scene.recordingCameraKeyframes, elapsedSpeechMs);
   const zoomSfxUrl = recordingCameraZoomSfxUrl(scene.recordingCameraZoomSfx);
   const blurRegion = normalizeRecordingBlurRegion(scene.recordingBlurRegion);
@@ -890,8 +888,8 @@ function RecordingSceneStage({
     const sync = () => {
       if (v.videoWidth > 0 && v.videoHeight > 0) {
         setVideoSize({ w: v.videoWidth, h: v.videoHeight });
-        // Matte crop is for screen recordings with baked bars — skip for video clips.
-        if (!scene.mediaUrl || isVideoClip) {
+        // Matte crop removes baked black bars for every recording/clip.
+        if (!scene.mediaUrl) {
           setContentCrop(null);
           return;
         }
@@ -930,7 +928,7 @@ function RecordingSceneStage({
       v.removeEventListener("loadedmetadata", sync);
       if (onReady) v.removeEventListener("loadeddata", onReady);
     };
-  }, [scene.mediaUrl, isVideoClip]);
+  }, [scene.mediaUrl]);
 
   useLayoutEffect(() => {
     const el = stageRef.current;
@@ -948,16 +946,14 @@ function RecordingSceneStage({
 
   const cameraView = useMemo(() => {
     if (!videoSize.w || !videoSize.h || !stageSize.w || !stageSize.h) return null;
-    // Screen recordings: crop baked mattes then stretch. Video clips: full frame, contain.
+    // Crop baked mattes then stretch to fill (no letterboxing).
     const crop =
-      !isVideoClip && contentCrop
-        ? contentCrop
-        : {
-            x: 0,
-            y: 0,
-            w: videoSize.w,
-            h: videoSize.h,
-          };
+      contentCrop ?? {
+        x: 0,
+        y: 0,
+        w: videoSize.w,
+        h: videoSize.h,
+      };
     const local = recordingCameraDrawRects(
       crop.w,
       crop.h,
@@ -983,7 +979,7 @@ function RecordingSceneStage({
         cameraFit,
       ),
     };
-  }, [videoSize, stageSize, cam, cameraFit, contentCrop, isVideoClip]);
+  }, [videoSize, stageSize, cam, cameraFit, contentCrop]);
 
   const blurView = useMemo(() => {
     if (!blurRegion || !cameraView) return null;
@@ -1065,13 +1061,13 @@ function RecordingSceneStage({
                     top: cameraView.videoLayout.top,
                     width: cameraView.videoLayout.width,
                     height: cameraView.videoLayout.height,
-                    objectFit: isVideoClip ? "contain" : "fill",
+                    objectFit: "fill",
                   }
                 : {
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    objectFit: isVideoClip ? "contain" : "fill",
+                    objectFit: "fill",
                   }
             }
           />

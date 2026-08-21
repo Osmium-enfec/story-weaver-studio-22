@@ -668,10 +668,8 @@ export function drawRecordingSceneFrame(
 ) {
   const background = opts.background ?? DEFAULT_BACKGROUND;
   const customBg = background.kind !== "whiteboard";
-  /** Video clip: contain (no stretch). Screen recordings stretch after matte crop. */
-  const isVideoClip =
-    scene.recordingUseEmbeddedAudio === true && scene.recordingVoiceReplace !== true;
-  const cameraFit = isVideoClip ? "contain" : "fill";
+  /** All recordings/clips stretch edge-to-edge after matte crop (no black bars). */
+  const cameraFit = "fill" as const;
 
   if (!opts.contentOnly) {
     drawSceneBackground(ctx, W, H, opts);
@@ -706,10 +704,9 @@ export function drawRecordingSceneFrame(
       scene.recordingCameraKeyframes,
       opts.elapsedSpeechMs ?? 0,
     );
-    const crop =
-      !isVideoClip && url
-        ? detectAndCacheVideoContentCrop(url, src, iw, ih)
-        : { x: 0, y: 0, w: iw, h: ih };
+    const crop = url
+      ? detectAndCacheVideoContentCrop(url, src, iw, ih)
+      : { x: 0, y: 0, w: iw, h: ih };
     const local = recordingCameraDrawRects(
       crop.w,
       crop.h,
@@ -752,22 +749,6 @@ export function drawRecordingSceneFrame(
           opts.elapsedSpeechMs ?? 0,
         );
       }
-    } else if (isVideoClip) {
-      // Fallback: contain full frame (no stretch).
-      const ir = iw / Math.max(1, ih);
-      const cr = vw / Math.max(1, vh);
-      let dw = vw;
-      let dh = vh;
-      if (ir > cr) {
-        dw = vw;
-        dh = vw / ir;
-      } else {
-        dh = vh;
-        dw = vh * ir;
-      }
-      const dx = vx + (vw - dw) / 2;
-      const dy = vy + (vh - dh) / 2;
-      ctx.drawImage(src, 0, 0, iw, ih, dx, dy, dw, dh);
     } else {
       // Fallback: stretch cropped content edge-to-edge (no letterbox).
       ctx.drawImage(src, crop.x, crop.y, crop.w, crop.h, vx, vy, vw, vh);
