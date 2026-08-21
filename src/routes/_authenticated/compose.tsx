@@ -58,7 +58,7 @@ import {
 import type { SceneBackground } from "@/lib/scene-background";
 
 export const Route = createFileRoute("/_authenticated/compose")({
-  validateSearch: (s: Record<string, unknown>) => ({
+  validateSearch: (s: Record<string, unknown>): { project?: string } => ({
     project: typeof s.project === "string" ? s.project : undefined,
   }),
   head: () => ({ meta: [{ title: "Compose Scene — Explainer Studio" }] }),
