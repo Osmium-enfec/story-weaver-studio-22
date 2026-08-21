@@ -168,6 +168,7 @@ interface ComposeStepsAccordionProps {
   lastImagePrompt: string | null;
   generatingImage: boolean;
   segmentingLayers?: boolean;
+  onAutoLayers?: () => void;
   generatingTts: boolean;
   saving: boolean;
   showPreview: boolean;
@@ -270,6 +271,7 @@ export function ComposeStepsAccordion({
   lastImagePrompt,
   generatingImage,
   segmentingLayers = false,
+  onAutoLayers,
   generatingTts,
   saving,
   showPreview,
@@ -3200,12 +3202,29 @@ export function ComposeStepsAccordion({
             <p className="text-sm text-muted-foreground">Complete the image step first.</p>
           ) : (
             <>
-              {segmentingLayers && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 size={14} className="animate-spin" />
-                  Detecting layers with SAM 2…
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Drag a rectangle on the image to crop an element manually.
                 </p>
-              )}
+                {onAutoLayers && (
+                  <button
+                    type="button"
+                    onClick={onAutoLayers}
+                    disabled={segmentingLayers}
+                    className="ml-auto inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-50"
+                  >
+                    {segmentingLayers ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" /> Detecting…
+                      </>
+                    ) : (
+                      <>
+                        <Layers size={12} /> Auto-detect layers (SAM 2)
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
               <CropCanvas
                 imageUrl={draft.compositeUrl}
                 bgAspect={draft.bgAspect}
