@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.bump_image_asset_usage(uuid) FROM PUBLIC;
