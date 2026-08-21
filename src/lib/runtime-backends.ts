@@ -5,8 +5,33 @@
  * Droplet / Docker: set DATABASE_URL + Spaces vars → Postgres + object storage.
  */
 
+/**
+ * True when running in a serverless edge worker (published app): no writable
+ * filesystem and no native modules, so SQLite/disk backends cannot be used.
+ */
+export function isEdgeRuntime(): boolean {
+  try {
+    return (
+      typeof navigator !== "undefined" &&
+      typeof navigator.userAgent === "string" &&
+      navigator.userAgent.includes("Cloudflare-Workers")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Postgres connection string: explicit DATABASE_URL, else the cloud database. */
+export function postgresUrl(): string {
+  const explicit = process.env.DATABASE_URL?.trim();
+  if (explicit) return explicit;
+  // Published edge runtime has no SQLite — fall back to the cloud Postgres.
+  if (isEdgeRuntime()) return process.env.SUPABASE_DB_URL?.trim() || "";
+  return "";
+}
+
 export function usePostgres(): boolean {
-  return Boolean(process.env.DATABASE_URL?.trim());
+  return Boolean(postgresUrl());
 }
 
 export function useSpaces(): boolean {
