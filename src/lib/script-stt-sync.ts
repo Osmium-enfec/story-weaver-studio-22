@@ -319,7 +319,7 @@ function tryMatchBox(
   const binding = bindingForCover(cover, bindings);
   const contentFirst = isContentRole(binding.role) && !footerSearch;
 
-  let hit: PhraseAnchor | null = null;
+  const found: { hit: PhraseAnchor | null } = { hit: null };
   let usedPhrase = "";
   let source: "speech" | "keyword" = "speech";
 
