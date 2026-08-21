@@ -59,7 +59,7 @@ export const saveProject = createServerFn({ method: "POST" })
     const { userId } = context;
     const id = data.id ?? randomUUID();
 
-    localSaveProject(userId, { ...data, id });
+    localSaveProject(userId, { ...data, id, scenes: data.scenes ?? [] });
 
     return { id, store: "sqlite" as const };
   });
