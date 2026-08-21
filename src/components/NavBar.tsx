@@ -31,7 +31,7 @@ export function NavBar() {
       /* clear local session even if server logout fails */
     }
     clearAuthSession();
-    navigate({ to: "/compose", replace: true });
+    navigate({ to: "/compose", search: {}, replace: true });
   }
 
   return (
