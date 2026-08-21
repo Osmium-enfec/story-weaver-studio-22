@@ -831,8 +831,6 @@ function RecordingSceneStage({
   /** Stretch over loop BG after cropping baked black/white mattes. */
   const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
   /** All recordings/clips: crop baked mattes, then stretch edge-to-edge (no black bars). */
-  const isVideoClip =
-    scene.recordingUseEmbeddedAudio === true && scene.recordingVoiceReplace !== true;
   const cameraFit = "fill" as const;
   const cam = recordingCameraAt(scene.recordingCameraKeyframes, elapsedSpeechMs);
   const zoomSfxUrl = recordingCameraZoomSfxUrl(scene.recordingCameraZoomSfx);
