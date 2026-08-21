@@ -36,6 +36,7 @@ import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/
 import { Route as ApiSyncFeedSplatRouteImport } from './routes/api/sync-feed.$'
 import { Route as ApiRenderAgentUpdatesSplatRouteImport } from './routes/api/render-agent-updates.$'
 import { Route as ApiPublicRuntimeInfoRouteImport } from './routes/api/public/runtime-info'
+import { Route as ApiPublicBundlesRouteImport } from './routes/api/public/bundles'
 import { Route as ApiDivStudioUpdatesSplatRouteImport } from './routes/api/div-studio-updates.$'
 import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
 import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$'
@@ -180,6 +181,11 @@ const ApiPublicRuntimeInfoRoute = ApiPublicRuntimeInfoRouteImport.update({
   path: '/api/public/runtime-info',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBundlesRoute = ApiPublicBundlesRouteImport.update({
+  id: '/api/public/bundles',
+  path: '/api/public/bundles',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDivStudioUpdatesSplatRoute =
   ApiDivStudioUpdatesSplatRouteImport.update({
     id: '/api/div-studio-updates/$',
@@ -247,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
+  '/api/public/bundles': typeof ApiPublicBundlesRoute
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
@@ -282,6 +289,7 @@ export interface FileRoutesByTo {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
+  '/api/public/bundles': typeof ApiPublicBundlesRoute
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
@@ -319,6 +327,7 @@ export interface FileRoutesById {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
+  '/api/public/bundles': typeof ApiPublicBundlesRoute
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
@@ -356,6 +365,7 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
+    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
@@ -391,6 +401,7 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
+    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
@@ -427,6 +438,7 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
+    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
@@ -455,6 +467,7 @@ export interface RootRouteChildren {
   ApiAppAssetsSplatRoute: typeof ApiAppAssetsSplatRoute
   ApiAssetsSplatRoute: typeof ApiAssetsSplatRoute
   ApiDivStudioUpdatesSplatRoute: typeof ApiDivStudioUpdatesSplatRoute
+  ApiPublicBundlesRoute: typeof ApiPublicBundlesRoute
   ApiPublicRuntimeInfoRoute: typeof ApiPublicRuntimeInfoRoute
   ApiRenderAgentUpdatesSplatRoute: typeof ApiRenderAgentUpdatesSplatRoute
   ApiSyncFeedSplatRoute: typeof ApiSyncFeedSplatRoute
@@ -652,6 +665,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRuntimeInfoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/bundles': {
+      id: '/api/public/bundles'
+      path: '/api/public/bundles'
+      fullPath: '/api/public/bundles'
+      preLoaderRoute: typeof ApiPublicBundlesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/div-studio-updates/$': {
       id: '/api/div-studio-updates/$'
       path: '/api/div-studio-updates/$'
@@ -753,6 +773,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAppAssetsSplatRoute: ApiAppAssetsSplatRoute,
   ApiAssetsSplatRoute: ApiAssetsSplatRoute,
   ApiDivStudioUpdatesSplatRoute: ApiDivStudioUpdatesSplatRoute,
+  ApiPublicBundlesRoute: ApiPublicBundlesRoute,
   ApiPublicRuntimeInfoRoute: ApiPublicRuntimeInfoRoute,
   ApiRenderAgentUpdatesSplatRoute: ApiRenderAgentUpdatesSplatRoute,
   ApiSyncFeedSplatRoute: ApiSyncFeedSplatRoute,
