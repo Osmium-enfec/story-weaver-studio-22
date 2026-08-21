@@ -1,6 +1,15 @@
 import { generateKokoroMp3Buffer } from "@/lib/kokoro-tts.server";
 import { normalizeNarrationText } from "@/lib/narration-text";
 
+export class TtsError extends Error {
+  status: number;
+  constructor(message: string, status = 500) {
+    super(message);
+    this.name = "TtsError";
+    this.status = status;
+  }
+}
+
 const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ";
 const ELEVEN_MODEL = "eleven_v3";
 
@@ -57,23 +66,27 @@ async function generateTtsMp3(
     if (res.ok) break;
     if (res.status !== 429 && res.status < 500) {
       lastErr = await res.text();
+      let detail: { code?: string; type?: string; message?: string } | undefined;
       try {
-        const j = JSON.parse(lastErr) as { detail?: { code?: string; type?: string } };
-        if (
-          j?.detail?.code === "payment_issue" ||
-          (res.status === 401 && j?.detail?.type === "payment_required")
-        ) {
-          throw new Error(
-            "ElevenLabs billing issue — complete your invoice at elevenlabs.io to resume narration.",
-          );
-        }
-      } catch (parseErr) {
-        if (parseErr instanceof Error && parseErr.message.includes("ElevenLabs billing")) {
-          throw parseErr;
-        }
+        detail = (JSON.parse(lastErr) as { detail?: typeof detail }).detail;
+      } catch {
+        detail = undefined;
       }
-      throw new Error(`TTS failed: ${res.status} ${lastErr.slice(0, 240)}`);
+      if (detail?.code === "payment_issue" || detail?.type === "payment_required") {
+        throw new TtsError(
+          "ElevenLabs billing issue — the subscription has a failed or incomplete payment. Complete the latest invoice at elevenlabs.io to resume narration.",
+          402,
+        );
+      }
+      if (res.status === 401 || res.status === 403) {
+        throw new TtsError(
+          `ElevenLabs rejected the API key (${res.status}). ${detail?.message ?? ""}`.trim(),
+          401,
+        );
+      }
+      throw new TtsError(`TTS failed: ${res.status} ${lastErr.slice(0, 240)}`, 502);
     }
+
     lastErr = await res.text();
     const delay = Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 400;
     await new Promise((r) => setTimeout(r, delay));
