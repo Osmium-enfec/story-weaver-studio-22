@@ -930,7 +930,7 @@ function RecordingSceneStage({
       v.removeEventListener("loadedmetadata", sync);
       if (onReady) v.removeEventListener("loadeddata", onReady);
     };
-  }, [scene.mediaUrl, isVideoClip]);
+  }, [scene.mediaUrl]);
 
   useLayoutEffect(() => {
     const el = stageRef.current;
@@ -981,7 +981,7 @@ function RecordingSceneStage({
         cameraFit,
       ),
     };
-  }, [videoSize, stageSize, cam, cameraFit, contentCrop, isVideoClip]);
+  }, [videoSize, stageSize, cam, cameraFit, contentCrop]);
 
   const blurView = useMemo(() => {
     if (!blurRegion || !cameraView) return null;
@@ -1063,13 +1063,13 @@ function RecordingSceneStage({
                     top: cameraView.videoLayout.top,
                     width: cameraView.videoLayout.width,
                     height: cameraView.videoLayout.height,
-                    objectFit: isVideoClip ? "contain" : "fill",
+                    objectFit: "fill",
                   }
                 : {
                     inset: 0,
                     width: "100%",
                     height: "100%",
-                    objectFit: isVideoClip ? "contain" : "fill",
+                    objectFit: "fill",
                   }
             }
           />
