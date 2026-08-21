@@ -1,5 +1,7 @@
 // Client-side audio decoding, sentence alignment, and per-scene WAV slicing.
 
+import { getAudioContextCtor } from "./web-global";
+
 export interface SttWord {
   text: string;
   start: number;
@@ -199,7 +201,8 @@ export async function computeSnappedRangesMs(
   ranges: SentenceRange[],
 ): Promise<{ startMs: number; endMs: number }[]> {
   const ab = await file.arrayBuffer();
-  const AC = window.AudioContext || (window as any).webkitAudioContext;
+  const AC = getAudioContextCtor();
+  if (!AC) throw new Error("Web Audio not available");
   const ctx: AudioContext = new AC();
   const buf = await ctx.decodeAudioData(ab.slice(0));
   const snapped = snapRangesToSilence(buf, ranges);
@@ -226,7 +229,8 @@ export async function sliceAudioIntoScenes(
   ranges: SentenceRange[],
 ): Promise<{ audioUrls: string[]; durationsMs: number[] }> {
   const ArrayBufferData = await file.arrayBuffer();
-  const AC = window.AudioContext || (window as any).webkitAudioContext;
+  const AC = getAudioContextCtor();
+  if (!AC) throw new Error("Web Audio not available");
   const ctx: AudioContext = new AC();
   const full = await ctx.decodeAudioData(ArrayBufferData.slice(0));
 

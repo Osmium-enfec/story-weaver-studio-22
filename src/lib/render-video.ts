@@ -3,7 +3,7 @@ import { canvasFont } from "./scene-font";
 import fixWebmDuration from "fix-webm-duration";
 import { speechProgressInScene } from "./reveal-schedule";
 import { drawCodeEditor } from "./code-scene-canvas";
-import { drawQuestionSceneFrame } from "./rasterize-scene";
+import { drawQuestionSceneFrame, drawRecordingSceneFrame } from "./rasterize-scene";
 import {
   questionMarkGapMs,
   questionMarkCountdownMs,
@@ -19,7 +19,7 @@ const PLAYBACK_RATE = 0.95;
 
 const QUALITY_PRESETS: Record<RenderQuality, { w: number; h: number; fps: number; bps: number }> = {
   preview: { w: 1280, h: 720, fps: 30, bps: 6_000_000 },
-  hd: { w: 1920, h: 1080, fps: 60, bps: 14_000_000 },
+  hd: { w: 1920, h: 1080, fps: 30, bps: 10_000_000 },
 };
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -239,7 +239,7 @@ export async function renderVideo(
           } catch {}
         }
       }
-    } else if (s.kind === "stock" && s.mediaUrl) {
+    } else if ((s.kind === "stock" || s.kind === "recording") && s.mediaUrl) {
       if (!vidCache.has(s.mediaUrl)) {
         try {
           vidCache.set(s.mediaUrl, await loadVideo(s.mediaUrl));
@@ -365,8 +365,11 @@ export async function renderVideo(
       }
     }
 
-    const video = scene.kind === "stock" ? vidCache.get(scene.mediaUrl!) : null;
-    if (video) {
+    const video =
+      scene.kind === "stock" || scene.kind === "recording"
+        ? vidCache.get(scene.mediaUrl!)
+        : null;
+    if (video && scene.kind === "stock") {
       video.currentTime = 0;
       video.play().catch(() => {});
     }
@@ -388,6 +391,24 @@ export async function renderVideo(
         drawCodeScene(ctx, scene, progress, W, H);
       } else if (scene.kind === "question") {
         drawQuestionSceneFrame(ctx, scene, progress, W, H, { questionPhase: "question" });
+      } else if (scene.kind === "recording" && video) {
+        const elapsed = progress * durMs;
+        const trimStart = (scene.recordingTrimStartMs ?? 0) / 1000;
+        const offset = (scene.recordingVideoOffsetMs ?? 0) / 1000;
+        const t = Math.max(0, trimStart + Math.max(0, elapsed / 1000 - offset));
+        if (Math.abs(video.currentTime - t) > 0.05) {
+          try {
+            video.currentTime = t;
+          } catch {
+            /* ignore */
+          }
+        }
+        drawRecordingSceneFrame(ctx, scene, progress, W, H, {
+          bg: bgCache,
+          el: elCache,
+          vid: vidCache,
+          cov: new Map(),
+        }, { elapsedSpeechMs: elapsed });
       } else if (video) {
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, W, H);
@@ -399,7 +420,7 @@ export async function renderVideo(
       onProgress?.(Math.min(1, (elapsed + progress * durMs) / totalDuration));
     });
 
-    if (video) video.pause();
+    if (video && scene.kind === "stock") video.pause();
     elapsed += durMs;
 
     if (!masterMode && scene.kind === "question") {

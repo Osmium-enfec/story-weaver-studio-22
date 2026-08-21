@@ -6,7 +6,7 @@ import { getTemplate } from "@/lib/mask-templates";
 
 export type { QuestionKind };
 
-export const QUESTION_TEMPLATE_ID: Record<QuestionKind, string> = {
+export const QUESTION_TEMPLATE_ID: Record<"mcq" | "msq", string> = {
   mcq: "mcq-four-card",
   msq: "msq-four-card",
 };
@@ -14,9 +14,11 @@ export const QUESTION_TEMPLATE_ID: Record<QuestionKind, string> = {
 export const QUESTION_KIND_LABELS: Record<QuestionKind, string> = {
   mcq: "MCQ · pick one",
   msq: "MSQ · pick many",
+  coding: "Coding problem",
+  predictOutput: "Predict output",
 };
 
-export function templateForQuestion(kind: QuestionKind): MaskTemplate {
+export function templateForQuestion(kind: "mcq" | "msq"): MaskTemplate {
   return getTemplate(QUESTION_TEMPLATE_ID[kind]);
 }
 

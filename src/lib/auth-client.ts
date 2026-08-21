@@ -2,7 +2,7 @@ const SESSION_KEY = "explainer_studio_session";
 
 export type StoredSession = {
   token: string;
-  user: { id: string; email: string };
+  user: { id: string; email: string; isAdmin?: boolean };
 };
 
 export function getStoredSession(): StoredSession | null {

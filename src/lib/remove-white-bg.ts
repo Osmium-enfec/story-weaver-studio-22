@@ -1,23 +1,20 @@
 // Convert a white-background element image into a transparent PNG data URL.
 // In-memory cached; safe to call repeatedly with the same URL.
 
+import { createExportCanvas, loadExportImage, exportSourceSize } from "./export-runtime";
+
 const cache = new Map<string, Promise<string>>();
 
 function loadCorsImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
+  return loadExportImage(url).then((img) => img as HTMLImageElement);
 }
 
 async function process(url: string): Promise<string> {
   const img = await loadCorsImage(url);
-  const w = img.naturalWidth || 512;
-  const h = img.naturalHeight || 512;
-  const canvas = document.createElement("canvas");
+  const size = exportSourceSize(img);
+  const w = size.w || 512;
+  const h = size.h || 512;
+  const canvas = createExportCanvas(w, h) as HTMLCanvasElement;
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });

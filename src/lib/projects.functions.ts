@@ -5,10 +5,12 @@ import { requireAuth } from "@/integrations/auth/auth-middleware";
 import {
   localDeleteProject,
   localGetProject,
+  localGetProjectById,
   localListProjects,
   localSaveProject,
 } from "@/lib/local-projects-db";
 import { getProjectParts } from "@/lib/project-parts";
+import { isAdminEmail } from "@/lib/admin";
 
 const SaveInput = z.object({
   id: z.string().uuid().optional(),
@@ -19,6 +21,8 @@ const SaveInput = z.object({
   parts: z.any().optional(),
   thumbnail_url: z.string().optional(),
   workshop_draft: z.any().optional(),
+  course_id: z.string().uuid().nullable().optional(),
+  allow_scene_shrink: z.boolean().optional(),
 });
 
 const IdInput = z.object({ id: z.string().uuid() });
@@ -31,35 +35,28 @@ export type ProjectListItem = {
   updated_at: string;
   audio_mode: string;
   scene_count: number;
+  part_count?: number;
+  course_id?: string | null;
 };
 
-export type ProjectRecord = {
-  id: string;
-  user_id?: string;
-  title: string;
-  script?: string | null;
-  audio_mode: string;
-  thumbnail_url?: string | null;
-  created_at?: string;
-  updated_at?: string;
-  scenes?: any;
-  parts?: any;
-  workshop_draft?: any;
-};
-
-function normalizeProjectRecord(p: Record<string, any>): ProjectRecord {
+function normalizeProjectRecord(p: Record<string, unknown>): Record<string, unknown> {
   const parts = getProjectParts(p as { parts?: unknown; workshop_draft?: unknown });
-  return { ...p, parts } as ProjectRecord;
+  return { ...p, parts };
 }
 
 export const saveProject = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .inputValidator((d: unknown) => SaveInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { userId } = context;
+    const { userId, email } = context;
     const id = data.id ?? randomUUID();
 
-    localSaveProject(userId, { ...data, id, scenes: data.scenes ?? [] });
+    await localSaveProject(
+      userId,
+      email,
+      { ...data, id, scenes: data.scenes ?? [] },
+      { asAdmin: isAdminEmail(email) },
+    );
 
     return { id, store: "sqlite" as const };
   });
@@ -67,22 +64,31 @@ export const saveProject = createServerFn({ method: "POST" })
 export const listProjects = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    return localListProjects(context.userId);
+    const asAdmin = isAdminEmail(context.email);
+    return await localListProjects(context.userId, context.email, {
+      asAdmin,
+      requireCourse: !asAdmin,
+    });
   });
 
 export const getProject = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .inputValidator((d: unknown) => IdInput.parse(d))
   .handler(async ({ data, context }) => {
-    const local = localGetProject(context.userId, data.id);
+    const asAdmin = isAdminEmail(context.email);
+    const local = asAdmin
+      ? await localGetProjectById(data.id)
+      : await localGetProject(context.userId, context.email, data.id);
     if (!local) throw new Error("Project not found.");
-    return normalizeProjectRecord(local as unknown as Record<string, any>);
+    // createServerFn requires the return type to be serializable; `unknown` breaks
+    // the type-level check even though the runtime value is JSON-safe.
+    return normalizeProjectRecord(local as any) as any;
   });
 
 export const deleteProject = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .inputValidator((d: unknown) => IdInput.parse(d))
   .handler(async ({ data, context }) => {
-    localDeleteProject(context.userId, data.id);
+    await localDeleteProject(context.userId, data.id);
     return { ok: true };
   });

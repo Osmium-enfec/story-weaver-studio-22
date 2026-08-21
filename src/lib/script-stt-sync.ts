@@ -319,7 +319,7 @@ function tryMatchBox(
   const binding = bindingForCover(cover, bindings);
   const contentFirst = isContentRole(binding.role) && !footerSearch;
 
-  const found: { hit: PhraseAnchor | null } = { hit: null };
+  let hit: PhraseAnchor | null = null;
   let usedPhrase = "";
   let source: "speech" | "keyword" = "speech";
 
@@ -329,7 +329,7 @@ function tryMatchBox(
         ? alignKeywordFromEnd(kw, words, fromWordIdx)
         : alignKeywordSequential(kw, words, fromWordIdx, usedWordIndices);
       if (anchor) {
-        found.hit = anchor;
+        hit = anchor;
         usedPhrase = kw;
         source = "keyword";
         return;
@@ -343,7 +343,7 @@ function tryMatchBox(
         ? alignPhraseFromEnd(phrase, words, fromWordIdx)
         : alignPhraseSequential(phrase, words, fromWordIdx);
       if (anchor) {
-        found.hit = anchor;
+        hit = anchor;
         usedPhrase = phrase;
         source = "speech";
         return;
@@ -353,16 +353,16 @@ function tryMatchBox(
 
   if (contentFirst) {
     tryKeywords(contentKeywordsForBinding(binding, cover));
-    if (!found.hit) tryKeywords(keywordsForBinding(binding, cover));
-    if (!found.hit) tryPhrases();
+    if (!hit) tryKeywords(keywordsForBinding(binding, cover));
+    if (!hit) tryPhrases();
   } else {
     tryPhrases();
-    if (!found.hit) tryKeywords(keywordsForBinding(binding, cover));
+    if (!hit) tryKeywords(keywordsForBinding(binding, cover));
   }
 
-  const anchor = found.hit;
-  if (!anchor) return { match: null, nextCursor: fromWordIdx };
+  if (!hit) return { match: null, nextCursor: fromWordIdx };
 
+  const anchor = hit as PhraseAnchor;
   usedWordIndices?.add(anchor.endWordIdx);
 
   return {

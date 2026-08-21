@@ -1,7 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
+import type { CodeTypingBeat } from "@/lib/code-scene-sfx";
+import {
+  CODE_TYPING_SFX,
+  DEFAULT_CODE_TYPING_CPS,
+  buildCodeBeatTimeline,
+  resolveCodeBeatFrame,
+  resolveCodeTypingBeats,
+  isTypingInProgress,
+} from "@/lib/code-scene-sfx";
 import { QuestionScene, MarkYourAnswersScreen, QuestionIntroScreen } from "./QuestionScene";
+import { TemplateScene } from "./TemplateScene";
 import {
   sceneToQuestionContent,
   questionMarkSettingsFromScene,
@@ -16,7 +27,8 @@ import {
   type QuestionDisplayPhase,
 } from "@/lib/question-scene-layout";
 import type { CompositionElement } from "@/lib/explainer.functions";
-import { exportToMp4, downloadBlob, type ExportQuality } from "@/lib/ffmpeg-stitcher";
+import { startNativeExportJob } from "@/lib/native-export-client";
+import type { ExportQuality } from "@/lib/ffmpeg-stitcher";
 import {
   backgroundToCss,
   CARD_PADDING_FRAC,
@@ -26,6 +38,29 @@ import {
 import { getTransparentUrl } from "@/lib/remove-white-bg";
 import { layoutFor } from "@/lib/scene-layouts";
 import { type RevealCover } from "@/lib/build-reveal";
+import {
+  recordingCameraAt,
+  recordingCameraDrawRects,
+  recordingCameraVideoLayout,
+  recordingCameraZoomEvents,
+  recordingCameraZoomSfxUrl,
+} from "@/lib/recording-camera";
+import {
+  blurRadiusForStrength,
+  normalizeRecordingBlurRegion,
+  sourceBlurRectToView,
+} from "@/lib/recording-blur";
+import {
+  handDrawnRectPathD,
+  highlightAnimAtMs,
+  highlightStrokeWidth,
+  normalizeRecordingHighlights,
+  sourceHighlightRectToView,
+} from "@/lib/recording-highlight";
+import {
+  detectAndCacheVideoContentCrop,
+  type VideoContentCrop,
+} from "@/lib/video-black-bars";
 import { expandBboxForReveal } from "@/lib/bbox-utils";
 import { COMPOSITE_ASPECT } from "@/lib/course-visual-style";
 import { isCropOnlyScene } from "@/lib/compose-scene";
@@ -39,9 +74,15 @@ import {
   type MasterVisualState,
 } from "@/lib/scene-transition";
 import { EXCALIFONT_STACK } from "@/lib/scene-font";
-import { CODE_TYPING_SFX, isTypingInProgress } from "@/lib/code-scene-sfx";
 import type { PartBgmConfig } from "@/lib/part-bgm";
-import { resolvePartBgm } from "@/lib/part-bgm";
+import { partBgmVolumeAtMs, resolvePartBgm } from "@/lib/part-bgm";
+import { bgmMuteRangesMs } from "@/lib/common-intro-outro";
+import {
+  recordingAudioRateAtClock,
+  recordingAudioSourceTimeSec,
+  recordingClockMsFromAudioSourceSec,
+} from "@/lib/recording-audio-layout";
+import { recordingVideoAtClock } from "@/lib/rasterize-scene";
 
 
 
@@ -52,9 +93,83 @@ export interface ResolvedElement extends CompositionElement {
 export interface Scene {
   id: string;
   subtitle: string;
-  kind: "image" | "stock" | "code" | "question";
-  /** stock (legacy): video URL. New scenes never use this. */
+  kind: "image" | "stock" | "code" | "question" | "template" | "recording";
+  /** stock (legacy) or recording: video URL. */
   mediaUrl?: string;
+  /** recording: trim in/out on the source video (ms). */
+  recordingTrimStartMs?: number;
+  recordingTrimEndMs?: number;
+  /** recording: delay video relative to scene clock (ms; may be negative). */
+  recordingVideoOffsetMs?: number;
+  /** recording: full source video duration before trim (ms). */
+  recordingSourceDurationMs?: number;
+  /** recording: trim in/out on TTS source (ms). Legacy single-clip fields. */
+  recordingAudioTrimStartMs?: number;
+  recordingAudioTrimEndMs?: number;
+  /** recording: delay trimmed narration on scene timeline (ms). */
+  recordingAudioOffsetMs?: number;
+  /** recording: full TTS length before trim (ms). */
+  recordingAudioSourceDurationMs?: number;
+  /**
+   * recording: one or more narration slices placed on the timeline.
+   * Prefer this over the single-clip fields when present.
+   */
+  recordingAudioSegments?: Array<{
+    id: string;
+    trimStartMs: number;
+    trimEndMs: number;
+    offsetMs: number;
+    rate?: number;
+  }>;
+  /**
+   * recording: one or more video slices on the timeline.
+   * Prefer this over recordingTrim* / recordingVideoOffsetMs when present.
+   */
+  recordingVideoSegments?: Array<{
+    id: string;
+    trimStartMs: number;
+    trimEndMs: number;
+    offsetMs: number;
+    rate?: number;
+  }>;
+  /**
+   * recording: pan/zoom camera keyframes on the scene clock.
+   * Interpolated in preview + export via recording-camera.ts.
+   */
+  recordingCameraKeyframes?: Array<{
+    atMs: number;
+    scale: number;
+    focusX: number;
+    focusY: number;
+    easing?: "linear" | "easeInOut";
+  }>;
+  /** How long a zoom in/out move lasts when authored (ms). */
+  recordingCameraZoomDurationMs?: number;
+  /** One-shot SFX when a zoom move starts. */
+  recordingCameraZoomSfx?: "swoosh" | "none";
+  /** recording: audio was demuxed from the video (clip mode — no TTS/sync). */
+  recordingUseEmbeddedAudio?: boolean;
+  /** recording: Screen recording 2 auto voice-replace pipeline. */
+  recordingVoiceReplace?: boolean;
+  /** recording: blur region in source space (tracks through camera zoom). */
+  recordingBlurRegion?: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    strength: number;
+  };
+  /** recording: timed hand-drawn rectangle highlights. */
+  recordingHighlights?: Array<{
+    id: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    color: string;
+    atMs: number;
+    drawMs: number;
+  }>;
   /** image: composited background + elements */
   backgroundUrl?: string;
   /** Thumbnail source for compose scenes (not shown during crop-only playback). */
@@ -70,22 +185,57 @@ export interface Scene {
   codeTo?: string;
   codeLanguage?: string;
   codeVariant?: CodeVariant;
-  /** MCQ / MSQ question scene (code-rendered, not AI image). */
-  questionKind?: "mcq" | "msq";
+  /** Characters per second for timed code typing (optional). */
+  codeTypingCps?: number;
+  /** Monospace code font size in px (optional; default ~14). */
+  codeFontSize?: number;
+  /** Console output shown after Run (user-authored; not executed). Legacy single-step. */
+  codeOutput?: string;
+  /** Delay after typing finishes before Run is pressed (ms). Legacy single-step. */
+  codeRunDelayMs?: number;
+  /** How long to show output after Run (ms). Legacy single-step. */
+  codeOutputHoldMs?: number;
+  /**
+   * Multi-step type → run → output cycles. Each beat appends more code.
+   * When set, overrides flat codeOutput / codeRunDelayMs / codeOutputHoldMs.
+   */
+  codeTypingBeats?: CodeTypingBeat[];
+  /** Scene has no voiceover — silent bed + BGM / typing SFX only. */
+  silentNarration?: boolean;
+  /** MCQ / MSQ / coding / predict-output question scene (code-rendered, not AI image). */
+  questionKind?: "mcq" | "msq" | "coding" | "predictOutput";
   questionText?: string;
   questionSubtitle?: string;
   questionOptions?: string[];
   questionCorrect?: string[];
+  /** Predict-output: code block between question and options. */
+  questionCode?: string;
+  /** Predict-output: MCQ vs MSQ option style. */
+  predictSelectMode?: "mcq" | "msq";
+  /** Coding-problem layout fields. */
+  codingTitle?: string;
+  codingStarterCode?: string;
+  codingTestCases?: { label: string; input: string; output: string }[];
   /** Countdown page copy + timing after question narration. */
   questionMarkText?: string;
   questionMarkGapMs?: number;
   questionMarkCountdownSec?: number;
   questionMarkAudioUrl?: string;
+  /** Probed length of questionMarkAudioUrl (ms) — extends post-speech hold when longer than countdown. */
+  questionMarkDurationMs?: number;
   /** Intro screen before the question card (voiceover + gap). */
   questionIntroText?: string;
   questionIntroGapMs?: number;
   questionIntroAudioUrl?: string;
   questionIntroDurationMs?: number;
+  /** White-bg Excalifont templates (text / typing / countdown) or template code typing. */
+  templateKind?: "text" | "countdown" | "typing" | "codeTyping";
+  templateText?: string;
+  templateColor?: string;
+  templateFontSize?: number;
+  templateCountdownSec?: number;
+  /** Locked built-in template card (try-question / try-coding). */
+  templateFixedPreset?: "try-question" | "try-coding";
   /**
    * When set, the whole video shares ONE continuous audio track and
    * this scene occupies [startMs, endMs] of it. All scenes in a set
@@ -96,8 +246,21 @@ export interface Scene {
   endMs?: number;
   /** Hold after speech before slide (ms). Set when master track is stitched. */
   holdMs?: number;
-  /** Slide + whoosh duration (ms), matched to transition SFX length. */
+  /** Slide + whoosh duration (ms) after this scene (stitched). */
   transitionMs?: number;
+  /** Inter-scene visual effect (default: right-to-left swap). */
+  transitionEffect?: "slide-left";
+  /**
+   * Authored transition AFTER this scene to the next.
+   * Survives edit/re-stitch; ignored on the last scene.
+   */
+  outTransition?: {
+    holdMs: number;
+    durationMs: number;
+    effect: "slide-left";
+    sfxId: "swoosh";
+    sfxVolume: number;
+  };
   /** Narration spoken during this scene — used to sync box reveals to words. */
   narrationText?: string;
   /** Detected hand-drawn boxes; each fades in on its scheduled turn. */
@@ -160,18 +323,42 @@ function RevealBoxLayers({
   );
 }
 
+function SceneBackgroundLayer({ background }: { background: SceneBackground }) {
+  const videoBg = background.kind === "video" ? background.url : null;
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden"
+      style={{ background: backgroundToCss(background) }}
+    >
+      {videoBg && (
+        <video
+          key={videoBg}
+          src={videoBg}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+    </div>
+  );
+}
+
 function ImageScene({
   scene,
   progress,
   elapsedSpeechMs,
   background,
   transparentMap,
+  contentOnly = false,
 }: {
   scene: Scene;
   progress: number;
   elapsedSpeechMs: number;
   background: SceneBackground;
   transparentMap: Map<string, string>;
+  contentOnly?: boolean;
 }) {
   const t = progress;
   const customBg = background.kind !== "whiteboard";
@@ -327,24 +514,7 @@ function ImageScene({
     });
   }
 
-  return (
-    <div
-      className="relative h-full w-full overflow-hidden"
-      style={{ background: backgroundToCss(background) }}
-    >
-      {videoBg && (
-        <video
-          key={videoBg}
-          src={videoBg}
-          autoPlay
-          muted
-          loop
-          playsInline
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      )}
-      {/* Inner card: on custom bg we inset a white rounded card (like the reference).
-          On whiteboard, we let the AI background fill edge-to-edge. */}
+  const card = (
       <div
         className="absolute overflow-hidden"
         style={{
@@ -385,38 +555,10 @@ function ImageScene({
           renderElements()
         )}
       </div>
-    </div>
   );
-}
 
-
-function QuestionSceneStage({
-  scene,
-  progress,
-  background,
-  questionPhase = "question",
-  markHoldElapsedMs = 0,
-}: {
-  scene: Scene;
-  progress: number;
-  background: SceneBackground;
-  questionPhase?: QuestionDisplayPhase;
-  markHoldElapsedMs?: number;
-  postSpeechElapsedMs?: number;
-}) {
-  const content = sceneToQuestionContent(scene);
-  const markSettings = questionMarkSettingsFromScene(scene);
-  const introSettings = questionIntroSettingsFromScene(scene);
-  const customBg = background.kind !== "whiteboard";
-  const videoBg = background.kind === "video" ? background.url : null;
-  const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
-
-  if (!content) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-white text-sm text-muted-foreground">
-        Question data missing
-      </div>
-    );
+  if (contentOnly) {
+    return <div className="relative h-full w-full overflow-hidden">{card}</div>;
   }
 
   return (
@@ -435,6 +577,43 @@ function QuestionSceneStage({
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}
+      {card}
+    </div>
+  );
+}
+
+
+function QuestionSceneStage({
+  scene,
+  progress,
+  background,
+  questionPhase = "question",
+  markHoldElapsedMs = 0,
+  contentOnly = false,
+}: {
+  scene: Scene;
+  progress: number;
+  background: SceneBackground;
+  questionPhase?: QuestionDisplayPhase;
+  markHoldElapsedMs?: number;
+  contentOnly?: boolean;
+}) {
+  const content = sceneToQuestionContent(scene);
+  const markSettings = questionMarkSettingsFromScene(scene);
+  const introSettings = questionIntroSettingsFromScene(scene);
+  const customBg = background.kind !== "whiteboard";
+  const videoBg = background.kind === "video" ? background.url : null;
+  const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
+
+  if (!content) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-white text-sm text-muted-foreground">
+        Question data missing
+      </div>
+    );
+  }
+
+  const card = (
       <div
         className="absolute overflow-hidden"
         style={{
@@ -460,54 +639,11 @@ function QuestionSceneStage({
           <QuestionScene content={content} progress={questionPhase === "mark-gap" ? 1 : progress} embedded />
         )}
       </div>
-    </div>
   );
-}
 
-function CodeSceneStage({
-  scene,
-  progress,
-  background,
-  playing,
-}: {
-  scene: Scene;
-  progress: number;
-  background: SceneBackground;
-  playing: boolean;
-}) {
-  const typingAudioRef = useRef<HTMLAudioElement | null>(null);
-  const customBg = background.kind !== "whiteboard";
-  const videoBg = background.kind === "video" ? background.url : null;
-  const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
-  const variant = scene.codeVariant ?? "typing";
-  const code = scene.code ?? "";
-
-  useEffect(() => {
-    return () => {
-      typingAudioRef.current?.pause();
-      typingAudioRef.current = null;
-    };
-  }, [scene.id]);
-
-  useEffect(() => {
-    if (variant !== "typing") {
-      typingAudioRef.current?.pause();
-      return;
-    }
-    const shouldPlay = playing && isTypingInProgress(code, progress);
-    if (!shouldPlay) {
-      typingAudioRef.current?.pause();
-      return;
-    }
-    let el = typingAudioRef.current;
-    if (!el) {
-      el = new Audio(CODE_TYPING_SFX);
-      el.loop = true;
-      el.volume = 0.42;
-      typingAudioRef.current = el;
-    }
-    if (el.paused) void el.play().catch(() => {});
-  }, [variant, code, progress, playing, scene.id]);
+  if (contentOnly) {
+    return <div className="relative h-full w-full overflow-hidden">{card}</div>;
+  }
 
   return (
     <div
@@ -525,6 +661,100 @@ function CodeSceneStage({
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}
+      {card}
+    </div>
+  );
+}
+
+function CodeSceneStage({
+  scene,
+  progress,
+  background,
+  playing,
+  contentOnly = false,
+}: {
+  scene: Scene;
+  progress: number;
+  background: SceneBackground;
+  playing: boolean;
+  contentOnly?: boolean;
+}) {
+  const typingAudioRef = useRef<HTMLAudioElement | null>(null);
+  const customBg = background.kind !== "whiteboard";
+  const videoBg = background.kind === "video" ? background.url : null;
+  const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
+  const variant = scene.codeVariant ?? "typing";
+  const cps = scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS;
+  const timeline = useMemo(() => {
+    if ((scene.codeVariant ?? "typing") !== "typing") return null;
+    const beats = resolveCodeTypingBeats({
+      beats: scene.codeTypingBeats,
+      code: scene.code,
+      output: scene.codeOutput,
+      runDelayMs: scene.codeRunDelayMs,
+      outputHoldMs: scene.codeOutputHoldMs,
+    });
+    if (!beats.length) return null;
+    return buildCodeBeatTimeline(beats, cps);
+  }, [
+    scene.codeVariant,
+    scene.codeTypingBeats,
+    scene.code,
+    scene.codeOutput,
+    scene.codeRunDelayMs,
+    scene.codeOutputHoldMs,
+    cps,
+  ]);
+  const elapsedMs = progress * Math.max(1, scene.durationMs);
+  const beatFrame =
+    timeline != null ? resolveCodeBeatFrame(elapsedMs, timeline, cps) : null;
+  const code = scene.code ?? "";
+  const typingOpts = {
+    cps: scene.codeTypingCps,
+    durationMs: scene.durationMs,
+  };
+
+  useEffect(() => {
+    return () => {
+      typingAudioRef.current?.pause();
+      typingAudioRef.current = null;
+    };
+  }, [scene.id]);
+
+  useEffect(() => {
+    if (variant !== "typing") {
+      typingAudioRef.current?.pause();
+      return;
+    }
+    const shouldPlay = playing && (
+      beatFrame
+        ? beatFrame.typingActive
+        : isTypingInProgress(code, progress, typingOpts)
+    );
+    if (!shouldPlay) {
+      typingAudioRef.current?.pause();
+      return;
+    }
+    let el = typingAudioRef.current;
+    if (!el) {
+      el = new Audio(CODE_TYPING_SFX);
+      el.loop = true;
+      el.volume = 0.42;
+      typingAudioRef.current = el;
+    }
+    if (el.paused) void el.play().catch(() => {});
+  }, [
+    variant,
+    code,
+    progress,
+    playing,
+    scene.id,
+    scene.codeTypingCps,
+    scene.durationMs,
+    beatFrame?.typingActive,
+  ]);
+
+  const card = (
       <div
         className="absolute overflow-hidden"
         style={{
@@ -542,8 +772,431 @@ function CodeSceneStage({
           progress={progress}
           title={scene.subtitle}
           embedded
+          typingSpeedCps={scene.codeTypingCps}
+          durationMs={scene.durationMs}
+          codeOutput={scene.codeOutput}
+          codeRunDelayMs={scene.codeRunDelayMs}
+          codeOutputHoldMs={scene.codeOutputHoldMs}
+          codeTypingBeats={scene.codeTypingBeats}
+          fontSizePx={scene.codeFontSize}
         />
       </div>
+  );
+
+  if (contentOnly) {
+    return <div className="relative h-full w-full overflow-hidden">{card}</div>;
+  }
+
+  return (
+    <div
+      className="relative h-full w-full overflow-hidden"
+      style={{ background: backgroundToCss(background) }}
+    >
+      {videoBg && (
+        <video
+          key={videoBg}
+          src={videoBg}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      {card}
+    </div>
+  );
+}
+
+/** Screen recording inside the white card; video is muted and clock-synced to TTS. */
+function RecordingSceneStage({
+  scene,
+  elapsedSpeechMs,
+  background,
+  contentOnly = false,
+  playing = false,
+}: {
+  scene: Scene;
+  elapsedSpeechMs: number;
+  background: SceneBackground;
+  contentOnly?: boolean;
+  playing?: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const zoomSfxRef = useRef<HTMLAudioElement | null>(null);
+  const lastZoomSfxStartRef = useRef<number | null>(null);
+  const customBg = background.kind !== "whiteboard";
+  const videoBg = background.kind === "video" ? background.url : null;
+  /** Stretch over loop BG after cropping baked black/white mattes. */
+  const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
+  /** Video clip: contain (no stretch). Screen recordings keep fill. */
+  const isVideoClip =
+    scene.recordingUseEmbeddedAudio === true && scene.recordingVoiceReplace !== true;
+  const cameraFit = isVideoClip ? "contain" : "fill";
+  const cam = recordingCameraAt(scene.recordingCameraKeyframes, elapsedSpeechMs);
+  const zoomSfxUrl = recordingCameraZoomSfxUrl(scene.recordingCameraZoomSfx);
+  const blurRegion = normalizeRecordingBlurRegion(scene.recordingBlurRegion);
+  const [videoSize, setVideoSize] = useState({ w: 0, h: 0 });
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+  const [contentCrop, setContentCrop] = useState<VideoContentCrop | null>(null);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !scene.mediaUrl) return;
+    const { sourceSec, rate } = recordingVideoAtClock(scene, elapsedSpeechMs);
+    if (Math.abs(v.currentTime - sourceSec) > 0.12) {
+      try {
+        v.currentTime = sourceSec;
+      } catch {
+        /* ignore seek errors while metadata loads */
+      }
+    }
+    if (Math.abs(v.playbackRate - rate) > 0.001) {
+      try {
+        v.playbackRate = rate;
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [elapsedSpeechMs, scene]);
+
+  useEffect(() => {
+    if (!playing) {
+      lastZoomSfxStartRef.current = null;
+      return;
+    }
+    if (!zoomSfxUrl) return;
+    const events = recordingCameraZoomEvents(scene.recordingCameraKeyframes);
+    const hit = events.find(
+      (ev) => elapsedSpeechMs >= ev.startMs && elapsedSpeechMs < ev.startMs + 80,
+    );
+    if (!hit) return;
+    if (lastZoomSfxStartRef.current === hit.startMs) return;
+    lastZoomSfxStartRef.current = hit.startMs;
+    const el = zoomSfxRef.current;
+    if (!el) return;
+    el.src = zoomSfxUrl;
+    el.currentTime = 0;
+    el.volume = 0.75;
+    void el.play().catch(() => {});
+  }, [playing, elapsedSpeechMs, scene.recordingCameraKeyframes, zoomSfxUrl]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    setContentCrop(null);
+    let onReady: (() => void) | null = null;
+    const sync = () => {
+      if (v.videoWidth > 0 && v.videoHeight > 0) {
+        setVideoSize({ w: v.videoWidth, h: v.videoHeight });
+        // Matte crop is for screen recordings with baked bars — skip for video clips.
+        if (!scene.mediaUrl || isVideoClip) {
+          setContentCrop(null);
+          return;
+        }
+        const run = () => {
+          try {
+            const crop = detectAndCacheVideoContentCrop(
+              scene.mediaUrl!,
+              v,
+              v.videoWidth,
+              v.videoHeight,
+            );
+            setContentCrop(crop);
+          } catch {
+            setContentCrop({
+              x: 0,
+              y: 0,
+              w: v.videoWidth,
+              h: v.videoHeight,
+            });
+          }
+        };
+        if (v.readyState >= 2) run();
+        else {
+          onReady = () => {
+            if (onReady) v.removeEventListener("loadeddata", onReady);
+            onReady = null;
+            run();
+          };
+          v.addEventListener("loadeddata", onReady);
+        }
+      }
+    };
+    sync();
+    v.addEventListener("loadedmetadata", sync);
+    return () => {
+      v.removeEventListener("loadedmetadata", sync);
+      if (onReady) v.removeEventListener("loadeddata", onReady);
+    };
+  }, [scene.mediaUrl, isVideoClip]);
+
+  useLayoutEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r && r.width > 0 && r.height > 0) {
+        setStageSize({ w: r.width, h: r.height });
+      }
+    });
+    ro.observe(el);
+    setStageSize({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, []);
+
+  const cameraView = useMemo(() => {
+    if (!videoSize.w || !videoSize.h || !stageSize.w || !stageSize.h) return null;
+    // Screen recordings: crop baked mattes then stretch. Video clips: full frame, contain.
+    const crop =
+      !isVideoClip && contentCrop
+        ? contentCrop
+        : {
+            x: 0,
+            y: 0,
+            w: videoSize.w,
+            h: videoSize.h,
+          };
+    const local = recordingCameraDrawRects(
+      crop.w,
+      crop.h,
+      0,
+      0,
+      stageSize.w,
+      stageSize.h,
+      cam,
+      cameraFit,
+    );
+    if (!local) return null;
+    const rects = {
+      ...local,
+      sx: crop.x + local.sx,
+      sy: crop.y + local.sy,
+    };
+    return {
+      rects,
+      videoLayout: recordingCameraVideoLayout(
+        videoSize.w,
+        videoSize.h,
+        rects,
+        cameraFit,
+      ),
+    };
+  }, [videoSize, stageSize, cam, cameraFit, contentCrop, isVideoClip]);
+
+  const blurView = useMemo(() => {
+    if (!blurRegion || !cameraView) return null;
+    const view = sourceBlurRectToView(
+      blurRegion,
+      videoSize.w,
+      videoSize.h,
+      cameraView.rects,
+    );
+    if (!view) return null;
+    return {
+      ...view,
+      radius: blurRadiusForStrength(
+        blurRegion.strength,
+        Math.min(view.width, view.height),
+      ),
+    };
+  }, [blurRegion, cameraView, videoSize]);
+
+  const highlightViews = useMemo(() => {
+    const highlights = normalizeRecordingHighlights(scene.recordingHighlights);
+    if (!cameraView || !highlights.length || !videoSize.w || !videoSize.h) return [];
+    const out: Array<{
+      id: string;
+      color: string;
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+      pathD: string;
+      strokeProgress: number;
+      opacity: number;
+    }> = [];
+    for (const h of highlights) {
+      const anim = highlightAnimAtMs(h, elapsedSpeechMs);
+      if (!anim.active) continue;
+      const view = sourceHighlightRectToView(h, videoSize.w, videoSize.h, cameraView.rects);
+      if (!view) continue;
+      out.push({
+        id: h.id,
+        color: h.color,
+        ...view,
+        pathD: handDrawnRectPathD(view.left, view.top, view.width, view.height, h.id),
+        strokeProgress: anim.strokeProgress,
+        opacity: anim.opacity,
+      });
+    }
+    return out;
+  }, [scene.recordingHighlights, cameraView, videoSize, elapsedSpeechMs]);
+
+  const card = (
+    <div
+      className="absolute overflow-hidden"
+      style={{
+        inset: customBg ? `${padPct}%` : 0,
+        borderRadius: customBg ? "1.25rem" : 0,
+        // Transparent so the orange loop BG shows up to the video edge.
+        background: "transparent",
+        boxShadow: "none",
+      }}
+    >
+      <audio ref={zoomSfxRef} preload="auto" className="hidden" />
+      {scene.mediaUrl ? (
+        <div
+          ref={stageRef}
+          className="absolute inset-0 overflow-hidden bg-transparent"
+        >
+          <video
+            ref={videoRef}
+            src={scene.mediaUrl}
+            muted
+            playsInline
+            preload="auto"
+            className="absolute max-w-none bg-transparent"
+            style={
+              cameraView
+                ? {
+                    left: cameraView.videoLayout.left,
+                    top: cameraView.videoLayout.top,
+                    width: cameraView.videoLayout.width,
+                    height: cameraView.videoLayout.height,
+                    objectFit: isVideoClip ? "contain" : "fill",
+                  }
+                : {
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: isVideoClip ? "contain" : "fill",
+                  }
+            }
+          />
+          {blurView && blurView.radius > 0 && (
+            <div
+              className="pointer-events-none absolute"
+              style={{
+                left: blurView.left,
+                top: blurView.top,
+                width: blurView.width,
+                height: blurView.height,
+                backdropFilter: `blur(${blurView.radius}px)`,
+                WebkitBackdropFilter: `blur(${blurView.radius}px)`,
+              }}
+              aria-hidden
+            />
+          )}
+          {highlightViews.length > 0 && (
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+              aria-hidden
+            >
+              {highlightViews.map((hv) => (
+                <path
+                  key={hv.id}
+                  d={hv.pathD}
+                  fill="none"
+                  stroke={hv.color}
+                  strokeWidth={highlightStrokeWidth(hv.width, hv.height)}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  pathLength={1}
+                  strokeDasharray={1}
+                  strokeDashoffset={1 - hv.strokeProgress}
+                  opacity={hv.opacity}
+                />
+              ))}
+            </svg>
+          )}
+        </div>
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-muted text-sm text-muted-foreground">
+          No recording
+        </div>
+      )}
+    </div>
+  );
+
+  if (contentOnly) {
+    return <div className="relative h-full w-full overflow-hidden">{card}</div>;
+  }
+
+  return (
+    <div
+      className="relative h-full w-full overflow-hidden"
+      style={{ background: backgroundToCss(background) }}
+    >
+      {videoBg && (
+        <video
+          key={videoBg}
+          src={videoBg}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      {card}
+    </div>
+  );
+}
+
+function TemplateSceneStage({
+  scene,
+  progress,
+  elapsedSpeechMs,
+  background,
+  contentOnly = false,
+}: {
+  scene: Scene;
+  progress: number;
+  elapsedSpeechMs?: number;
+  background: SceneBackground;
+  contentOnly?: boolean;
+}) {
+  const customBg = background.kind !== "whiteboard";
+  const videoBg = background.kind === "video" ? background.url : null;
+  const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
+
+  const card = (
+      <div
+        className="absolute overflow-hidden"
+        style={{
+          inset: customBg ? `${padPct}%` : 0,
+          borderRadius: customBg ? "1.25rem" : 0,
+          background: customBg ? "#ffffff" : "transparent",
+          boxShadow: customBg ? "0 10px 40px -12px rgba(0,0,0,0.25)" : "none",
+        }}
+      >
+        <TemplateScene scene={scene} progress={progress} elapsedMs={elapsedSpeechMs} />
+      </div>
+  );
+
+  if (contentOnly) {
+    return <div className="relative h-full w-full overflow-hidden">{card}</div>;
+  }
+
+  return (
+    <div
+      className="relative h-full w-full overflow-hidden"
+      style={{ background: backgroundToCss(background) }}
+    >
+      {videoBg && (
+        <video
+          key={videoBg}
+          src={videoBg}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      {card}
     </div>
   );
 }
@@ -558,7 +1211,7 @@ function SceneStage({
   playing,
   questionPhase = "question",
   markHoldElapsedMs = 0,
-  postSpeechElapsedMs = 0,
+  contentOnly = false,
 }: {
   scene: Scene;
   progress: number;
@@ -569,18 +1222,8 @@ function SceneStage({
   playing: boolean;
   questionPhase?: QuestionDisplayPhase;
   markHoldElapsedMs?: number;
-  postSpeechElapsedMs?: number;
+  contentOnly?: boolean;
 }) {
-  console.log("[SceneStage]", {
-    id: scene.id,
-    kind: scene.kind,
-    codeLen: scene.code?.length ?? 0,
-    codeVariant: scene.codeVariant ?? null,
-    elements: (scene.elements ?? []).length,
-    elementUrls: (scene.elements ?? []).map((e) => e.mediaUrl?.slice(0, 60)),
-    bgUrl: scene.backgroundUrl?.slice(0, 60) ?? null,
-    subtitle: scene.subtitle,
-  });
   if (scene.kind === "question") {
     return (
       <QuestionSceneStage
@@ -589,13 +1232,41 @@ function SceneStage({
         background={background}
         questionPhase={questionPhase}
         markHoldElapsedMs={markHoldElapsedMs}
-        postSpeechElapsedMs={postSpeechElapsedMs}
+        contentOnly={contentOnly}
       />
     );
   }
   if (scene.kind === "code") {
     return (
-      <CodeSceneStage scene={scene} progress={progress} background={background} playing={playing} />
+      <CodeSceneStage
+        scene={scene}
+        progress={progress}
+        background={background}
+        playing={playing}
+        contentOnly={contentOnly}
+      />
+    );
+  }
+  if (scene.kind === "recording") {
+    return (
+      <RecordingSceneStage
+        scene={scene}
+        elapsedSpeechMs={elapsedSpeechMs}
+        background={background}
+        contentOnly={contentOnly}
+        playing={playing}
+      />
+    );
+  }
+  if (scene.kind === "template") {
+    return (
+      <TemplateSceneStage
+        scene={scene}
+        progress={progress}
+        elapsedSpeechMs={elapsedSpeechMs}
+        background={background}
+        contentOnly={contentOnly}
+      />
     );
   }
   if (scene.kind === "image") {
@@ -606,6 +1277,7 @@ function SceneStage({
         elapsedSpeechMs={elapsedSpeechMs}
         background={background}
         transparentMap={transparentMap}
+        contentOnly={contentOnly}
       />
     );
   }
@@ -626,12 +1298,15 @@ export function VideoPlayer({
   scenes,
   background = DEFAULT_BACKGROUND,
   bgm,
+  projectId,
   onPlaybackUpdate,
 }: {
   scenes: Scene[];
   background?: SceneBackground;
   /** Continuous background music for stitched part preview / export. */
   bgm?: PartBgmConfig | null;
+  /** Used to persist temp stitch audio to disk before export (avoids Chrome OOM). */
+  projectId?: string | null;
   onPlaybackUpdate?: (info: {
     sceneIndex: number;
     progress: number;
@@ -645,6 +1320,7 @@ export function VideoPlayer({
     () => resolvePartBgm(bgm),
     [bgm?.url, bgm?.volume, bgm?.enabled],
   );
+  const bgmMuteRanges = useMemo(() => bgmMuteRangesMs(scenes), [scenes]);
 
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -658,10 +1334,17 @@ export function VideoPlayer({
   const introAudioRef = useRef<HTMLAudioElement>(null);
   const markAudioPlayedRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [exportQuality, setExportQuality] = useState<ExportQuality | null>(null);
-  const [exportProgress, setExportProgress] = useState(0);
-  const [exportStage, setExportStage] = useState("");
+  const [exportStarting, setExportStarting] = useState<ExportQuality | null>(null);
+  const [exportRunner, setExportRunner] = useState<"server" | "agent">(() => {
+    try {
+      const v = localStorage.getItem("explainer.exportRunner");
+      return v === "agent" ? "agent" : "server";
+    } catch {
+      return "server";
+    }
+  });
   const [transparentMap, setTransparentMap] = useState<Map<string, string>>(new Map());
+  const navigate = useNavigate();
 
   // Only process element images when a custom background is chosen; the
   // whiteboard theme already sits on white, so multiply-blend handles it.
@@ -692,7 +1375,7 @@ export function VideoPlayer({
   function syncBgmPosition(curMs: number, durationMs: number) {
     const el = bgmRef.current;
     if (!el || !bgmConfig) return;
-    el.volume = bgmConfig.volume;
+    el.volume = partBgmVolumeAtMs(bgmConfig, curMs, bgmMuteRanges);
     const endMs = Math.max(0, durationMs);
     if (curMs >= endMs - 20) {
       el.pause();
@@ -741,6 +1424,8 @@ export function VideoPlayer({
     setTailMarkHold(null);
     setMarkHoldElapsedMs(0);
     markHoldStartRef.current = 0;
+    markAudioPlayedRef.current = false;
+    markAudioRef.current?.pause();
   }
 
   function questionNeedsIntroGate(s: Scene | undefined): boolean {
@@ -830,6 +1515,8 @@ export function VideoPlayer({
     setMarkHoldElapsedMs(0);
     setPerSceneTransition({ from, to, t: 0 });
     perSceneHoldRef.current = setTimeout(() => {
+      markAudioRef.current?.pause();
+      markAudioPlayedRef.current = false;
       const transStart = performance.now();
       const tick = () => {
         const t = Math.min(1, (performance.now() - transStart) / transitionMs);
@@ -860,25 +1547,27 @@ export function VideoPlayer({
   const scene = scenes[index];
 
   async function handleExport(quality: ExportQuality) {
-    if (exportQuality) return;
-    setExportQuality(quality);
-    setExportProgress(0);
-    setExportStage("starting…");
+    if (exportStarting) return;
+    setExportStarting(quality);
     try {
-      const blob = await exportToMp4(scenes, masterAudioUrl, quality, (stage, ratio) => {
-        setExportStage(stage);
-        setExportProgress(ratio);
-      }, background, bgm ?? undefined);
+      const label = quality === "hd" ? "1080p30" : "720p30";
+      const { jobId, runner } = await startNativeExportJob({
+        scenes,
+        masterAudioUrl,
+        quality,
+        background,
+        bgm: bgm ?? undefined,
+        projectId,
+        filename: `explainer-${label}-${Date.now()}.mp4`,
+        runner: exportRunner,
+      });
+      void navigate({ to: "/export", search: { jobId, runner } });
 
-      const label = quality === "hd" ? "1080p60" : "720p30";
-      downloadBlob(blob, `explainer-${label}-${Date.now()}.mp4`);
     } catch (e) {
       console.error("Export failed", e);
       alert("Export failed: " + (e as Error).message);
     } finally {
-      setExportQuality(null);
-      setExportProgress(0);
-      setExportStage("");
+      setExportStarting(null);
     }
   }
 
@@ -891,6 +1580,16 @@ export function VideoPlayer({
       masterMode && visualState ? scenes[visualState.sceneIndex] : scenes[index];
     if (!current || current.kind !== "question") {
       markAudioPlayedRef.current = false;
+      markAudioRef.current?.pause();
+      return;
+    }
+
+    // Stop mark VO once the slide to the next scene begins.
+    if (perSceneTransition != null && perSceneTransition.t > 0) {
+      markAudioRef.current?.pause();
+      return;
+    }
+    if (masterMode && visualState?.phase === "transition") {
       markAudioRef.current?.pause();
       return;
     }
@@ -917,8 +1616,18 @@ export function VideoPlayer({
       return;
     }
 
-    if (questionPostSpeechAt(postElapsed, current).phase !== "countdown" || !playing) {
+    const phase = questionPostSpeechAt(postElapsed, current).phase;
+    if (!playing) {
+      markAudioRef.current?.pause();
+      return;
+    }
+    if (phase === "gap") {
       markAudioPlayedRef.current = false;
+      markAudioRef.current?.pause();
+      return;
+    }
+    if (phase !== "countdown") {
+      // post-hold / done — let finishing VO play out; don't restart.
       return;
     }
 
@@ -949,7 +1658,9 @@ export function VideoPlayer({
     const waitForIntro = questionNeedsIntroGate(s) && !questionMainReady;
 
     if (playing && !waitForIntro) {
-      a.play().catch(() => {});
+      if (s?.kind !== "recording") {
+        a.play().catch(() => {});
+      }
       videoRef.current?.play().catch(() => {});
     } else {
       if (waitForIntro) a.pause();
@@ -1011,22 +1722,139 @@ export function VideoPlayer({
 
   // ============ PER-SCENE MODE (no master): reload audio per scene ============
   const clipStartMs = scenes[index]?.audioClipStartMs ?? 0;
+  const recordingClockRef = useRef({ wall: 0, ms: 0 });
 
   useEffect(() => {
     if (masterMode) return;
     setProgress(0);
     setElapsedSpeechMs(0);
+    recordingClockRef.current = { wall: performance.now(), ms: 0 };
     const a = audioRef.current;
     if (!a) return;
-    a.currentTime = clipStartMs / 1000;
     const s = scenes[index];
+    if (s?.kind === "recording") {
+      a.pause();
+      return;
+    }
+    a.currentTime = clipStartMs / 1000;
     const waitForIntro = questionNeedsIntroGate(s) && !questionMainReady;
     if (playing && !waitForIntro) a.play().catch(() => {});
     else a.pause();
   }, [index, masterMode, playing, clipStartMs, questionMainReady, scenes]);
 
+  // Recording scenes: let narration <audio> play natively and drive the clock from
+  // it (avoids per-frame currentTime seeks that make voice flutter in preview).
+  useEffect(() => {
+    if (masterMode || !playing) return;
+    const s = scenes[index];
+    if (s?.kind !== "recording") return;
+
+    const sceneMs = Math.max(1, revealSpeechDurationMs(s));
+    const a = audioRef.current;
+    const startClock = Math.min(sceneMs, Math.max(0, recordingClockRef.current.ms));
+    recordingClockRef.current = { wall: performance.now(), ms: startClock };
+
+    if (a) {
+      const startSrc = recordingAudioSourceTimeSec(s, startClock);
+      try {
+        a.playbackRate = recordingAudioRateAtClock(s, startClock);
+      } catch {
+        /* ignore */
+      }
+      if (startSrc == null) {
+        a.pause();
+      } else {
+        try {
+          if (Math.abs(a.currentTime - startSrc) > 0.08) a.currentTime = startSrc;
+        } catch {
+          /* ignore */
+        }
+        void a.play().catch(() => {});
+      }
+    }
+
+    let raf = 0;
+    const finish = () => {
+      setProgress(1);
+      setElapsedSpeechMs(sceneMs);
+      audioRef.current?.pause();
+      if (index < scenes.length - 1) runPerSceneTransition(index, index + 1);
+      else setPlaying(false);
+    };
+
+    const tick = () => {
+      const audio = audioRef.current;
+      let clock: number;
+
+      if (audio && !audio.paused && !audio.ended) {
+        try {
+          const wantRate = recordingAudioRateAtClock(s, recordingClockRef.current.ms);
+          if (Math.abs(audio.playbackRate - wantRate) > 0.01) {
+            audio.playbackRate = wantRate;
+          }
+        } catch {
+          /* ignore */
+        }
+        const fromAudio = recordingClockMsFromAudioSourceSec(s, audio.currentTime);
+        if (fromAudio != null) {
+          clock = Math.min(sceneMs, fromAudio);
+          recordingClockRef.current = { wall: performance.now(), ms: clock };
+        } else {
+          clock = Math.min(
+            sceneMs,
+            recordingClockRef.current.ms +
+              (performance.now() - recordingClockRef.current.wall),
+          );
+          recordingClockRef.current = { wall: performance.now(), ms: clock };
+          const nextSrc = recordingAudioSourceTimeSec(s, clock);
+          if (nextSrc != null) {
+            try {
+              if (Math.abs(audio.currentTime - nextSrc) > 0.12) audio.currentTime = nextSrc;
+            } catch {
+              /* ignore */
+            }
+            void audio.play().catch(() => {});
+          }
+        }
+      } else {
+        clock = Math.min(
+          sceneMs,
+          recordingClockRef.current.ms +
+            (performance.now() - recordingClockRef.current.wall),
+        );
+        recordingClockRef.current = { wall: performance.now(), ms: clock };
+        if (audio) {
+          const nextSrc = recordingAudioSourceTimeSec(s, clock);
+          if (nextSrc != null) {
+            try {
+              if (Math.abs(audio.currentTime - nextSrc) > 0.12) audio.currentTime = nextSrc;
+            } catch {
+              /* ignore */
+            }
+            void audio.play().catch(() => {});
+          }
+        }
+      }
+
+      setElapsedSpeechMs(clock);
+      setProgress(Math.min(1, clock / sceneMs));
+
+      if (clock >= sceneMs - 40) {
+        finish();
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+    };
+  }, [playing, index, masterMode, scenes]);
+
   useEffect(() => {
     if (masterMode) return;
+    if (scenes[index]?.kind === "recording") return;
     if (!questionMainReady) return;
     const a = audioRef.current;
     if (!a) return;
@@ -1185,10 +2013,11 @@ export function VideoPlayer({
   const overallPct = Math.max(0, Math.min(100, (currentMs / totalMs) * 100));
 
   // Continuous background music — synced to timeline, trimmed at part end.
+  // Muted over intro/outro bumpers (they already include music).
   useEffect(() => {
     const el = bgmRef.current;
     if (!el || !bgmConfig) return;
-    el.volume = bgmConfig.volume;
+    el.volume = partBgmVolumeAtMs(bgmConfig, currentMs, bgmMuteRanges);
     if (!playing) {
       el.pause();
       return;
@@ -1197,7 +2026,7 @@ export function VideoPlayer({
     if (currentMs < totalMs - 20) {
       void el.play().catch(() => {});
     }
-  }, [playing, currentMs, totalMs, bgmConfig]);
+  }, [playing, currentMs, totalMs, bgmConfig, bgmMuteRanges]);
 
   function seekToMs(ms: number) {
     if (masterMode && audioRef.current) {
@@ -1291,6 +2120,7 @@ export function VideoPlayer({
       <div className="relative aspect-video w-full overflow-hidden rounded-xl border bg-white shadow-sm">
         {slide ? (
           <>
+            <SceneBackgroundLayer background={background} />
             <div
               className="absolute inset-0"
               style={{ transform: `translateX(${-slide.t * 100}%)` }}
@@ -1310,6 +2140,7 @@ export function VideoPlayer({
                     ? questionMarkCountdownMs(scenes[slide.from]!)
                     : 0
                 }
+                contentOnly
               />
             </div>
             <div
@@ -1323,6 +2154,7 @@ export function VideoPlayer({
                 background={background}
                 transparentMap={transparentMap}
                 playing={playing}
+                contentOnly
               />
             </div>
           </>
@@ -1410,45 +2242,51 @@ export function VideoPlayer({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
-        <span className="mr-1 text-xs font-medium text-muted-foreground">Download:</span>
+        <span className="mr-1 text-xs font-medium text-muted-foreground">Export:</span>
+        <select
+          value={exportRunner}
+          onChange={(e) => {
+            const next = e.target.value === "agent" ? "agent" : "server";
+            setExportRunner(next);
+            try {
+              localStorage.setItem("explainer.exportRunner", next);
+            } catch {
+              /* ignore */
+            }
+          }}
+          className="h-8 rounded-md border bg-background px-2 text-xs"
+          title="Where to encode the MP4"
+        >
+          <option value="server">Studio Mac</option>
+          <option value="agent">This Mac · Render Agent</option>
+        </select>
         <button
           onClick={() => handleExport("preview")}
-          disabled={!!exportQuality}
+          disabled={!!exportStarting}
           className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {exportQuality === "preview" ? (
+          {exportStarting === "preview" ? (
             <Loader2 size={12} className="animate-spin" />
           ) : (
             <Download size={12} />
           )}
-          Current quality (720p 30fps)
+          720p 30fps
         </button>
         <button
           onClick={() => handleExport("hd")}
-          disabled={!!exportQuality}
+          disabled={!!exportStarting}
           className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {exportQuality === "hd" ? (
+          {exportStarting === "hd" ? (
             <Loader2 size={12} className="animate-spin" />
           ) : (
             <Download size={12} />
           )}
-          HD (1080p 60fps)
+          HD 1080p 30fps
         </button>
-        {exportQuality && (
-          <div className="ml-2 flex min-w-[240px] flex-1 items-center gap-2 text-xs text-muted-foreground">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary transition-[width]"
-                style={{ width: `${Math.round(exportProgress * 100)}%` }}
-              />
-            </div>
-            <span className="whitespace-nowrap tabular-nums">
-              {Math.round(exportProgress * 100)}%
-            </span>
-            <span className="truncate opacity-80">{exportStage}</span>
-          </div>
-        )}
+        <span className="text-[11px] text-muted-foreground">
+          Opens the Export page for progress
+        </span>
       </div>
     </div>
   );

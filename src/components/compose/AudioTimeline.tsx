@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import {
   DEFAULT_PLACEMENT_SFX,
@@ -10,6 +10,8 @@ import {
   type PlacementSfxKey,
 } from "@/lib/compose-scene";
 
+type DragKind = { type: "scrub" } | { type: "placement"; id: string };
+
 interface AudioTimelineProps {
   audioUrl: string;
   durationMs: number;
@@ -19,7 +21,10 @@ interface AudioTimelineProps {
   onSelectCrop: (id: string | null) => void;
   onDuration: (ms: number) => void;
   onAddPlacement: (cropId: string, startMs: number, sfxUrl?: string | null) => void;
-  onUpdatePlacement: (id: string, patch: { sfxUrl?: string | null }) => void;
+  onUpdatePlacement: (
+    id: string,
+    patch: { startMs?: number; sfxUrl?: string | null },
+  ) => void;
   onRemovePlacement: (id: string) => void;
   onSeek: (ms: number) => void;
 }
@@ -39,8 +44,10 @@ export function AudioTimeline({
 }: AudioTimelineProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<DragKind | null>(null);
   const [currentMs, setCurrentMs] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [dragging, setDragging] = useState<DragKind | null>(null);
 
   useEffect(() => {
     const a = audioRef.current;
@@ -50,7 +57,10 @@ export function AudioTimeline({
         onDuration(Math.round(a.duration * 1000));
       }
     };
-    const onTime = () => setCurrentMs(a.currentTime * 1000);
+    const onTime = () => {
+      if (dragRef.current?.type === "scrub") return;
+      setCurrentMs(a.currentTime * 1000);
+    };
     a.addEventListener("loadedmetadata", onMeta);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", () => setPlaying(false));
@@ -67,15 +77,70 @@ export function AudioTimeline({
     else a.pause();
   }, [playing]);
 
-  function seekFromEvent(e: React.MouseEvent<HTMLDivElement>) {
+  const seekToMs = useCallback(
+    (ms: number, opts?: { play?: boolean }) => {
+      const dur = durationMs || 1;
+      const clamped = Math.max(0, Math.min(dur, ms));
+      setCurrentMs(clamped);
+      onSeek(clamped);
+      if (audioRef.current) audioRef.current.currentTime = clamped / 1000;
+      if (opts?.play) setPlaying(true);
+    },
+    [durationMs, onSeek],
+  );
+
+  function clientXToMs(clientX: number): number {
     const bar = barRef.current;
-    if (!bar || durationMs <= 0) return;
+    const dur = durationMs || 1;
+    if (!bar) return 0;
     const rect = bar.getBoundingClientRect();
-    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const ms = frac * durationMs;
-    setCurrentMs(ms);
-    onSeek(ms);
-    if (audioRef.current) audioRef.current.currentTime = ms / 1000;
+    const frac = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+    return frac * dur;
+  }
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: PointerEvent) => {
+      const kind = dragRef.current;
+      if (!kind) return;
+      const ms = clientXToMs(e.clientX);
+      if (kind.type === "scrub") {
+        seekToMs(ms);
+      } else {
+        onUpdatePlacement(kind.id, { startMs: Math.round(ms) });
+      }
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      setDragging(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bind while dragging
+  }, [dragging, seekToMs, onUpdatePlacement]);
+
+  function beginDrag(kind: DragKind, e: React.PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragRef.current = kind;
+    setDragging(kind);
+    if (kind.type === "scrub") {
+      setPlaying(false);
+      seekToMs(clientXToMs(e.clientX));
+    } else {
+      onUpdatePlacement(kind.id, { startMs: Math.round(clientXToMs(e.clientX)) });
+    }
+  }
+
+  function seekFromBarClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (dragRef.current) return;
+    seekToMs(clientXToMs(e.clientX));
   }
 
   function fmt(ms: number) {
@@ -107,7 +172,7 @@ export function AudioTimeline({
       {crops.length > 0 && (
         <div>
           <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Cropped elements — click to add at playhead
+            Layer elements — click to add at playhead, then drag on the timeline to move
           </p>
           <div className="flex flex-wrap gap-2">
             {crops.map((c) => {
@@ -168,41 +233,62 @@ export function AudioTimeline({
         aria-valuemin={0}
         aria-valuemax={dur}
         aria-valuenow={Math.round(currentMs)}
-        className="relative h-12 cursor-pointer rounded-md bg-muted"
-        onClick={seekFromEvent}
+        className="relative h-14 cursor-pointer rounded-md bg-muted"
+        onClick={seekFromBarClick}
       >
         {placements.map((p) => {
           const crop = crops.find((c) => c.id === p.cropId);
           const left = (p.startMs / dur) * 100;
-          const sfxLabel = PLACEMENT_SFX_OPTIONS.find((o) => o.id === placementSfxKey(p.sfxUrl))?.label;
+          const sfxLabel = PLACEMENT_SFX_OPTIONS.find(
+            (o) => o.id === placementSfxKey(p.sfxUrl),
+          )?.label;
+          const isDrag = dragging?.type === "placement" && dragging.id === p.id;
           return (
             <div
               key={p.id}
-              className="absolute top-1 bottom-1 flex -translate-x-1/2 flex-col items-center"
+              className={`absolute top-1 z-20 flex -translate-x-1/2 cursor-grab flex-col items-center active:cursor-grabbing ${
+                isDrag ? "z-40 opacity-90" : ""
+              }`}
               style={{ left: `${left}%` }}
-              title={`${crop?.name ?? "crop"} @ ${fmt(p.startMs)}${sfxLabel ? ` · ${sfxLabel}` : ""}`}
+              title={`Drag to move · ${crop?.name ?? "crop"} @ ${fmt(p.startMs)}${sfxLabel ? ` · ${sfxLabel}` : ""}`}
+              onPointerDown={(e) => beginDrag({ type: "placement", id: p.id }, e)}
+              onClick={(e) => e.stopPropagation()}
             >
               {crop?.imageUrl ? (
                 <img
                   src={crop.imageUrl}
                   alt=""
-                  className="h-7 w-7 rounded border border-primary/40 bg-white object-contain shadow-sm"
+                  draggable={false}
+                  className="h-8 w-8 rounded border-2 border-primary/50 bg-white object-contain shadow-sm pointer-events-none"
                 />
               ) : (
-                <div className="h-7 w-7 rounded border bg-background" />
+                <div className="h-8 w-8 rounded border bg-background pointer-events-none" />
               )}
-              <div className="mt-0.5 h-0.5 w-0.5 rounded-full bg-primary" />
+              <div className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary pointer-events-none" />
             </div>
           );
         })}
+
+        {/* Draggable playhead */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-foreground"
-          style={{ left: `${pct}%` }}
-        />
+          className="absolute top-0 z-30 cursor-ew-resize"
+          style={{
+            left: `${pct}%`,
+            height: "100%",
+            width: 16,
+            transform: "translateX(-50%)",
+          }}
+          onPointerDown={(e) => beginDrag({ type: "scrub" }, e)}
+          onClick={(e) => e.stopPropagation()}
+          title="Drag to scrub — Play continues from here"
+        >
+          <div className="mx-auto h-2.5 w-2.5 rounded-full bg-foreground shadow" />
+          <div className="mx-auto h-[calc(100%-10px)] w-0.5 bg-foreground" />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Click the timeline to seek, then click a crop to place it. Pick tick, pop, or no sound on
-        each element card below.
+        Drag the black playhead to scrub, then Play from that spot. Drag layer thumbs on the bar to
+        reposition. Click the bar to jump.
       </p>
 
       {placements.length > 0 && (
@@ -227,7 +313,26 @@ export function AudioTimeline({
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{crop?.name ?? "?"}</p>
-                    <p className="tabular-nums text-xs text-muted-foreground">@{fmt(p.startMs)}</p>
+                    <label className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                      @
+                      <input
+                        type="number"
+                        min={0}
+                        max={Math.round(dur)}
+                        step={100}
+                        value={Math.round(p.startMs)}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          if (!Number.isFinite(v)) return;
+                          onUpdatePlacement(p.id, {
+                            startMs: Math.max(0, Math.min(dur, Math.round(v))),
+                          });
+                        }}
+                        className="w-20 rounded border bg-background px-1 py-0.5 tabular-nums"
+                        aria-label="Start time ms"
+                      />
+                      ms
+                    </label>
                   </div>
                   <select
                     value={placementSfxKey(p.sfxUrl)}

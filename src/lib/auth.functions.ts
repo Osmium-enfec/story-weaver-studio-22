@@ -17,7 +17,7 @@ const Credentials = z.object({
 export const register = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => Credentials.parse(d))
   .handler(async ({ data }) => {
-    localRegisterUser(data.email, data.password);
+    await localRegisterUser(data.email, data.password);
     return localLoginUser(data.email, data.password);
   });
 
@@ -28,7 +28,7 @@ export const login = createServerFn({ method: "POST" })
 export const logout = createServerFn({ method: "POST" })
   .middleware([requireAuth])
   .handler(async ({ context }) => {
-    localLogoutSession(context.token);
+    await localLogoutSession(context.token);
     return { ok: true };
   });
 
@@ -36,6 +36,6 @@ export const me = createServerFn({ method: "POST" }).handler(async () => {
   const request = getRequest();
   const authHeader = request?.headers?.get("authorization") ?? "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-  const user = localValidateSession(token);
+  const user = await localValidateSession(token);
   return { user };
 });

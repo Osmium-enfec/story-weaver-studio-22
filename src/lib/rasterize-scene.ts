@@ -3,7 +3,12 @@
 // ffmpeg rasterizer can share the same drawing code.
 
 import type { Scene } from "@/components/VideoPlayer";
-import { isCropOnlyScene } from "@/lib/compose-scene";
+import {
+  clampPlaybackRate,
+  isCropOnlyScene,
+  normalizeRecordingVideoSegments,
+  recordingSegmentDurationMs,
+} from "@/lib/compose-scene";
 import {
   CARD_PADDING_FRAC,
   DEFAULT_BACKGROUND,
@@ -16,7 +21,13 @@ import { boxRevealOpacityAtMs, revealSpeechDurationMs } from "./reveal-schedule"
 import { masterVisualAt, slideOffset } from "./scene-transition";
 import { drawCodeEditor } from "./code-scene-canvas";
 import { drawQuestionBoard, drawMarkYourAnswersScreen, drawQuestionIntroScreen } from "./question-scene-canvas";
+import { drawTemplateFrame, templateCountdownProgress } from "./template-scene-canvas";
 import { canvasFont, ensureExcalifontLoaded } from "./scene-font";
+import {
+  createExportCanvas,
+  exportSourceSize,
+  loadExportImage,
+} from "./export-runtime";
 import {
   sceneToQuestionContent,
   questionMarkSettingsFromScene,
@@ -25,6 +36,16 @@ import {
   questionTimelineAt,
   markCountdownSeconds,
 } from "./question-scene-layout";
+import { recordingCameraAt, recordingCameraDrawRects } from "./recording-camera";
+import {
+  drawRecordingBlurRegion,
+  normalizeRecordingBlurRegion,
+} from "./recording-blur";
+import {
+  drawRecordingHighlight,
+  normalizeRecordingHighlights,
+} from "./recording-highlight";
+import { detectAndCacheVideoContentCrop } from "./video-black-bars";
 
 export interface DrawOptions {
   background?: SceneBackground;
@@ -32,10 +53,41 @@ export interface DrawOptions {
   /** For background.kind === "video". Caller must seek/advance the element
    *  before calling drawSceneFrame; we just draw its current frame. */
   videoBg?: HTMLVideoElement;
+  /** Cached still of the looped video bg (export uses this for stable frames). */
+  videoBgFrame?: CanvasImageSource;
+  /** Screen-recording still (ffmpeg-baked) — prefer over seeking HTMLVideoElement. */
+  recordingFrame?: CanvasImageSource;
+  /** Skip outer background — used when compositing slide layers over one shared bg. */
+  contentOnly?: boolean;
   /** Question scenes: intro → question → mark-gap → mark */
   questionPhase?: "intro" | "intro-gap" | "question" | "mark-gap" | "mark";
   /** Elapsed ms within the mark-your-answers hold (for countdown). */
   markHoldElapsedMs?: number;
+  /** Absolute speech-clock ms within the active scene (recording sync). */
+  elapsedSpeechMs?: number;
+}
+
+/** Draw the shared outer background (video loop, gradient, or whiteboard). */
+export function drawSceneBackground(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  opts: DrawOptions = {},
+): void {
+  const background = opts.background ?? DEFAULT_BACKGROUND;
+  const customBg = background.kind !== "whiteboard";
+
+  const videoSrc = opts.videoBgFrame ?? opts.videoBg;
+  if (background.kind === "video" && videoSrc) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    drawContain(ctx, videoSrc, 0, 0, W, H, "cover");
+  } else if (customBg) {
+    backgroundToCanvasFill(ctx, background, W, H);
+  } else {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+  }
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -50,13 +102,7 @@ function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 
 
 export function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
+  return loadExportImage(url).then((img) => img as HTMLImageElement);
 }
 
 export function loadVideo(url: string): Promise<HTMLVideoElement> {
@@ -67,8 +113,23 @@ export function loadVideo(url: string): Promise<HTMLVideoElement> {
     v.playsInline = true;
     v.preload = "auto";
     v.src = url;
-    v.onloadeddata = () => resolve(v);
-    v.onerror = reject;
+    const fail = () => reject(new Error(`Failed to load video: ${url}`));
+    v.onerror = fail;
+    v.onloadeddata = async () => {
+      try {
+        // Force a decoded frame — headless Chromium often leaves seeked frames blank
+        // until play() has produced at least one frame.
+        await v.play().catch(() => {});
+        v.pause();
+        if (!v.videoWidth || !v.videoHeight) {
+          reject(new Error(`Video has no dimensions: ${url}`));
+          return;
+        }
+        resolve(v);
+      } catch (e) {
+        reject(e);
+      }
+    };
   });
 }
 
@@ -79,11 +140,15 @@ export interface SceneAssets {
   cov: Map<string, HTMLImageElement>;
 }
 
-export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> {
+export async function preloadSceneAssets(
+  scenes: Scene[],
+  opts?: { skipVideoUrls?: Set<string> },
+): Promise<SceneAssets> {
   const bg = new Map<string, HTMLImageElement>();
   const el = new Map<string, HTMLImageElement>();
   const vid = new Map<string, HTMLVideoElement>();
   const cov = new Map<string, HTMLImageElement>();
+  const skipVideo = opts?.skipVideoUrls;
 
   const jobs: Promise<void>[] = [];
   for (const s of scenes) {
@@ -91,14 +156,18 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
       if (s.backgroundUrl && !bg.has(s.backgroundUrl)) {
         const url = s.backgroundUrl;
         jobs.push(
-          loadImage(url).then((img) => { bg.set(url, img); }).catch(() => {}),
+          loadImage(url).then((img) => { bg.set(url, img); }).catch((e) => {
+            console.warn("[export] image bg failed", url.slice(0, 160), e);
+          }),
         );
       }
       for (const e of s.elements ?? []) {
         if (!el.has(e.mediaUrl)) {
           const url = e.mediaUrl;
           jobs.push(
-            loadImage(url).then((img) => { el.set(url, img); }).catch(() => {}),
+            loadImage(url).then((img) => { el.set(url, img); }).catch((e) => {
+              console.warn("[export] image element failed", url.slice(0, 160), e);
+            }),
           );
         }
       }
@@ -110,8 +179,9 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
           );
         }
       }
-    } else if (s.kind === "stock" && s.mediaUrl) {
+    } else if ((s.kind === "stock" || s.kind === "recording") && s.mediaUrl) {
       const url = s.mediaUrl;
+      if (skipVideo?.has(url)) continue;
       if (!vid.has(url)) {
         jobs.push(
           loadVideo(url).then((v) => { vid.set(url, v); }).catch(() => {}),
@@ -125,12 +195,11 @@ export async function preloadSceneAssets(scenes: Scene[]): Promise<SceneAssets> 
 
 function drawContain(
   ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement | HTMLVideoElement,
+  img: CanvasImageSource,
   x: number, y: number, w: number, h: number,
   mode: "cover" | "contain" = "cover",
 ) {
-  const iw = "videoWidth" in img ? img.videoWidth : img.naturalWidth;
-  const ih = "videoHeight" in img ? img.videoHeight : img.naturalHeight;
+  const { w: iw, h: ih } = exportSourceSize(img);
   if (!iw || !ih) return;
   const ir = iw / ih;
   const cr = w / h;
@@ -153,16 +222,8 @@ export function drawImageSceneFrame(
   const background = opts.background ?? DEFAULT_BACKGROUND;
   const customBg = background.kind !== "whiteboard";
 
-  // Outer canvas: user-picked color / gradient / video, or plain white.
-  if (background.kind === "video" && opts.videoBg) {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, W, H);
-    drawContain(ctx, opts.videoBg, 0, 0, W, H, "cover");
-  } else if (customBg) {
-    backgroundToCanvasFill(ctx, background, W, H);
-  } else {
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, W, H);
+  if (!opts.contentOnly) {
+    drawSceneBackground(ctx, W, H, opts);
   }
 
   const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
@@ -196,7 +257,12 @@ export function drawImageSceneFrame(
     const covers = scene.revealCovers ?? [];
     const aspect =
       scene.bgAspect ??
-      (bg ? bg.naturalWidth / Math.max(1, bg.naturalHeight) : 1536 / 1024);
+      (bg
+        ? (() => {
+            const s = exportSourceSize(bg);
+            return s.w / Math.max(1, s.h);
+          })()
+        : 1536 / 1024);
     const cr = innerW / innerH;
     let dw: number;
     let dh: number;
@@ -215,8 +281,9 @@ export function drawImageSceneFrame(
     ctx.fillRect(dx, dy, dw, dh);
 
     if (covers.length > 0 && bg) {
-      const iw = bg.naturalWidth || 1;
-      const ih = bg.naturalHeight || 1;
+      const size = exportSourceSize(bg);
+      const iw = size.w || 1;
+      const ih = size.h || 1;
       covers.forEach((c, i) => {
         const alpha = boxRevealOpacityAtMs(progress * durationMs, i, covers);
         if (alpha <= 0) return;
@@ -351,15 +418,8 @@ export function drawCodeSceneFrame(
   const background = opts.background ?? DEFAULT_BACKGROUND;
   const customBg = background.kind !== "whiteboard";
 
-  if (background.kind === "video" && opts.videoBg) {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, W, H);
-    drawContain(ctx, opts.videoBg, 0, 0, W, H, "cover");
-  } else if (customBg) {
-    backgroundToCanvasFill(ctx, background, W, H);
-  } else {
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, W, H);
+  if (!opts.contentOnly) {
+    drawSceneBackground(ctx, W, H, opts);
   }
 
   const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
@@ -412,15 +472,8 @@ export function drawQuestionSceneFrame(
   const background = opts.background ?? DEFAULT_BACKGROUND;
   const customBg = background.kind !== "whiteboard";
 
-  if (background.kind === "video" && opts.videoBg) {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, W, H);
-    drawContain(ctx, opts.videoBg, 0, 0, W, H, "cover");
-  } else if (customBg) {
-    backgroundToCanvasFill(ctx, background, W, H);
-  } else {
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, W, H);
+  if (!opts.contentOnly) {
+    drawSceneBackground(ctx, W, H, opts);
   }
 
   const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
@@ -474,6 +527,63 @@ export function drawQuestionSceneFrame(
   ctx.restore();
 }
 
+export function drawTemplateSceneFrame(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  progress: number,
+  W: number,
+  H: number,
+  opts: DrawOptions = {},
+) {
+  const background = opts.background ?? DEFAULT_BACKGROUND;
+  const customBg = background.kind !== "whiteboard";
+
+  if (!opts.contentOnly) {
+    drawSceneBackground(ctx, W, H, opts);
+  }
+
+  const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
+  const padY = customBg ? Math.round(H * CARD_PADDING_FRAC) : 0;
+  const innerX = padX;
+  const innerY = padY;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+
+  ctx.save();
+  if (customBg) {
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = Math.round(H * 0.03);
+    ctx.shadowOffsetY = Math.round(H * 0.012);
+    ctx.fillStyle = "#ffffff";
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.clip();
+  }
+
+  ctx.translate(customBg ? innerX : 0, customBg ? innerY : 0);
+  const elapsedMs =
+    scene.templateKind === "countdown"
+      ? Math.round(progress * ((scene.templateCountdownSec ?? 5) * 1000))
+      : undefined;
+  drawTemplateFrame(ctx, customBg ? innerW : W, customBg ? innerH : H, {
+    type:
+      scene.templateKind === "countdown"
+        ? "countdown"
+        : scene.templateKind === "typing"
+          ? "typing"
+          : "text",
+    text: scene.templateText ?? "",
+    color: scene.templateColor ?? "#1a1a1a",
+    fontSize: scene.templateFontSize ?? 72,
+    countdownSec: scene.templateCountdownSec,
+    elapsedMs,
+    progress,
+  });
+  ctx.restore();
+}
+
 export function drawStockFrame(
   ctx: CanvasRenderingContext2D,
   video: HTMLVideoElement,
@@ -484,12 +594,233 @@ export function drawStockFrame(
   drawContain(ctx, video, 0, 0, W, H, "cover");
 }
 
+/** Source time (seconds) for a recording scene at a speech-clock position. */
+export function recordingSourceTimeSec(scene: Scene, elapsedSpeechMs: number): number {
+  const segments = normalizeRecordingVideoSegments({
+    videoSegments: scene.recordingVideoSegments,
+    sourceDurationMs: scene.recordingSourceDurationMs ?? 0,
+    trimStartMs: scene.recordingTrimStartMs ?? 0,
+    trimEndMs: scene.recordingTrimEndMs ?? 0,
+    videoOffsetMs: scene.recordingVideoOffsetMs ?? 0,
+  });
+  for (const seg of segments) {
+    const timelineDur = recordingSegmentDurationMs(seg);
+    const local = elapsedSpeechMs - seg.offsetMs;
+    if (local >= 0 && local <= timelineDur) {
+      const rate = clampPlaybackRate(seg.rate);
+      return (seg.trimStartMs + local * rate) / 1000;
+    }
+  }
+  // Past the last clip: hold the last source frame (not the first — that
+  // restarts the bumper and looks like a freeze on a wrong still).
+  const last = segments[segments.length - 1];
+  if (!last) return 0;
+  const rate = clampPlaybackRate(last.rate);
+  const lastLocal = recordingSegmentDurationMs(last);
+  return (last.trimStartMs + Math.max(0, lastLocal - 1) * rate) / 1000;
+}
+
+/** Active video segment + rate at clock, or null when outside all clips. */
+export function recordingVideoAtClock(
+  scene: Scene,
+  elapsedSpeechMs: number,
+): { sourceSec: number; rate: number; inWindow: boolean } {
+  const segments = normalizeRecordingVideoSegments({
+    videoSegments: scene.recordingVideoSegments,
+    sourceDurationMs: scene.recordingSourceDurationMs ?? 0,
+    trimStartMs: scene.recordingTrimStartMs ?? 0,
+    trimEndMs: scene.recordingTrimEndMs ?? 0,
+    videoOffsetMs: scene.recordingVideoOffsetMs ?? 0,
+  });
+  for (const seg of segments) {
+    const timelineDur = recordingSegmentDurationMs(seg);
+    const local = elapsedSpeechMs - seg.offsetMs;
+    if (local >= 0 && local <= timelineDur) {
+      const rate = clampPlaybackRate(seg.rate);
+      return {
+        sourceSec: (seg.trimStartMs + local * rate) / 1000,
+        rate,
+        inWindow: true,
+      };
+    }
+  }
+  const last = segments[segments.length - 1];
+  if (!last) {
+    return { sourceSec: 0, rate: 1, inWindow: false };
+  }
+  const rate = clampPlaybackRate(last.rate);
+  const lastLocal = recordingSegmentDurationMs(last);
+  return {
+    sourceSec: (last.trimStartMs + Math.max(0, lastLocal - 1) * rate) / 1000,
+    rate,
+    inWindow: false,
+  };
+}
+
+export function drawRecordingSceneFrame(
+  ctx: CanvasRenderingContext2D,
+  scene: Scene,
+  progress: number,
+  W: number,
+  H: number,
+  assets: SceneAssets,
+  opts: DrawOptions = {},
+) {
+  const background = opts.background ?? DEFAULT_BACKGROUND;
+  const customBg = background.kind !== "whiteboard";
+  /** Video clip: contain (no stretch). Screen recordings stretch after matte crop. */
+  const isVideoClip =
+    scene.recordingUseEmbeddedAudio === true && scene.recordingVoiceReplace !== true;
+  const cameraFit = isVideoClip ? "contain" : "fill";
+
+  if (!opts.contentOnly) {
+    drawSceneBackground(ctx, W, H, opts);
+  }
+
+  const padX = customBg ? Math.round(W * CARD_PADDING_FRAC) : 0;
+  const padY = customBg ? Math.round(H * CARD_PADDING_FRAC) : 0;
+  const innerX = padX;
+  const innerY = padY;
+  const innerW = W - padX * 2;
+  const innerH = H - padY * 2;
+
+  ctx.save();
+  if (customBg) {
+    roundRectPath(ctx, innerX, innerY, innerW, innerH, Math.round(Math.min(W, H) * 0.025));
+    ctx.clip();
+  }
+
+  // Edge-to-edge inside the orange inset (no white card / black pad).
+  const vx = innerX;
+  const vy = innerY;
+  const vw = customBg ? innerW : W;
+  const vh = customBg ? innerH : H;
+
+  const frame = opts.recordingFrame;
+  const url = scene.mediaUrl;
+  const video = !frame && url ? assets.vid.get(url) : undefined;
+  const src: CanvasImageSource | undefined = frame ?? video;
+  if (src) {
+    const { w: iw, h: ih } = exportSourceSize(src);
+    const cam = recordingCameraAt(
+      scene.recordingCameraKeyframes,
+      opts.elapsedSpeechMs ?? 0,
+    );
+    const crop =
+      !isVideoClip && url
+        ? detectAndCacheVideoContentCrop(url, src, iw, ih)
+        : { x: 0, y: 0, w: iw, h: ih };
+    const local = recordingCameraDrawRects(
+      crop.w,
+      crop.h,
+      vx,
+      vy,
+      vw,
+      vh,
+      cam,
+      cameraFit,
+    );
+    if (local) {
+      const rects = {
+        ...local,
+        sx: crop.x + local.sx,
+        sy: crop.y + local.sy,
+      };
+      ctx.drawImage(
+        src,
+        rects.sx,
+        rects.sy,
+        rects.sw,
+        rects.sh,
+        rects.dx,
+        rects.dy,
+        rects.dw,
+        rects.dh,
+      );
+      const blur = normalizeRecordingBlurRegion(scene.recordingBlurRegion);
+      if (blur) {
+        drawRecordingBlurRegion(ctx, src, iw, ih, rects, blur);
+      }
+      const highlights = normalizeRecordingHighlights(scene.recordingHighlights);
+      for (const h of highlights) {
+        drawRecordingHighlight(
+          ctx,
+          h,
+          iw,
+          ih,
+          rects,
+          opts.elapsedSpeechMs ?? 0,
+        );
+      }
+    } else if (isVideoClip) {
+      // Fallback: contain full frame (no stretch).
+      const ir = iw / Math.max(1, ih);
+      const cr = vw / Math.max(1, vh);
+      let dw = vw;
+      let dh = vh;
+      if (ir > cr) {
+        dw = vw;
+        dh = vw / ir;
+      } else {
+        dh = vh;
+        dw = vh * ir;
+      }
+      const dx = vx + (vw - dw) / 2;
+      const dy = vy + (vh - dh) / 2;
+      ctx.drawImage(src, 0, 0, iw, ih, dx, dy, dw, dh);
+    } else {
+      // Fallback: stretch cropped content edge-to-edge (no letterbox).
+      ctx.drawImage(src, crop.x, crop.y, crop.w, crop.h, vx, vy, vw, vh);
+    }
+  }
+
+  ctx.restore();
+}
+
+/** Capture the current video frame into a canvas (stable for export compositing). */
+export function snapshotVideoBgFrame(
+  video: HTMLVideoElement,
+  W: number,
+  H: number,
+): HTMLCanvasElement {
+  const layer = createExportCanvas(W, H) as HTMLCanvasElement;
+  layer.width = W;
+  layer.height = H;
+  const ctx = layer.getContext("2d")!;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+  drawContain(ctx, video, 0, 0, W, H, "cover");
+  return layer;
+}
+
 /** Seek an HTMLVideoElement to a specific time and wait for the frame to be ready. */
 export function seekVideo(video: HTMLVideoElement, t: number): Promise<void> {
+  const dur = video.duration && Number.isFinite(video.duration) ? video.duration : t;
+  const clamped = Math.max(0, Math.min(Math.max(0, dur - 0.04), t));
+  if (Math.abs(video.currentTime - clamped) < 0.02) {
+    return Promise.resolve();
+  }
   return new Promise((resolve) => {
-    const onSeek = () => { video.removeEventListener("seeked", onSeek); resolve(); };
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      video.removeEventListener("seeked", onSeek);
+      clearTimeout(fallback);
+      resolve();
+    };
+    const onSeek = () => finish();
     video.addEventListener("seeked", onSeek);
-    video.currentTime = Math.max(0, Math.min(video.duration || t, t));
+    video.currentTime = clamped;
+    const rvfc = (
+      video as HTMLVideoElement & {
+        requestVideoFrameCallback?: (cb: () => void) => number;
+      }
+    ).requestVideoFrameCallback;
+    if (rvfc) {
+      rvfc.call(video, finish);
+    }
+    const fallback = setTimeout(finish, 120);
   });
 }
 
@@ -505,6 +836,10 @@ export function drawSceneFrame(
     drawCodeSceneFrame(ctx, scene, progress, W, H, opts);
   } else if (scene.kind === "question") {
     drawQuestionSceneFrame(ctx, scene, progress, W, H, opts);
+  } else if (scene.kind === "template") {
+    drawTemplateSceneFrame(ctx, scene, progress, W, H, opts);
+  } else if (scene.kind === "recording") {
+    drawRecordingSceneFrame(ctx, scene, progress, W, H, assets, opts);
   } else if (scene.kind === "image") {
     drawImageSceneFrame(ctx, scene, progress, W, H, assets, opts);
   } else if (scene.kind === "stock" && scene.mediaUrl) {
@@ -525,12 +860,105 @@ function drawSceneFrameToLayer(
   assets: SceneAssets,
   opts: DrawOptions,
 ): HTMLCanvasElement {
-  const layer = document.createElement("canvas");
+  const layer = createExportCanvas(W, H) as HTMLCanvasElement;
   layer.width = W;
   layer.height = H;
   const lctx = layer.getContext("2d")!;
   drawSceneFrame(lctx, scene, progress, W, H, assets, opts);
   return layer;
+}
+
+function snapshotToCanvas(
+  draw: (ctx: CanvasRenderingContext2D) => void,
+  W: number,
+  H: number,
+): HTMLCanvasElement {
+  const layer = createExportCanvas(W, H) as HTMLCanvasElement;
+  layer.width = W;
+  layer.height = H;
+  draw(layer.getContext("2d")!);
+  return layer;
+}
+
+/** Pre-rendered bg + both scene cards for a slide transition (export caches this). */
+export interface SlideTransitionCache {
+  from: number;
+  to: number;
+  background: HTMLCanvasElement;
+  fromLayer: HTMLCanvasElement;
+  toLayer: HTMLCanvasElement;
+}
+
+/** Snapshot bg + both card layers once; reuse while sliding (matches preview compositing). */
+export function createSlideTransitionCache(
+  scenes: Scene[],
+  from: number,
+  to: number,
+  W: number,
+  H: number,
+  assets: SceneAssets,
+  opts: DrawOptions = {},
+  fromDrawOpts: DrawOptions = opts,
+): SlideTransitionCache {
+  return {
+    from,
+    to,
+    background: snapshotToCanvas((ctx) => drawSceneBackground(ctx, W, H, opts), W, H),
+    fromLayer: drawSceneFrameToLayer(scenes[from]!, 1, W, H, assets, {
+      ...fromDrawOpts,
+      contentOnly: true,
+      ...(scenes[from]!.kind === "recording"
+        ? { elapsedSpeechMs: revealSpeechDurationMs(scenes[from]!) }
+        : {}),
+    }),
+    toLayer: drawSceneFrameToLayer(scenes[to]!, 0, W, H, assets, {
+      ...opts,
+      contentOnly: true,
+      ...(scenes[to]!.kind === "recording" ? { elapsedSpeechMs: 0 } : {}),
+    }),
+  };
+}
+
+/** Blit cached layers with integer pixel offsets to avoid canvas subpixel shimmer. */
+export function drawCachedSlideTransition(
+  ctx: CanvasRenderingContext2D,
+  cache: SlideTransitionCache,
+  slideT: number,
+  W: number,
+  H: number,
+): void {
+  const slide = slideOffset(slideT);
+  const fromX = Math.round(-slide * W);
+  const toX = Math.round((1 - slide) * W);
+  ctx.drawImage(cache.background, 0, 0, W, H);
+  ctx.drawImage(cache.fromLayer, fromX, 0, W, H);
+  ctx.drawImage(cache.toLayer, toX, 0, W, H);
+}
+
+/** Slide two scenes left: fixed outer bg, only card/content layers move. */
+export function drawSlideTransition(
+  ctx: CanvasRenderingContext2D,
+  scenes: Scene[],
+  from: number,
+  to: number,
+  slideT: number,
+  W: number,
+  H: number,
+  assets: SceneAssets,
+  opts: DrawOptions = {},
+  fromDrawOpts: DrawOptions = opts,
+): void {
+  const cache = createSlideTransitionCache(
+    scenes,
+    from,
+    to,
+    W,
+    H,
+    assets,
+    opts,
+    fromDrawOpts,
+  );
+  drawCachedSlideTransition(ctx, cache, slideT, W, H);
 }
 
 /** Draw the correct frame for an absolute master-timeline position. */
@@ -551,7 +979,6 @@ export function drawMasterVisualFrame(
   }
 
   if (vis.phase === "transition" && vis.fromIndex !== vis.toIndex) {
-    const t = slideOffset(vis.slideT);
     const fromScene = scenes[vis.fromIndex];
     const fromOpts = {
       ...opts,
@@ -562,26 +989,18 @@ export function drawMasterVisualFrame(
           ? questionMarkCountdownMs(fromScene)
           : opts.markHoldElapsedMs,
     };
-    const fromLayer = drawSceneFrameToLayer(
-      fromScene,
-      1,
-      W,
-      H,
-      assets,
-      fromOpts,
-    );
-    const toLayer = drawSceneFrameToLayer(
-      scenes[vis.toIndex],
-      0,
+    drawSlideTransition(
+      ctx,
+      scenes,
+      vis.fromIndex,
+      vis.toIndex,
+      vis.slideT,
       W,
       H,
       assets,
       opts,
+      fromOpts,
     );
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(fromLayer, -t * W, 0, W, H);
-    ctx.drawImage(toLayer, (1 - t) * W, 0, W, H);
     return;
   }
 
@@ -599,6 +1018,13 @@ export function drawMasterVisualFrame(
       markHoldElapsedMs: timeline.markElapsedMs,
     };
     drawProgress = timeline.questionProgress;
+  } else if (
+    activeScene.kind === "template" &&
+    activeScene.templateKind === "countdown"
+  ) {
+    drawProgress = templateCountdownProgress(vis.elapsedSpeechMs, activeScene.templateCountdownSec);
+  } else if (activeScene.kind === "recording") {
+    drawOpts = { ...opts, elapsedSpeechMs: vis.elapsedSpeechMs };
   }
   drawSceneFrame(ctx, activeScene, drawProgress, W, H, assets, drawOpts);
 }
@@ -606,8 +1032,13 @@ export function drawMasterVisualFrame(
 export function masterTimelineDurationMs(scenes: Scene[]): number {
   if (scenes.length === 0) return 0;
   const last = scenes[scenes.length - 1];
-  if (last.endMs != null) return last.endMs;
+  if (!last) return 0;
   const start = last.startMs ?? 0;
-  return start + revealSpeechDurationMs(last);
+  const computed = start + revealSpeechDurationMs(last);
+  if (last.kind === "template" && last.templateKind === "countdown") {
+    return computed;
+  }
+  if (last.endMs != null) return Math.max(last.endMs, computed);
+  return computed;
 }
 

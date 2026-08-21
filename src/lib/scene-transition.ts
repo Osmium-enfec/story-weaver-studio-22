@@ -1,27 +1,58 @@
 import type { Scene } from "@/components/VideoPlayer";
 import { revealSpeechDurationMs, speechProgressInScene } from "./reveal-schedule";
 import { questionPostSpeechVisualMs, questionPreQuestionMs } from "./question-scene-layout";
+import { templateCountdownDurationMs } from "@/lib/template-scene-canvas";
+import {
+  DEFAULT_TRANSITION_DURATION_MS,
+  getTransitionSfx,
+} from "@/lib/part-transition";
 
 /** Spoken clip length within a stitched master window (excludes trailing hold + whoosh). */
 function stitchedClipDurationMs(
-  scene: Pick<Scene, "startMs" | "endMs" | "masterAudioUrl" | "holdMs" | "transitionMs" | "kind" | "questionMarkGapMs" | "questionMarkCountdownSec">,
+  scene: Pick<
+    Scene,
+    | "startMs"
+    | "endMs"
+    | "masterAudioUrl"
+    | "holdMs"
+    | "transitionMs"
+    | "kind"
+    | "templateKind"
+    | "templateCountdownSec"
+    | "durationMs"
+    | "questionMarkGapMs"
+    | "questionMarkCountdownSec"
+    | "questionMarkDurationMs"
+  >,
   hasGap: boolean,
 ): number | null {
-  if (!hasGap || scene.endMs == null || scene.startMs == null) return null;
+  if (scene.endMs == null || scene.startMs == null) return null;
   if (scene.endMs <= scene.startMs) return null;
   if (!scene.masterAudioUrl) return null;
   const windowMs = scene.endMs - scene.startMs;
-  return Math.max(0, windowMs - sceneGapMs(scene));
+  let clipMs: number;
+  if (hasGap) {
+    clipMs = Math.max(0, windowMs - sceneGapMs(scene));
+  } else if (scene.kind === "question") {
+    const hold = sceneHoldMs(scene);
+    clipMs = hold > 0 ? Math.max(0, windowMs - hold) : windowMs;
+  } else {
+    clipMs = windowMs;
+  }
+  if (scene.kind === "template" && scene.templateKind === "countdown") {
+    return templateCountdownDurationMs(scene.templateCountdownSec);
+  }
+  return clipMs;
 }
 
 /** Hold the finished scene on screen after narration ends. */
 export const SCENE_HOLD_MS = 2000;
 
-/** Bundled whoosh — dragon-studio-simple-whoosh-382724.mp3 (~575ms). */
-export const TRANSITION_SFX_URL = "/transition-whoosh.mp3";
+/** Bundled swoosh (default transition voice). */
+export const TRANSITION_SFX_URL = getTransitionSfx("swoosh").url;
 
-/** Default slide duration; overwritten at stitch time from the SFX clip length. */
-export const SCENE_TRANSITION_MS = 575;
+/** Visual slide duration between scenes (default 1s, matches swoosh). */
+export const SCENE_TRANSITION_MS = DEFAULT_TRANSITION_DURATION_MS;
 
 /** Default total silent gap between scene voice clips (hold + transition). */
 export const SCENE_GAP_MS = SCENE_HOLD_MS + SCENE_TRANSITION_MS;
@@ -29,21 +60,34 @@ export const SCENE_GAP_MS = SCENE_HOLD_MS + SCENE_TRANSITION_MS;
 export function sceneHoldMs(
   scene: Pick<
     Scene,
-    "holdMs" | "kind" | "questionMarkGapMs" | "questionMarkCountdownSec"
+    | "holdMs"
+    | "kind"
+    | "questionMarkGapMs"
+    | "questionMarkCountdownSec"
+    | "questionMarkDurationMs"
+    | "outTransition"
   >,
 ): number {
   if (scene.kind === "question") return questionPostSpeechVisualMs(scene);
-  return scene.holdMs ?? SCENE_HOLD_MS;
+  return scene.holdMs ?? scene.outTransition?.holdMs ?? SCENE_HOLD_MS;
 }
 
-export function sceneTransitionMs(scene: Pick<Scene, "transitionMs">): number {
-  return scene.transitionMs ?? SCENE_TRANSITION_MS;
+export function sceneTransitionMs(
+  scene: Pick<Scene, "transitionMs" | "outTransition">,
+): number {
+  return scene.transitionMs ?? scene.outTransition?.durationMs ?? SCENE_TRANSITION_MS;
 }
 
 export function sceneGapMs(
   scene: Pick<
     Scene,
-    "holdMs" | "transitionMs" | "kind" | "questionMarkGapMs" | "questionMarkCountdownSec"
+    | "holdMs"
+    | "transitionMs"
+    | "kind"
+    | "questionMarkGapMs"
+    | "questionMarkCountdownSec"
+    | "questionMarkDurationMs"
+    | "outTransition"
   >,
 ): number {
   return sceneHoldMs(scene) + sceneTransitionMs(scene);
@@ -85,10 +129,14 @@ export function masterVisualAt(
       introPrefix + speechDur;
 
     const speechEnd = startMs + spokenMs;
+    const isLast = i === scenes.length - 1;
+    const trailingQuestionHold = isLast && scene.kind === "question" && holdMs > 0;
     const visualEnd = hasGap
       ? (scene.endMs ?? speechEnd + holdMs + transitionMs)
-      : speechEnd;
-    const transitionStart = visualEnd - transitionMs;
+      : trailingQuestionHold
+        ? (scene.endMs ?? speechEnd + holdMs)
+        : speechEnd;
+    const transitionStart = hasGap ? visualEnd - transitionMs : visualEnd;
 
     if (tMs < startMs) continue;
     if (tMs >= visualEnd) continue;
@@ -135,6 +183,7 @@ export function masterVisualAt(
         toIndex: i + 1,
       };
     }
+    // Last/only question: stay on mark/countdown hold until visualEnd.
     return {
       phase: "hold",
       sceneIndex: i,

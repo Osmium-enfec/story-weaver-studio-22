@@ -14,7 +14,7 @@ export const requireAuth = createMiddleware({ type: "function" }).server(async (
   }
 
   const token = authHeader.slice("Bearer ".length).trim();
-  const user = localValidateSession(token);
+  const user = await localValidateSession(token);
   if (!user) {
     throw new Error("Unauthorized: Session expired or invalid");
   }
