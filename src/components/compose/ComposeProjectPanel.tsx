@@ -112,6 +112,9 @@ export function ComposeProjectPanel({
 
   const [saving, setSaving] = useState(false);
   const [savingPart, setSavingPart] = useState(false);
+  const [readyBusy, setReadyBusy] = useState(false);
+  const [readyMsg, setReadyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   const [deletingSceneId, setDeletingSceneId] = useState<string | null>(null);
   const [deletingPartId, setDeletingPartId] = useState<string | null>(null);
   const [stitching, setStitching] = useState(false);
