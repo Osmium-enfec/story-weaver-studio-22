@@ -609,6 +609,60 @@ function runFfmpeg(bin: string, args: string[]): Promise<void> {
   });
 }
 
+function ffmpegOutput(bin: string, args: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    const p = spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let err = "";
+    p.stderr.on("data", (d: Buffer) => {
+      err += d.toString();
+    });
+    p.on("error", () => resolve(""));
+    p.on("close", () => resolve(err));
+  });
+}
+
+/**
+ * Detect baked-in black matte (letterbox/pillarbox) on a screen recording.
+ * Returns an ffmpeg `crop=w:h:x:y` value, or null when the frame is already clean.
+ */
+async function detectRecordingCrop(
+  bin: string,
+  src: string,
+): Promise<string | null> {
+  const out = await ffmpegOutput(bin, [
+    "-hide_banner",
+    "-ss",
+    "2",
+    "-t",
+    "6",
+    "-i",
+    src,
+    "-vf",
+    "fps=2,cropdetect=24:2:0",
+    "-f",
+    "null",
+    "-",
+  ]);
+  const matches = [...out.matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)];
+  const last = matches[matches.length - 1];
+  if (!last) return null;
+  const cw = Number(last[1]);
+  const ch = Number(last[2]);
+  const cx = Number(last[3]);
+  const cy = Number(last[4]);
+  if (!cw || !ch) return null;
+  // Ignore a no-op crop and reject absurd crops (mostly-dark real content).
+  const size = await ffmpegOutput(bin, ["-hide_banner", "-i", src]);
+  const dim = size.match(/,\s(\d{2,5})x(\d{2,5})[\s,]/);
+  const sw = dim ? Number(dim[1]) : 0;
+  const sh = dim ? Number(dim[2]) : 0;
+  if (sw && sh) {
+    if (cw >= sw - 2 && ch >= sh - 2) return null;
+    if (cw < sw * 0.35 || ch < sh * 0.35) return null;
+  }
+  return `crop=${cw}:${ch}:${cx}:${cy}`;
+}
+
 function resolvePublicVideoPath(url: string): string | null {
   if (!url || url.startsWith("data:") || url.startsWith("blob:")) return null;
   const rel = url.replace(/^\//, "");
@@ -824,12 +878,18 @@ async function prepareRecordingVideoFrames(
       continue;
     }
 
+    // Trim baked-in black bars (letterbox/pillarbox) before rasterizing.
+    const cropFilter = await detectRecordingCrop(ffmpegBin, src);
+    if (cropFilter) {
+      console.log(`[export] recording matte trim ${mediaUrl}: ${cropFilter}`);
+    }
+
     const bakeHash = hashRecordingBake({
       mediaUrl,
       quality,
       bakeFps,
       fileKey: localFileFingerprint(src),
-      bakeVersion: "pts-zero-v1",
+      bakeVersion: `pts-zero-v2:${cropFilter ?? "nocrop"}`,
     });
     const framesDir = path.join(jobDir(job.id), "rec-frames", String(i));
     mkdirSync(framesDir, { recursive: true });
@@ -843,7 +903,9 @@ async function prepareRecordingVideoFrames(
         "-i",
         src,
         "-vf",
-        `setpts=PTS-STARTPTS,fps=${bakeFps}`,
+        [`setpts=PTS-STARTPTS`, cropFilter, `fps=${bakeFps}`]
+          .filter(Boolean)
+          .join(","),
         "-vsync",
         "cfr",
         "-q:v",
