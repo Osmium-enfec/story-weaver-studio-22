@@ -92,10 +92,10 @@ export function scratchRoot(): string {
 
 export function describeBackends(): {
   db: "postgres" | "sqlite";
-  storage: "spaces" | "disk";
+  storage: "spaces" | "cloud" | "disk";
 } {
   return {
     db: usePostgres() ? "postgres" : "sqlite",
-    storage: useSpaces() ? "spaces" : "disk",
+    storage: useSpaces() ? "spaces" : useCloudStorage() ? "cloud" : "disk",
   };
 }
