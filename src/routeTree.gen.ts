@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
+import { Route as ApiRenderBundlesRouteImport } from './routes/api/render-bundles'
 import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
 import { Route as ApiPersistAssetRouteImport } from './routes/api/persist-asset'
@@ -75,6 +76,11 @@ const ApiTranscribeRoute = ApiTranscribeRouteImport.update({
 const ApiSyncRoute = ApiSyncRouteImport.update({
   id: '/api/sync',
   path: '/api/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRenderBundlesRoute = ApiRenderBundlesRouteImport.update({
+  id: '/api/render-bundles',
+  path: '/api/render-bundles',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRecording2VoiceReplaceRoute =
@@ -231,6 +237,7 @@ export interface FileRoutesByFullPath {
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
+  '/api/render-bundles': typeof ApiRenderBundlesRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -265,6 +272,7 @@ export interface FileRoutesByTo {
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
+  '/api/render-bundles': typeof ApiRenderBundlesRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -301,6 +309,7 @@ export interface FileRoutesById {
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
+  '/api/render-bundles': typeof ApiRenderBundlesRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
+    | '/api/render-bundles'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -371,6 +381,7 @@ export interface FileRouteTypes {
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
+    | '/api/render-bundles'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -406,6 +417,7 @@ export interface FileRouteTypes {
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
+    | '/api/render-bundles'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -436,6 +448,7 @@ export interface RootRouteChildren {
   ApiPersistAssetRoute: typeof ApiPersistAssetRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiRecording2VoiceReplaceRoute: typeof ApiRecording2VoiceReplaceRoute
+  ApiRenderBundlesRoute: typeof ApiRenderBundlesRoute
   ApiSyncRoute: typeof ApiSyncRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
   ApiTtsRoute: typeof ApiTtsRoute
@@ -497,6 +510,13 @@ declare module '@tanstack/react-router' {
       path: '/api/sync'
       fullPath: '/api/sync'
       preLoaderRoute: typeof ApiSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/render-bundles': {
+      id: '/api/render-bundles'
+      path: '/api/render-bundles'
+      fullPath: '/api/render-bundles'
+      preLoaderRoute: typeof ApiRenderBundlesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/recording2-voice-replace': {
@@ -726,6 +746,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPersistAssetRoute: ApiPersistAssetRoute,
   ApiProjectsRoute: ApiProjectsRoute,
   ApiRecording2VoiceReplaceRoute: ApiRecording2VoiceReplaceRoute,
+  ApiRenderBundlesRoute: ApiRenderBundlesRoute,
   ApiSyncRoute: ApiSyncRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
   ApiTtsRoute: ApiTtsRoute,
