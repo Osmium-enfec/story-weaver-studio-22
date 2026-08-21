@@ -94,8 +94,11 @@ export function pgConnectionOptions(connectionString: string): pg.PoolConfig {
   }
   // Trim — Droplet/nano saves often leave trailing spaces/CRLF, which would
   // keep rejectUnauthorized=true and break DO Managed Postgres (private CA).
+  // The managed cloud database (no explicit DATABASE_URL) also presents a
+  // private CA chain, so don't verify it unless explicitly asked to.
+  const cloudFallback = !process.env.DATABASE_URL?.trim();
   const rejectUnauthorized =
-    (process.env.PG_SSL_REJECT_UNAUTHORIZED ?? "").trim() !== "0";
+    (process.env.PG_SSL_REJECT_UNAUTHORIZED ?? "").trim() !== "0" && !cloudFallback;
   return { connectionString: url, ssl: { rejectUnauthorized } };
 }
 
