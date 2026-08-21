@@ -28,6 +28,11 @@ export function isEdgeRuntime(): boolean {
 export function isHostedBuild(): boolean {
   if ((process.env.ENFEC_FORCE_SQLITE ?? "").trim() === "1") return false;
   if (isEdgeRuntime()) return true;
+  // Lovable preview sandbox: disk/SQLite is ephemeral, so mirror the published
+  // app and use the cloud database (same accounts, courses and episodes).
+  if (process.env.LOVABLE_SANDBOX?.trim() === "1" && !process.env.ENFEC_SELF_HOSTED?.trim()) {
+    return true;
+  }
   return (
     process.env.NODE_ENV === "production" &&
     !process.env.ENFEC_SELF_HOSTED?.trim()
