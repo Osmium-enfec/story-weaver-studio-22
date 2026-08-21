@@ -116,7 +116,10 @@ export function localLoginUser(
     .get(normalized) as
     | { id: string; email: string; password_hash: string; created_at: string }
     | undefined;
-  if (!row || !verifyPassword(password, row.password_hash)) {
+  if (!row) {
+    throw new Error("No account found with this email. Please create an account first.");
+  }
+  if (!verifyPassword(password, row.password_hash)) {
     throw new Error("Invalid email or password.");
   }
 
