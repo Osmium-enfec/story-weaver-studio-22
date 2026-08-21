@@ -6,6 +6,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  CloudUpload,
   Download,
   Film,
   Loader2,
@@ -18,7 +19,9 @@ import {
 } from "lucide-react";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import { apiPersistAsset } from "@/lib/compose-api";
+import { apiFreezeBundle } from "@/lib/render-bundles-api";
 import { apiGetProject, apiSaveProject } from "@/lib/projects-api";
+
 import { startNativeExportJob } from "@/lib/native-export-client";
 import type { ExportQuality } from "@/lib/ffmpeg-stitcher";
 import {
