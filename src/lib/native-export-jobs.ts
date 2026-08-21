@@ -878,12 +878,18 @@ async function prepareRecordingVideoFrames(
       continue;
     }
 
+    // Trim baked-in black bars (letterbox/pillarbox) before rasterizing.
+    const cropFilter = await detectRecordingCrop(ffmpegBin, src);
+    if (cropFilter) {
+      console.log(`[export] recording matte trim ${mediaUrl}: ${cropFilter}`);
+    }
+
     const bakeHash = hashRecordingBake({
       mediaUrl,
       quality,
       bakeFps,
       fileKey: localFileFingerprint(src),
-      bakeVersion: "pts-zero-v1",
+      bakeVersion: `pts-zero-v2:${cropFilter ?? "nocrop"}`,
     });
     const framesDir = path.join(jobDir(job.id), "rec-frames", String(i));
     mkdirSync(framesDir, { recursive: true });
