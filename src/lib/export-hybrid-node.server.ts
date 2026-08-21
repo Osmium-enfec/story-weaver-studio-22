@@ -175,8 +175,9 @@ function installNodeGlobals(): GlobalBag {
     hadWindow: Object.prototype.hasOwnProperty.call(g, "window"),
   };
 
-  g.AudioContext = NodeAudioContext;
-  g.OfflineAudioContext = NodeOfflineAudioContext;
+  g.AudioContext = audioMod?.AudioContext;
+  g.OfflineAudioContext = audioMod?.OfflineAudioContext;
+
   // TanStack: `if (typeof document !== "undefined") self.__TSR_ROUTER__ = this`
   if (typeof g.self === "undefined") g.self = globalThis;
   if (typeof g.window === "undefined") g.window = globalThis;
