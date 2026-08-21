@@ -97,14 +97,17 @@ function AdminPage() {
   const [data, setData] = useState<AdminOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"users" | "courses" | "assignments" | "exports">(
-    "users",
-  );
+  const [tab, setTab] = useState<
+    "users" | "courses" | "assignments" | "exports" | "bundles"
+  >("users");
   const [usersPage, setUsersPage] = useState(1);
   const [coursesPage, setCoursesPage] = useState(1);
   const [assignmentsPage, setAssignmentsPage] = useState(1);
   const [exportsPage, setExportsPage] = useState(1);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [bundles, setBundles] = useState<RenderBundleItem[] | null>(null);
+  const [bundlesError, setBundlesError] = useState<string | null>(null);
+
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     try {
