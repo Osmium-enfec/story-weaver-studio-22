@@ -30,6 +30,7 @@ import {
   type SceneCompletionProgress,
 } from "@/lib/part-script";
 import { newCodeTypingBeatId } from "@/lib/code-scene-sfx";
+import { COMMON_INTRO_VIDEO_URL, COMMON_OUTRO_VIDEO_URL } from "@/lib/common-intro-outro";
 
 export interface PartScriptPanelProps {
   plan: PartScriptPlan;
