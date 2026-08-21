@@ -890,8 +890,8 @@ function RecordingSceneStage({
     const sync = () => {
       if (v.videoWidth > 0 && v.videoHeight > 0) {
         setVideoSize({ w: v.videoWidth, h: v.videoHeight });
-        // Matte crop is for screen recordings with baked bars — skip for video clips.
-        if (!scene.mediaUrl || isVideoClip) {
+        // Matte crop removes baked black bars for every recording/clip.
+        if (!scene.mediaUrl) {
           setContentCrop(null);
           return;
         }
