@@ -668,10 +668,8 @@ export function drawRecordingSceneFrame(
 ) {
   const background = opts.background ?? DEFAULT_BACKGROUND;
   const customBg = background.kind !== "whiteboard";
-  /** Video clip: contain (no stretch). Screen recordings stretch after matte crop. */
-  const isVideoClip =
-    scene.recordingUseEmbeddedAudio === true && scene.recordingVoiceReplace !== true;
-  const cameraFit = isVideoClip ? "contain" : "fill";
+  /** All recordings/clips stretch edge-to-edge after matte crop (no black bars). */
+  const cameraFit = "fill" as const;
 
   if (!opts.contentOnly) {
     drawSceneBackground(ctx, W, H, opts);
@@ -706,10 +704,9 @@ export function drawRecordingSceneFrame(
       scene.recordingCameraKeyframes,
       opts.elapsedSpeechMs ?? 0,
     );
-    const crop =
-      !isVideoClip && url
-        ? detectAndCacheVideoContentCrop(url, src, iw, ih)
-        : { x: 0, y: 0, w: iw, h: ih };
+    const crop = url
+      ? detectAndCacheVideoContentCrop(url, src, iw, ih)
+      : { x: 0, y: 0, w: iw, h: ih };
     const local = recordingCameraDrawRects(
       crop.w,
       crop.h,
