@@ -1034,35 +1034,36 @@ function ComposePage() {
       setSelectedCropId(null);
       setGeneratingImage(false);
 
-      // SAM 2 → transparent layers → timeline-ready crops
-      setSegmentingLayers(true);
-      try {
-        const { crops, warning } = await autoLayersFromComposite(img.imageUrl, {
-          segment: runSegment,
-          fetchMask: runFetchMask,
-        });
-        setDraft((d) => ({
-          ...d,
-          crops,
-          placements: [],
-        }));
-        if (crops.length > 0) {
-          setSelectedCropId(crops[0]!.id);
-          setOpenSteps((s) => (s.includes("crop") ? s : [...s, "crop"]));
-        }
-        if (warning) setError(warning);
-      } catch (segErr: unknown) {
-        setError(
-          segErr instanceof Error
-            ? `Image generated, but layering failed: ${segErr.message}`
-            : "Image generated, but layering failed.",
-        );
-      } finally {
-        setSegmentingLayers(false);
-      }
+      // Layers stay manual: crop elements by dragging on the image, or run
+      // SAM 2 explicitly from the "Auto-detect layers" button.
+      setOpenSteps((s) => (s.includes("crop") ? s : [...s, "crop"]));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setGeneratingImage(false);
+    }
+  }
+
+  /** Explicit SAM 2 pass — only runs when the user asks for it. */
+  async function handleAutoLayers() {
+    const composite = draft.compositeUrl;
+    if (!composite) {
+      setError("Complete the image step first.");
+      return;
+    }
+    setError(null);
+    setSegmentingLayers(true);
+    try {
+      const { crops, warning } = await autoLayersFromComposite(composite, {
+        segment: runSegment,
+        fetchMask: runFetchMask,
+      });
+      setDraft((d) => ({ ...d, crops, placements: [] }));
+      if (crops.length > 0) setSelectedCropId(crops[0]!.id);
+      if (warning) setError(warning);
+    } catch (segErr: unknown) {
+      setError(segErr instanceof Error ? `Layering failed: ${segErr.message}` : "Layering failed.");
+    } finally {
+      setSegmentingLayers(false);
     }
   }
 
@@ -3581,6 +3582,7 @@ function ComposePage() {
           lastImagePrompt={lastImagePrompt}
           generatingImage={generatingImage}
           segmentingLayers={segmentingLayers}
+          onAutoLayers={handleAutoLayers}
           generatingTts={generatingTts}
           saving={saving}
           showPreview={showPreview}

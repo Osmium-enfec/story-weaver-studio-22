@@ -4,6 +4,8 @@ import { extractLayer } from "@/lib/layer-compose";
 import type { ReplicateSegment } from "@/lib/segment-layers.functions";
 
 const MIN_AREA_FRAC = 0.002;
+/** Masks covering nearly the whole frame are the background, not an element. */
+const MAX_AREA_FRAC = 0.85;
 const MAX_LAYERS = 20;
 
 type SegmentResult =
@@ -58,6 +60,7 @@ export async function autoLayersFromComposite(
   });
   const imgArea = Math.max(1, probe.naturalWidth * probe.naturalHeight);
   const minArea = imgArea * MIN_AREA_FRAC;
+  const maxArea = imgArea * MAX_AREA_FRAC;
 
   const extracted: { crop: ComposeCrop; area: number; y: number }[] = [];
 
@@ -66,7 +69,7 @@ export async function autoLayersFromComposite(
     try {
       const proxied = await runners.fetchMask({ data: { url: layer.maskUrl } });
       const bitmap = await extractLayer(compositeDataUrl, proxied.dataUrl);
-      if (bitmap.area < minArea) continue;
+      if (bitmap.area < minArea || bitmap.area > maxArea) continue;
 
       const W = probe.naturalWidth || 1;
       const H = probe.naturalHeight || 1;
