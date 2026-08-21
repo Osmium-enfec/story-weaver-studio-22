@@ -31,6 +31,18 @@ export const Route = createFileRoute("/api/render-bundles")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        try {
+          return await handlePost(request);
+        } catch (e) {
+          console.error("[render-bundles] POST failed", e);
+          return jsonError(e instanceof Error ? e.message : "Render bundle request failed", 500);
+        }
+      },
+    },
+  },
+});
+
+async function handlePost(request: Request): Promise<Response> {
         let user;
         try {
           user = await requireApiUser(request);
@@ -100,10 +112,7 @@ export const Route = createFileRoute("/api/render-bundles")({
           if (e instanceof BundleValidationError) return jsonError(e.message, 422);
           return jsonError(e instanceof Error ? e.message : "Freeze failed", 500);
         }
-      },
-    },
-  },
-});
+}
 
 async function ownerEmail(userId: string): Promise<string> {
   const { localGetUserById } = await import("@/lib/local-auth-db");
