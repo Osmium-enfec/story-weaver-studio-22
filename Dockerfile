@@ -33,6 +33,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
+ENV ENFEC_SELF_HOSTED=1
 ENV ENFEC_DATA_ROOT=/var/lib/divstudio/data
 ENV ENFEC_SCRATCH_ROOT=/var/lib/divstudio/scratch
 
