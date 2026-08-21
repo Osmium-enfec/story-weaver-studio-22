@@ -360,19 +360,20 @@ function tryMatchBox(
     if (!hit) tryKeywords(keywordsForBinding(binding, cover));
   }
 
-  if (!hit) return { match: null, nextCursor: fromWordIdx };
+  const anchor: PhraseAnchor | null = hit;
+  if (!anchor) return { match: null, nextCursor: fromWordIdx };
 
-  usedWordIndices?.add(hit.endWordIdx);
+  usedWordIndices?.add(anchor.endWordIdx);
 
   return {
     match: {
       boxIndex,
-      startSec: hit.startSec,
+      startSec: anchor.startSec,
       phrase: usedPhrase,
       source,
-      endWordIdx: hit.endWordIdx,
+      endWordIdx: anchor.endWordIdx,
     },
-    nextCursor: Math.max(fromWordIdx, hit.endWordIdx + 1),
+    nextCursor: Math.max(fromWordIdx, anchor.endWordIdx + 1),
   };
 }
 
