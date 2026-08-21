@@ -55,9 +55,10 @@ export function CropCanvas({
 
   function onPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
+    e.preventDefault();
     const p = pointerToLocal(e);
     setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    containerRef.current?.setPointerCapture?.(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent) {
@@ -66,13 +67,27 @@ export function CropCanvas({
     setDrag({ ...drag, x1: p.x, y1: p.y });
   }
 
-  function onPointerUp() {
+  function onPointerUp(e?: React.PointerEvent) {
+    if (e) containerRef.current?.releasePointerCapture?.(e.pointerId);
     if (!drag) return;
     const left = Math.min(drag.x0, drag.x1);
     const top = Math.min(drag.y0, drag.y1);
     const width = Math.abs(drag.x1 - drag.x0);
     const height = Math.abs(drag.y1 - drag.y0);
     setDrag(null);
+
+    // A plain click (no drag) selects the crop under the cursor instead of
+    // creating a layer — only a dragged rectangle of real size crops.
+    if (width < 8 || height < 8) {
+      const nx = (left - fit.x) / (fit.w || 1);
+      const ny = (top - fit.y) / (fit.h || 1);
+      const hit = crops.find(
+        (c) =>
+          nx >= c.bbox.x && nx <= c.bbox.x + c.bbox.w && ny >= c.bbox.y && ny <= c.bbox.y + c.bbox.h,
+      );
+      onSelectCrop(hit ? hit.id : null);
+      return;
+    }
 
     const bbox = screenRectToNormBbox(left, top, width, height, fit);
     const img = imgRef.current;
@@ -109,7 +124,7 @@ export function CropCanvas({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
+        onPointerCancel={onPointerUp}
       >
         {fit.w > 0 && (
           <div
@@ -127,13 +142,7 @@ export function CropCanvas({
             {crops.map((c) => (
               <div
                 key={c.id}
-                role="button"
-                tabIndex={0}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  onSelectCrop(c.id);
-                }}
-                className={`absolute border-2 ${
+                className={`pointer-events-none absolute border-2 ${
                   selectedCropId === c.id ? "border-primary bg-primary/10" : "border-blue-400/80"
                 }`}
                 style={{
