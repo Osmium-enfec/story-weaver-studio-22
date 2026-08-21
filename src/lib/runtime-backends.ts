@@ -61,6 +61,18 @@ export function usePostgres(): boolean {
   return Boolean(postgresUrl()) || useCloudRest();
 }
 
+/**
+ * Hosted build with no Spaces credentials: store/serve media in the cloud
+ * storage bucket, since the edge runtime has no writable disk.
+ */
+export function useCloudStorage(): boolean {
+  if (useSpaces()) return false;
+  if (!isHostedBuild()) return false;
+  return Boolean(
+    process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
+  );
+}
+
 export function useSpaces(): boolean {
   return Boolean(
     process.env.SPACES_BUCKET?.trim() &&
