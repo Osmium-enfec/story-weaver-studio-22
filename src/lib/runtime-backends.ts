@@ -45,8 +45,20 @@ export function postgresUrl(): string {
 
 
 
+/**
+ * Hosted build with no Postgres connection string: talk to the cloud database
+ * over HTTP (service-role RPC) instead of raw TCP, which edge runtimes lack.
+ */
+export function useCloudRest(): boolean {
+  if (postgresUrl()) return false;
+  if (!isHostedBuild()) return false;
+  return Boolean(
+    process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
+  );
+}
+
 export function usePostgres(): boolean {
-  return Boolean(postgresUrl());
+  return Boolean(postgresUrl()) || useCloudRest();
 }
 
 export function useSpaces(): boolean {

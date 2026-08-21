@@ -1,5 +1,5 @@
 import pg from "pg";
-import { postgresUrl } from "@/lib/runtime-backends";
+import { postgresUrl, useCloudRest } from "@/lib/runtime-backends";
 
 /** Cloud fallback (published app) keeps app tables in the private `app` schema. */
 function usingCloudFallback(): boolean {
@@ -117,6 +117,7 @@ export function getPgPool(): pg.Pool {
 
 /** Create tables/indexes if missing. Safe to call repeatedly. */
 export async function ensurePgSchema(): Promise<void> {
+  if (useCloudRest()) return;
   if (!postgresUrl()) return;
   // Cloud fallback: schema is provisioned by migration; the app role cannot DDL.
   if (usingCloudFallback()) return;
@@ -132,10 +133,40 @@ export async function ensurePgSchema(): Promise<void> {
   return schemaPromise;
 }
 
+/**
+ * Hosted/edge runtime has no raw TCP Postgres access and no connection string,
+ * so queries go through the service-role-only `app_exec_sql` RPC instead.
+ */
+async function restQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
+  text: string,
+  params?: unknown[],
+): Promise<pg.QueryResult<T>> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.rpc("app_exec_sql" as never, {
+    q: text,
+    params: (params ?? []).map((p) =>
+      p === null || p === undefined ? null : typeof p === "string" ? p : String(p),
+    ),
+  } as never);
+  if (error) throw new Error(error.message);
+  const payload = (data ?? { rows: [], rowCount: 0 }) as {
+    rows: T[];
+    rowCount: number;
+  };
+  return {
+    rows: payload.rows ?? [],
+    rowCount: payload.rowCount ?? 0,
+    command: "",
+    oid: 0,
+    fields: [],
+  } as unknown as pg.QueryResult<T>;
+}
+
 export async function pgQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params?: unknown[],
 ): Promise<pg.QueryResult<T>> {
+  if (useCloudRest()) return restQuery<T>(text, params);
   await ensurePgSchema();
   return getPgPool().query<T>(text, params);
 }

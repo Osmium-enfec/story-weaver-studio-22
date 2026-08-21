@@ -26,6 +26,7 @@ export const Route = createFileRoute("/api/public/runtime-info")({
           nodeEnv: process.env.NODE_ENV ?? null,
           hasDatabaseUrl: Boolean(process.env.DATABASE_URL?.trim()),
           hasCloudDbUrl: Boolean(process.env.SUPABASE_DB_URL?.trim()),
+          hasServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
           backends: describeBackends(),
           dbOk,
           dbError,
