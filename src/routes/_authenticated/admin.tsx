@@ -266,6 +266,8 @@ function AdminPage() {
                   ["courses", "Courses"],
                   ["assignments", "Assignments"],
                   ["exports", "Exports"],
+                  ["bundles", "Ready for HD"],
+
                 ] as const
               ).map(([id, label]) => (
                 <button
