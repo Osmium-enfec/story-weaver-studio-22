@@ -409,6 +409,7 @@ function sqliteListProjects(
              FROM projects WHERE course_id = ? ORDER BY title ASC`,
           )
           .all(opts.courseId) as Record<string, unknown>[];
+        rows.sort(naturalByTitle);
       }
     } else if (opts?.requireCourse) {
       rows = conn
@@ -443,6 +444,7 @@ function sqliteListProjects(
          FROM projects WHERE course_id = ? ORDER BY title ASC`,
       )
       .all(opts.courseId) as Record<string, unknown>[];
+    rows.sort(naturalByTitle);
   } else {
     // Non-admins never browse unassigned episodes.
     rows = conn
