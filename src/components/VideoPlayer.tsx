@@ -948,16 +948,14 @@ function RecordingSceneStage({
 
   const cameraView = useMemo(() => {
     if (!videoSize.w || !videoSize.h || !stageSize.w || !stageSize.h) return null;
-    // Screen recordings: crop baked mattes then stretch. Video clips: full frame, contain.
+    // Crop baked mattes then stretch to fill (no letterboxing).
     const crop =
-      !isVideoClip && contentCrop
-        ? contentCrop
-        : {
-            x: 0,
-            y: 0,
-            w: videoSize.w,
-            h: videoSize.h,
-          };
+      contentCrop ?? {
+        x: 0,
+        y: 0,
+        w: videoSize.w,
+        h: videoSize.h,
+      };
     const local = recordingCameraDrawRects(
       crop.w,
       crop.h,
