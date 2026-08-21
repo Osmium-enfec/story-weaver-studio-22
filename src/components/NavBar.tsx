@@ -37,7 +37,7 @@ export function NavBar() {
   return (
     <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-40">
       <div className="flex w-full items-center justify-between px-4 py-3 xl:px-8">
-        <Link to="/compose" className="flex items-center gap-2 font-semibold">
+        <Link to="/compose" search={{}} className="flex items-center gap-2 font-semibold">
           <Sparkles size={18} className="text-primary" />
           <span>Explainer Studio</span>
         </Link>
