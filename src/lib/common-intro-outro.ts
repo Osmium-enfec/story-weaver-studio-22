@@ -5,6 +5,9 @@ import {
   type ComposeRecordingDraft,
 } from "@/lib/compose-scene";
 import { sceneGapMs } from "@/lib/scene-transition";
+import commonIntroAsset from "@/assets/media/common-intro.mp4.asset.json";
+import commonOutroAsset from "@/assets/media/common-outro.mp4.asset.json";
+import commonIntroOutroAsset from "@/assets/media/common-intro-outro.mp4.asset.json";
 
 /** Brand bumper for Script Intro scenes. */
 export const COMMON_INTRO_VIDEO_URL = commonIntroAsset.url;
@@ -49,7 +52,8 @@ export function isCommonIntroOutroMediaUrl(url: string | null | undefined): bool
   return (
     url === COMMON_INTRO_VIDEO_URL ||
     url === COMMON_OUTRO_VIDEO_URL ||
-    url === COMMON_INTRO_OUTRO_VIDEO_URL
+    url === COMMON_INTRO_OUTRO_VIDEO_URL ||
+    (url != null && LEGACY_BUMPER_URLS.includes(url))
   );
 }
 
@@ -75,7 +79,7 @@ export function bgmMuteRangesMs(scenes: Scene[]): { startMs: number; endMs: numb
       if (!isCommonIntroOutroScene(scene)) continue;
       const startMs = scene.startMs ?? 0;
       const fallbackMs =
-        scene.mediaUrl === COMMON_OUTRO_VIDEO_URL
+        commonBumperLabelForScene(scene) === "Outro"
           ? COMMON_OUTRO_DURATION_MS
           : COMMON_INTRO_DURATION_MS;
       const clipMs = Math.max(0, scene.durationMs ?? fallbackMs);
@@ -175,10 +179,14 @@ export function commonBumperLabelForScene(
   if (scene.subtitle === "Intro" || scene.subtitle === "Outro") {
     return scene.subtitle;
   }
-  if (scene.mediaUrl === COMMON_OUTRO_VIDEO_URL) return "Outro";
+  if (scene.mediaUrl === COMMON_OUTRO_VIDEO_URL || scene.mediaUrl === "/common-outro.mp4") {
+    return "Outro";
+  }
   if (
     scene.mediaUrl === COMMON_INTRO_VIDEO_URL ||
-    scene.mediaUrl === COMMON_INTRO_OUTRO_VIDEO_URL
+    scene.mediaUrl === COMMON_INTRO_OUTRO_VIDEO_URL ||
+    scene.mediaUrl === "/common-intro.mp4" ||
+    scene.mediaUrl === "/common-intro-outro.mp4"
   ) {
     return "Intro";
   }

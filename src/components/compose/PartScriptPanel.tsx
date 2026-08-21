@@ -499,9 +499,9 @@ export function PartScriptPanel({
                     <video
                       src={
                         scene.type === "outro"
-                          ? "/common-outro.mp4"
+                          ? COMMON_OUTRO_VIDEO_URL
                           : scene.type === "intro"
-                            ? "/common-intro.mp4"
+                            ? COMMON_INTRO_VIDEO_URL
                             : scene.mediaUrl!
                       }
                       className="max-h-40 w-full rounded-md border bg-black object-contain"
