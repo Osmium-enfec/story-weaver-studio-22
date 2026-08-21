@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
-import { login, register } from "@/lib/auth.functions";
+import { apiLogin, apiRegister } from "@/lib/auth-api";
 import { getStoredSession, persistAuthSession } from "@/lib/auth-client";
 import { Loader2, Sparkles } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
@@ -18,8 +17,6 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const runLogin = useServerFn(login);
-  const runRegister = useServerFn(register);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -27,7 +24,7 @@ function AuthPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getStoredSession()) navigate({ to: "/compose", search: {}, replace: true });
+    if (getStoredSession()) navigate({ to: "/courses", replace: true });
   }, [navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -37,10 +34,10 @@ function AuthPage() {
     try {
       const result =
         mode === "signin"
-          ? await runLogin({ data: { email, password } })
-          : await runRegister({ data: { email, password } });
+          ? await apiLogin(email, password)
+          : await apiRegister(email, password);
       persistAuthSession({ token: result.token, user: result.user });
-      navigate({ to: "/compose", search: {} });
+      navigate({ to: "/courses" });
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally {

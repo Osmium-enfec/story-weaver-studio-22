@@ -2,14 +2,23 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuth } from "@/integrations/auth/auth-middleware";
 import { buildCompositeImagePrompt } from "@/lib/course-visual-style";
-import { generateCompositeImageDirect } from "@/lib/explainer.functions";
+import { houseStyleReferenceUrls } from "@/lib/house-style.server";
+import {
+  IMAGE_ASPECT_OPTIONS,
+  IMAGE_MODEL_OPTIONS,
+  generateReplicateImageDataUrl,
+  styleLine,
+} from "@/lib/replicate-image";
 
 const ScriptInput = z
   .object({
     script: z.string().max(4000).optional().default(""),
     title: z.string().max(120).optional(),
-    /** Sent verbatim to gpt-image-1 — no extra wrapping or brief step. */
+    /** Sent verbatim as the final prompt — no course-style wrapping applied. */
     imagePrompt: z.string().max(8000).optional(),
+    model: z.enum(IMAGE_MODEL_OPTIONS).default("nano-banana-2"),
+    /** 16:9 matches COURSE_VISUAL_STYLE's landscape band layout. */
+    aspectRatio: z.enum(IMAGE_ASPECT_OPTIONS).default("16:9"),
   })
   .superRefine((data, ctx) => {
     const direct = data.imagePrompt?.trim() ?? "";
@@ -46,18 +55,34 @@ export const generateComposeImage = createServerFn({ method: "POST" })
     const script = data.script?.trim() ?? "";
     const title = deriveTitle(script, data.title, directPrompt);
 
-    // Always send exactly one prompt string — never restructure via a separate brief step.
-    const imagePrompt =
-      directPrompt || (script ? buildCompositeImagePrompt(script, title) : "");
-    if (!imagePrompt) {
+    // Deliberately NOT the md §3 wrapper: it forbids typography and asks for a
+    // single illustration, but compose needs labelled cards it can crop and
+    // animate one-by-one. COURSE_VISUAL_STYLE encodes that layout.
+    const basePrompt = directPrompt || buildCompositeImagePrompt(script, title);
+    if (!basePrompt) {
       throw new Error("Provide a custom image prompt or a script.");
     }
 
-    const imageUrl = await generateCompositeImageDirect(imagePrompt);
+    // The house style is always applied — every scene must share one look.
+    const referenceUrls = await houseStyleReferenceUrls();
+
+    const imagePrompt = [basePrompt, styleLine(referenceUrls.length)]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const imageUrl = await generateReplicateImageDataUrl({
+      model: data.model,
+      prompt: imagePrompt,
+      aspect: data.aspectRatio,
+      referenceUrls,
+    });
     return {
       imageUrl,
       title,
       imagePrompt,
+      model: data.model,
+      aspectRatio: data.aspectRatio,
+      styleRefCount: referenceUrls.length,
       promptMode: directPrompt ? ("direct" as const) : ("auto" as const),
     };
   });

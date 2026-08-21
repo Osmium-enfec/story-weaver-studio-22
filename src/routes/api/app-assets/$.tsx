@@ -1,37 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { contentTypeForExt } from "@/lib/asset-mime";
-
-function appAssetsRoot(): string {
-  return path.join(process.cwd(), ".data", "app-assets");
-}
+import { readAsset } from "@/lib/object-storage";
 
 export const Route = createFileRoute("/api/app-assets/$")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
+      GET: async ({ params, request }) => {
         const rel = params._splat ?? "";
         if (!rel || rel.includes("..")) {
           return new Response("Not found", { status: 404 });
         }
 
-        const filePath = path.join(appAssetsRoot(), rel);
-        const resolved = path.resolve(filePath);
-        if (!resolved.startsWith(path.resolve(appAssetsRoot()))) {
-          return new Response("Forbidden", { status: 403 });
-        }
-        if (!existsSync(resolved)) {
-          return new Response("Not found", { status: 404 });
-        }
+        const ext = path.extname(rel).slice(1);
+        const contentType = contentTypeForExt(ext);
+        const result = await readAsset({
+          kind: "app",
+          relPath: rel,
+          contentType,
+          rangeHeader: request.headers.get("range"),
+        });
+        if (!result) return new Response("Not found", { status: 404 });
 
-        const ext = path.extname(resolved).slice(1);
-        const body = readFileSync(resolved);
-        return new Response(body, {
-          headers: {
-            "Content-Type": contentTypeForExt(ext),
-            "Cache-Control": "public, max-age=31536000, immutable",
-          },
+        return new Response(result.body, {
+          status: result.status,
+          headers: result.headers,
         });
       },
     },

@@ -1,6 +1,14 @@
 import type { Scene } from "@/components/VideoPlayer";
 import type { CodeVariant } from "@/components/CodeScene";
 import { canvasFont } from "./scene-font";
+import {
+  buildCodeBeatTimeline,
+  DEFAULT_CODE_OUTPUT_HOLD_MS,
+  DEFAULT_CODE_TYPING_CPS,
+  resolveCodeBeatFrame,
+  resolveCodeTypingBeats,
+  typingVisibleChars,
+} from "./code-scene-sfx";
 
 type TokKind = "kw" | "str" | "num" | "com" | "fn" | "pun" | "txt";
 
@@ -88,6 +96,7 @@ function drawTitleBar(
   h: number,
   title: string,
   fontSize: number,
+  run?: { phase: "idle" | "ready" | "pressing" | "done" },
 ) {
   ctx.fillStyle = "#f8fafc";
   ctx.fillRect(x, y, w, h);
@@ -110,17 +119,94 @@ function drawTitleBar(
     dotX += dotR * 2 + Math.round(fontSize * 0.55);
   }
 
+  const runBtnW = run ? Math.round(fontSize * 4.2) : 0;
+  const runBtnH = Math.round(h * 0.58);
+  const runPad = Math.round(fontSize * 0.7);
+  const runBtnX = run ? x + w - runPad - runBtnW : x + w;
+  const runBtnY = y + (h - runBtnH) / 2;
+
   ctx.fillStyle = "#475569";
   ctx.font = canvasFont(400, Math.round(fontSize * 0.92));
   ctx.textBaseline = "middle";
   const titleX = dotX + Math.round(fontSize * 0.8);
-  const maxTitleW = w - (titleX - x) - fontSize;
+  const maxTitleW = runBtnX - titleX - fontSize * 0.5;
   let shown = title;
   while (shown.length > 0 && ctx.measureText(shown).width > maxTitleW) {
     shown = shown.slice(0, -1);
   }
   if (shown.length < title.length && shown.length > 1) shown = `${shown.slice(0, -1)}…`;
   ctx.fillText(shown, titleX, dotY);
+
+  if (run) {
+    const phase = run.phase;
+    const fill =
+      phase === "idle"
+        ? "#e2e8f0"
+        : phase === "pressing"
+          ? "#047857"
+          : "#10b981";
+    const text = phase === "idle" ? "#94a3b8" : "#ffffff";
+    const scale = phase === "pressing" ? 0.94 : 1;
+    const bw = runBtnW * scale;
+    const bh = runBtnH * scale;
+    const bx = runBtnX + (runBtnW - bw) / 2;
+    const by = runBtnY + (runBtnH - bh) / 2;
+    roundRectPath(ctx, bx, by, bw, bh, Math.round(bh * 0.22));
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.fillStyle = text;
+    ctx.font = `${Math.round(fontSize * 0.72)}px ui-monospace, "SF Mono", Menlo, monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("▶ Run", bx + bw / 2, by + bh / 2 + 0.5);
+    ctx.textAlign = "left";
+  }
+}
+
+function drawOutputPanel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  output: string,
+  fontSize: number,
+) {
+  ctx.fillStyle = "#f8fafc";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + w, y);
+  ctx.stroke();
+
+  const pad = Math.round(fontSize * 0.9);
+  ctx.fillStyle = "#64748b";
+  ctx.font = `${Math.round(fontSize * 0.65)}px ui-monospace, "SF Mono", Menlo, monospace`;
+  ctx.textBaseline = "top";
+  ctx.fillText("OUTPUT", x + pad, y + Math.round(pad * 0.55));
+
+  const lineH = Math.round(fontSize * 1.35);
+  let ly = y + Math.round(pad * 1.55);
+  ctx.fillStyle = "#1e293b";
+  ctx.font = `${Math.round(fontSize * 0.85)}px ui-monospace, "SF Mono", Menlo, monospace`;
+  const maxW = w - pad * 2;
+  for (const rawLine of output.replace(/\r\n/g, "\n").split("\n")) {
+    if (ly + lineH > y + h - pad * 0.4) break;
+    let line = rawLine;
+    while (line.length > 0 && ctx.measureText(line).width > maxW) {
+      let cut = line.length;
+      while (cut > 1 && ctx.measureText(line.slice(0, cut)).width > maxW) cut -= 1;
+      ctx.fillText(line.slice(0, cut), x + pad, ly);
+      ly += lineH;
+      line = line.slice(cut);
+      if (ly + lineH > y + h - pad * 0.4) break;
+    }
+    if (ly + lineH > y + h - pad * 0.4) break;
+    ctx.fillText(line, x + pad, ly);
+    ly += lineH;
+  }
 }
 
 function drawHighlightedLine(
@@ -132,10 +218,13 @@ function drawHighlightedLine(
 ) {
   let cx = x;
   ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
-  ctx.textBaseline = "top";
+  // Alphabetic baseline with vertical centering in the line box avoids
+  // clipping tall glyphs (e.g. `{`) against a tight top clip edge.
+  ctx.textBaseline = "alphabetic";
+  const baseline = y + Math.round(fontSize * 0.85);
   for (const tok of tokenize(line)) {
     ctx.fillStyle = tokenColor(tok.kind);
-    ctx.fillText(tok.text, cx, y);
+    ctx.fillText(tok.text, cx, baseline);
     cx += ctx.measureText(tok.text).width;
   }
 }
@@ -163,9 +252,10 @@ function drawCodeLines(
     ctx.translate(offsetX, 0);
     ctx.fillStyle = "#94a3b8";
     ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
-    ctx.textBaseline = "top";
+    ctx.textBaseline = "alphabetic";
     ctx.textAlign = "right";
-    ctx.fillText(String(idx + 1), contentX + lineNumW - 8, y);
+    const baseline = y + Math.round(fontSize * 0.85);
+    ctx.fillText(String(idx + 1), contentX + lineNumW - 8, baseline);
     ctx.textAlign = "left";
     drawHighlightedLine(ctx, line, contentX + lineNumW, y, fontSize);
     ctx.restore();
@@ -177,6 +267,7 @@ function visibleCodeForVariant(
   variant: CodeVariant,
   progress: number,
   codeTo?: string,
+  typingOpts?: { cps?: number; durationMs?: number },
 ): { lines: string[]; lineOpacity?: (i: number) => number; lineOffsetX?: (i: number) => number; scrollY?: number } {
   if (variant === "scroll") {
     return { lines: code.split("\n"), scrollY: 0 };
@@ -206,8 +297,7 @@ function visibleCodeForVariant(
     return { lines };
   }
 
-  const total = code.length;
-  const shown = Math.floor(total * Math.min(1, progress * 1.15));
+  const shown = typingVisibleChars(code, progress, typingOpts);
   const visible = code.slice(0, shown);
   return { lines: visible.split("\n") };
 }
@@ -225,6 +315,23 @@ export function drawCodeEditor(
   const variant = scene.codeVariant ?? "typing";
   const language = scene.codeLanguage ?? "ts";
   const title = scene.subtitle ?? `example.${language}`;
+  const cps = scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS;
+  const beats = resolveCodeTypingBeats({
+    beats: scene.codeTypingBeats,
+    code,
+    output: scene.codeOutput,
+    runDelayMs: scene.codeRunDelayMs,
+    outputHoldMs: scene.codeOutputHoldMs ?? DEFAULT_CODE_OUTPUT_HOLD_MS,
+  });
+  const useBeats = variant === "typing" && beats.length > 0;
+  const timeline = useBeats ? buildCodeBeatTimeline(beats, cps) : null;
+  const elapsedMs = progress * Math.max(1, scene.durationMs);
+  const frame =
+    timeline != null ? resolveCodeBeatFrame(elapsedMs, timeline, cps) : null;
+  const hasRun = useBeats && beats.some((b) => b.output.trim().length > 0);
+  const phase = frame?.runPhase ?? "idle";
+  const showOutput = hasRun && !!frame?.output;
+  const output = frame?.output ?? "";
   const radius = Math.round(Math.min(w, h) * 0.03);
 
   ctx.save();
@@ -238,55 +345,95 @@ export function drawCodeEditor(
   ctx.stroke();
 
   const titleBarH = Math.max(36, Math.round(h * 0.1));
+  const outputH = showOutput ? Math.max(72, Math.round(h * 0.28)) : 0;
   const fontSize = Math.max(12, Math.round(h * 0.038));
-  const lineH = Math.round(fontSize * 1.5);
+  // Extra line height so braces / tall glyphs aren't clipped at the top of line 1.
+  const lineH = Math.round(fontSize * 1.7);
   const lineNumW = Math.round(fontSize * 2.2);
   const pad = Math.round(fontSize * 1.1);
+  const contentTopPad = Math.round(fontSize * 0.35);
 
-  drawTitleBar(ctx, x, y, w, titleBarH, title, fontSize);
+  drawTitleBar(
+    ctx,
+    x,
+    y,
+    w,
+    titleBarH,
+    title,
+    fontSize,
+    hasRun ? { phase } : undefined,
+  );
 
   const contentX = x + pad;
-  const contentY = y + titleBarH + pad;
+  const contentY = y + titleBarH + pad + contentTopPad;
   const contentW = w - pad * 2;
-  const contentH = h - titleBarH - pad * 2;
+  const contentH = h - titleBarH - outputH - pad * 2 - contentTopPad;
 
   ctx.save();
-  roundRectPath(ctx, x, y + titleBarH, w, h - titleBarH, 0);
+  // Clip to the body below the title bar (not flush to glyph tops).
+  ctx.beginPath();
+  ctx.rect(x, y + titleBarH, w, h - titleBarH - outputH);
   ctx.clip();
   ctx.beginPath();
-  ctx.rect(contentX, contentY, contentW, contentH);
+  ctx.rect(contentX, contentY - contentTopPad, contentW, contentH + contentTopPad);
   ctx.clip();
 
-  const vis = visibleCodeForVariant(code, variant, progress, scene.codeTo);
-  if (variant === "scroll") {
-    const lines = code.split("\n");
-    const contentTotalH = lines.length * lineH + pad;
-    const travel = Math.max(0, contentTotalH - contentH);
-    const scrollY = -travel * progress;
+  if (variant === "typing" && frame) {
+    const lines = frame.visibleCode.split("\n");
+    const contentTotalH = lines.length * lineH;
+    const scrollY = Math.max(0, contentTotalH - contentH);
     ctx.save();
-    ctx.translate(0, scrollY);
+    ctx.translate(0, -scrollY);
     drawCodeLines(ctx, lines, contentX, contentY, lineNumW, fontSize, lineH);
+    if (frame.showCaret) {
+      const lastLine = lines[lines.length - 1] ?? "";
+      const caretY = contentY + (lines.length - 1) * lineH;
+      ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
+      const caretX =
+        contentX +
+        lineNumW +
+        ctx.measureText(lastLine).width +
+        Math.round(fontSize * 0.15);
+      ctx.fillStyle = "#334155";
+      const caretTop = caretY + Math.round(fontSize * 0.15);
+      ctx.fillRect(caretX, caretTop, Math.max(2, fontSize * 0.12), fontSize * 0.9);
+    }
     ctx.restore();
   } else {
-    drawCodeLines(
-      ctx,
-      vis.lines,
-      contentX,
-      contentY,
-      lineNumW,
-      fontSize,
-      lineH,
-      0,
-      vis.lineOpacity,
-      vis.lineOffsetX,
-    );
-
-    if (variant === "typing") {
-      const total = code.length;
-      const shown = Math.floor(total * Math.min(1, progress * 1.15));
-      if (shown < total) {
-        const visible = code.slice(0, shown);
-        const caretLines = visible.split("\n");
+    const vis = visibleCodeForVariant(code, variant, progress, scene.codeTo, {
+      cps: scene.codeTypingCps,
+      durationMs: scene.durationMs,
+    });
+    if (variant === "scroll") {
+      const lines = code.split("\n");
+      const contentTotalH = lines.length * lineH + pad;
+      const travel = Math.max(0, contentTotalH - contentH);
+      const scrollY = -travel * progress;
+      ctx.save();
+      ctx.translate(0, scrollY);
+      drawCodeLines(ctx, lines, contentX, contentY, lineNumW, fontSize, lineH);
+      ctx.restore();
+    } else if (variant === "typing") {
+      const shown = typingVisibleChars(code, progress, {
+        cps: scene.codeTypingCps,
+        durationMs: scene.durationMs,
+      });
+      const visible = code.slice(0, shown);
+      const caretLines = visible.split("\n");
+      const contentTotalH = caretLines.length * lineH;
+      const scrollY = Math.max(0, contentTotalH - contentH);
+      ctx.save();
+      ctx.translate(0, -scrollY);
+      drawCodeLines(
+        ctx,
+        caretLines,
+        contentX,
+        contentY,
+        lineNumW,
+        fontSize,
+        lineH,
+      );
+      if (shown < code.length) {
         const lastLine = caretLines[caretLines.length - 1] ?? "";
         const caretY = contentY + (caretLines.length - 1) * lineH;
         ctx.font = `${fontSize}px ui-monospace, "SF Mono", Menlo, monospace`;
@@ -296,11 +443,31 @@ export function drawCodeEditor(
           ctx.measureText(lastLine).width +
           Math.round(fontSize * 0.15);
         ctx.fillStyle = "#334155";
-        ctx.fillRect(caretX, caretY + 2, Math.max(2, fontSize * 0.12), fontSize * 0.85);
+        const caretTop = caretY + Math.round(fontSize * 0.15);
+        ctx.fillRect(caretX, caretTop, Math.max(2, fontSize * 0.12), fontSize * 0.9);
       }
+      ctx.restore();
+    } else {
+      drawCodeLines(
+        ctx,
+        vis.lines,
+        contentX,
+        contentY,
+        lineNumW,
+        fontSize,
+        lineH,
+        0,
+        vis.lineOpacity,
+        vis.lineOffsetX,
+      );
     }
   }
 
   ctx.restore();
+
+  if (showOutput) {
+    drawOutputPanel(ctx, x, y + h - outputH, w, outputH, output, fontSize);
+  }
+
   ctx.restore();
 }

@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      # Host nginx proxies divstudio.enfeca.com → 127.0.0.1:8092
+      - "8092:3000"
+    env_file:
+      - .env.production
+    environment:
+      PORT: "3000"
+      ENFEC_DATA_ROOT: /var/lib/divstudio/data
+      ENFEC_SCRATCH_ROOT: /var/lib/divstudio/scratch
+      PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      # Override host DNS (127.0.1.1) so Playwright can reach nginx on the gateway.
+      # Bumpers are host-served; EXPORT_BASE_URL must stay the public https origin.
+    extra_hosts:
+      - "divstudio.enfeca.com:host-gateway"
+    volumes:
+      - divstudio_data:/var/lib/divstudio/data
+      - divstudio_scratch:/var/lib/divstudio/scratch
+    restart: unless-stopped
+
+    restart: always

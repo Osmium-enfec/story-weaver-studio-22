@@ -2,13 +2,14 @@ import type { SttWord } from "./audio-slice";
 import { alignSentences, type SentenceRange } from "./audio-slice";
 import type { RevealCover } from "./build-reveal";
 import { questionPostSpeechVisualMs } from "./question-scene-layout";
+import { templateCountdownDurationMs } from "./template-scene-canvas";
 
 const LEAD_MS = 200;
 const DEFAULT_FADE_MS = 700;
 const MIN_FADE_MS = 160;
 const MAX_FADE_MS = 900;
 const DEFAULT_SCENE_HOLD_MS = 2000;
-const DEFAULT_SCENE_TRANSITION_MS = 575;
+const DEFAULT_SCENE_TRANSITION_MS = 1000;
 
 function masterWindowGapMs(scene: {
   holdMs?: number;
@@ -16,6 +17,7 @@ function masterWindowGapMs(scene: {
   kind?: string;
   questionMarkGapMs?: number;
   questionMarkCountdownSec?: number;
+  questionMarkDurationMs?: number;
 }): number {
   const hold =
     scene.kind === "question"
@@ -46,8 +48,11 @@ export function revealSpeechDurationMs(scene: {
   holdMs?: number;
   transitionMs?: number;
   kind?: string;
+  templateKind?: "text" | "countdown" | "typing" | "codeTyping";
+  templateCountdownSec?: number;
   questionMarkGapMs?: number;
   questionMarkCountdownSec?: number;
+  questionMarkDurationMs?: number;
   revealCovers?: RevealCover[];
 }): number {
   let base = 0;
@@ -60,6 +65,10 @@ export function revealSpeechDurationMs(scene: {
       base = windowMs;
     }
   } else base = 15000;
+
+  if (scene.kind === "template" && scene.templateKind === "countdown") {
+    return templateCountdownDurationMs(scene.templateCountdownSec);
+  }
 
   if (scene.revealCovers?.length) {
     base = Math.max(base, lastRevealEndMs(scene.revealCovers) + SCENE_TAIL_MS);

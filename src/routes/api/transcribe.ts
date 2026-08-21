@@ -1,9 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { jsonError, requireApiUser } from "@/lib/api-auth";
 
 export const Route = createFileRoute("/api/transcribe")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        try {
+          await requireApiUser(request);
+        } catch (e) {
+          return e instanceof Response ? e : jsonError("Unauthorized", 401);
+        }
+
         const key = process.env.ELEVENLABS_API_KEY;
         if (!key) {
           return new Response(

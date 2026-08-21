@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { ImagePlus, Upload } from "lucide-react";
+import { RefreshCw, Trash2, Upload } from "lucide-react";
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
@@ -34,42 +34,12 @@ export function ComposeImageUpload({ value, onChange, disabled }: ComposeImageUp
     if (file) readFile(file);
   }
 
+  function openPicker() {
+    if (!disabled) inputRef.current?.click();
+  }
+
   return (
-    <div className="space-y-3">
-      <div
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (!disabled) setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        onClick={() => !disabled && inputRef.current?.click()}
-        className={`flex min-h-[200px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-10 text-center transition ${
-          dragOver ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
-        } ${disabled ? "pointer-events-none opacity-60" : ""}`}
-      >
-        {value ? (
-          <>
-            <img
-              src={value}
-              alt="Uploaded composite"
-              className="mb-3 max-h-48 max-w-full rounded-md object-contain shadow-sm"
-            />
-            <p className="text-sm text-muted-foreground">Click or drop to replace image</p>
-          </>
-        ) : (
-          <>
-            <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
-            <p className="text-sm font-medium">Drag and drop an image here</p>
-            <p className="mt-1 text-xs text-muted-foreground">or click to browse (PNG, JPG, WebP)</p>
-          </>
-        )}
-      </div>
+    <div className="space-y-2">
       <input
         ref={inputRef}
         type="file"
@@ -82,15 +52,76 @@ export function ComposeImageUpload({ value, onChange, disabled }: ComposeImageUp
           e.target.value = "";
         }}
       />
-      {value && (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(null)}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive"
+
+      {!value ? (
+        <div
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") openPicker();
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!disabled) setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          onClick={openPicker}
+          className={`flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-8 text-center transition ${
+            dragOver
+              ? "border-primary bg-primary/5"
+              : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
+          } ${disabled ? "pointer-events-none opacity-60" : ""}`}
         >
-          <ImagePlus size={14} /> Remove image
-        </button>
+          <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
+          <p className="text-sm font-medium">Drag and drop an image here</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            or click to browse (PNG, JPG, WebP)
+          </p>
+        </div>
+      ) : (
+        <div
+          className={`space-y-2 rounded-lg border bg-muted/10 p-2 ${
+            dragOver ? "border-primary bg-primary/5" : ""
+          } ${disabled ? "opacity-60" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!disabled) setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+        >
+          <img
+            src={value}
+            alt="Uploaded"
+            className="mx-auto max-h-48 max-w-full rounded-md border object-contain"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+            <span className="text-xs text-muted-foreground">
+              Image ready — drop a file to replace
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={openPicker}
+                className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Replace
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange(null)}
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

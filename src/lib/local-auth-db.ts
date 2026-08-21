@@ -2,6 +2,9 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { isAdminEmail } from "@/lib/admin";
+import { hostAppDbPath } from "@/lib/host-storage";
+import { usePostgres } from "@/lib/runtime-backends";
 
 export interface AuthUser {
   id: string;
@@ -13,37 +16,15 @@ const SESSION_DAYS = 30;
 
 let db: Database.Database | null = null;
 
-function candidateDirs(): string[] {
-  const dirs: string[] = [];
-  if (process.env.LOCAL_APP_DB) dirs.push(path.dirname(process.env.LOCAL_APP_DB));
-  const cwd = process.cwd();
-  if (cwd && cwd !== "/") dirs.push(path.join(cwd, ".data"));
-  dirs.push("/dev-server/.data", "/tmp/.explainer-data");
-  return dirs;
-}
-
 function dbPath(): string {
-  let lastErr: unknown = null;
-  for (const dir of candidateDirs()) {
-    try {
-      mkdirSync(dir, { recursive: true });
-      return process.env.LOCAL_APP_DB && dir === path.dirname(process.env.LOCAL_APP_DB)
-        ? process.env.LOCAL_APP_DB
-        : path.join(dir, "app.db");
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw new Error(
-    `Unable to create local database directory: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
-  );
+  return hostAppDbPath();
 }
 
 function getDb(): Database.Database {
   if (db) return db;
+  mkdirSync(path.dirname(dbPath()), { recursive: true });
   db = new Database(dbPath());
   db.pragma("journal_mode = WAL");
-
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -89,7 +70,7 @@ function sessionExpiry(): string {
   return d.toISOString();
 }
 
-export function localRegisterUser(email: string, password: string): AuthUser {
+function sqliteRegisterUser(email: string, password: string): AuthUser {
   const conn = getDb();
   const normalized = email.trim().toLowerCase();
   const existing = conn
@@ -105,7 +86,7 @@ export function localRegisterUser(email: string, password: string): AuthUser {
   return { id, email: normalized, created_at: now };
 }
 
-export function localLoginUser(
+function sqliteLoginUser(
   email: string,
   password: string,
 ): { user: AuthUser; token: string } {
@@ -116,10 +97,7 @@ export function localLoginUser(
     .get(normalized) as
     | { id: string; email: string; password_hash: string; created_at: string }
     | undefined;
-  if (!row) {
-    throw new Error("No account found with this email. Please create an account first.");
-  }
-  if (!verifyPassword(password, row.password_hash)) {
+  if (!row || !verifyPassword(password, row.password_hash)) {
     throw new Error("Invalid email or password.");
   }
 
@@ -137,7 +115,7 @@ export function localLoginUser(
   };
 }
 
-export function localValidateSession(token: string): AuthUser | null {
+function sqliteValidateSession(token: string): AuthUser | null {
   if (!token) return null;
   const conn = getDb();
   const row = conn
@@ -158,7 +136,139 @@ export function localValidateSession(token: string): AuthUser | null {
   return { id: row.id, email: row.email, created_at: row.created_at };
 }
 
-export function localLogoutSession(token: string): void {
+function sqliteLogoutSession(token: string): void {
   if (!token) return;
   getDb().prepare("DELETE FROM sessions WHERE token_hash = ?").run(hashToken(token));
+}
+
+function sqliteListUsers(): AuthUser[] {
+  return getDb()
+    .prepare("SELECT id, email, created_at FROM users ORDER BY created_at DESC")
+    .all() as AuthUser[];
+}
+
+function sqliteGetUserById(id: string): AuthUser | null {
+  const row = getDb()
+    .prepare("SELECT id, email, created_at FROM users WHERE id = ?")
+    .get(id) as AuthUser | undefined;
+  return row ?? null;
+}
+
+function sqliteEnsureUser(email: string, password: string): AuthUser {
+  const conn = getDb();
+  const normalized = email.trim().toLowerCase();
+  const existing = conn
+    .prepare("SELECT id, email, created_at FROM users WHERE email = ?")
+    .get(normalized) as AuthUser | undefined;
+  if (existing) return existing;
+  return sqliteRegisterUser(normalized, password);
+}
+
+function sqliteActiveSessionCount(userId: string): number {
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS n FROM sessions
+       WHERE user_id = ? AND expires_at > ?`,
+    )
+    .get(userId, new Date().toISOString()) as { n: number };
+  return Number(row?.n ?? 0);
+}
+
+async function sqliteDeleteUser(userId: string, actorUserId: string): Promise<void> {
+  if (!userId) throw new Error("User id required.");
+  if (userId === actorUserId) {
+    throw new Error("You cannot delete your own account.");
+  }
+  const user = sqliteGetUserById(userId);
+  if (!user) throw new Error("User not found.");
+
+  if (isAdminEmail(user.email)) {
+    throw new Error("Cannot delete an admin account.");
+  }
+
+  const { localClearAssignmentsForUser } = await import("@/lib/local-projects-db");
+  await Promise.resolve(localClearAssignmentsForUser(userId));
+
+  const conn = getDb();
+  conn.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
+  const result = conn.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  if (result.changes < 1) throw new Error("User not found.");
+}
+
+/** Dual-backend: Postgres when DATABASE_URL is set, else local SQLite. */
+export async function localRegisterUser(email: string, password: string): Promise<AuthUser> {
+  if (usePostgres()) {
+    const { pgRegisterUser } = await import("@/lib/pg-auth-db");
+    return pgRegisterUser(email, password);
+  }
+  return sqliteRegisterUser(email, password);
+}
+
+export async function localLoginUser(
+  email: string,
+  password: string,
+): Promise<{ user: AuthUser; token: string }> {
+  if (usePostgres()) {
+    const { pgLoginUser } = await import("@/lib/pg-auth-db");
+    return pgLoginUser(email, password);
+  }
+  return sqliteLoginUser(email, password);
+}
+
+export async function localValidateSession(token: string): Promise<AuthUser | null> {
+  if (usePostgres()) {
+    const { pgValidateSession } = await import("@/lib/pg-auth-db");
+    return pgValidateSession(token);
+  }
+  return sqliteValidateSession(token);
+}
+
+export async function localLogoutSession(token: string): Promise<void> {
+  if (usePostgres()) {
+    const { pgLogoutSession } = await import("@/lib/pg-auth-db");
+    await pgLogoutSession(token);
+    return;
+  }
+  sqliteLogoutSession(token);
+}
+
+export async function localListUsers(): Promise<AuthUser[]> {
+  if (usePostgres()) {
+    const { pgListUsers } = await import("@/lib/pg-auth-db");
+    return pgListUsers();
+  }
+  return sqliteListUsers();
+}
+
+export async function localGetUserById(id: string): Promise<AuthUser | null> {
+  if (usePostgres()) {
+    const { pgGetUserById } = await import("@/lib/pg-auth-db");
+    return pgGetUserById(id);
+  }
+  return sqliteGetUserById(id);
+}
+
+export async function localEnsureUser(email: string, password: string): Promise<AuthUser> {
+  if (usePostgres()) {
+    const { pgEnsureUser } = await import("@/lib/pg-auth-db");
+    return pgEnsureUser(email, password);
+  }
+  return sqliteEnsureUser(email, password);
+}
+
+export async function localActiveSessionCount(userId: string): Promise<number> {
+  if (usePostgres()) {
+    const { pgActiveSessionCount } = await import("@/lib/pg-auth-db");
+    return pgActiveSessionCount(userId);
+  }
+  return sqliteActiveSessionCount(userId);
+}
+
+export async function localDeleteUser(userId: string, actorUserId: string): Promise<void> {
+  if (usePostgres()) {
+    const { pgDeleteUser } = await import("@/lib/pg-auth-db");
+    await pgDeleteUser(userId, actorUserId);
+    return;
+  }
+  await sqliteDeleteUser(userId, actorUserId);
 }

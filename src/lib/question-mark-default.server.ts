@@ -4,6 +4,7 @@ import {
   QUESTION_MARK_SCREEN_TEXT_DEFAULT,
   isDefaultMarkText,
 } from "@/lib/question-scene-layout";
+import { normalizeNarrationText } from "@/lib/narration-text";
 
 const DEFAULT_FILENAME = "question-mark-default.mp3";
 
@@ -19,9 +20,11 @@ export function defaultMarkTtsUrl(): string {
   return `/api/app-assets/${DEFAULT_FILENAME}`;
 }
 
-async function synthesizeMp3(text: string): Promise<Buffer> {
+async function synthesizeMp3(rawText: string): Promise<Buffer> {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new Error("ELEVENLABS_API_KEY missing");
+
+  const text = normalizeNarrationText(rawText);
 
   const ELEVEN_VOICE_ID = process.env.ELEVEN_VOICE_ID ?? "TX3LPaxmHKxFdv7VOQHJ";
   const ELEVEN_MODEL = process.env.ELEVEN_MODEL ?? "eleven_v3";

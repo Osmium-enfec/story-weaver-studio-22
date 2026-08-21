@@ -11,10 +11,16 @@ export function contentTypeForExt(ext: string): string {
       return "audio/mpeg";
     case "wav":
       return "audio/wav";
-    case "webm":
-      return "audio/webm";
     case "ogg":
       return "audio/ogg";
+    case "mp4":
+    case "m4v":
+      return "video/mp4";
+    case "mov":
+      return "video/quicktime";
+    case "webm":
+      // Screen recordings are video; audio-only webm is rare in this app.
+      return "video/webm";
     default:
       return "application/octet-stream";
   }
@@ -32,6 +38,8 @@ export function extFromUrl(url: string, fallback: string): string {
       if (mime.includes("wav")) return "wav";
       if (mime.includes("webm")) return "webm";
       if (mime.includes("ogg")) return "ogg";
+      if (mime.includes("mp4")) return "mp4";
+      if (mime.includes("quicktime")) return "mov";
     }
   }
   return fallback;

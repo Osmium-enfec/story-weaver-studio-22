@@ -98,10 +98,10 @@ export function CropCanvas({
           type="text"
           value={cropName}
           onChange={(e) => setCropName(e.target.value)}
-          placeholder="Name for next crop (optional)"
+          placeholder="Name for next layer (optional)"
           className="h-9 flex-1 min-w-[160px] rounded-md border bg-background px-3 text-sm"
         />
-        <span className="text-xs text-muted-foreground">Drag on image to crop</span>
+        <span className="text-xs text-muted-foreground">Drag on image to add a layer</span>
       </div>
       <div
         ref={containerRef}

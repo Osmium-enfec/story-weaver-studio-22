@@ -1,115 +1,102 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuth } from "@/integrations/auth/auth-middleware";
-import { OPENAI_API, openAIHeaders, requireOpenAIKey } from "@/lib/openai-env";
 import { replicateFetch, requireReplicateKey } from "@/lib/replicate-client";
 
-const Input = z.object({
+/** meta/sam-2 automatic mask generation — community version hash (reference md). */
+const SAM2_VERSION =
+  "fe97b453a6455861e3bac769b441ca1f1086110da7466dbb65cf1eecfd60dc83";
+
+const StartInput = z.object({
   imageDataUrl: z.string().min(20),
-  labels: z.array(z.string()).optional(),
+  pointsPerSide: z.number().int().min(8).max(64).default(32),
+  predIouThresh: z.number().min(0).max(1).default(0.9),
+  stabilityScoreThresh: z.number().min(0).max(1).default(0.96),
+  useM2m: z.boolean().default(true),
+  /** Cap returned masks; -1 = unlimited (we still soft-cap client-side). */
+  maskLimit: z.number().int().min(-1).max(100).default(24),
 });
 
 export interface ReplicateSegment {
   id: string;
   label: string;
-  maskUrl: string; // full-size white-on-black PNG URL (Replicate CDN)
+  maskUrl: string;
 }
 
 type SegmentImageLayersResult =
   | { layers: ReplicateSegment[]; error?: never; fallback?: never }
   | { layers: ReplicateSegment[]; error: string; fallback: true };
 
-async function gatewayFetch(path: string, init: RequestInit) {
-  return replicateFetch(path, init);
+function dataUrlToBlob(dataUrl: string): { blob: Blob; filename: string } {
+  const match = dataUrl.match(/^data:(.+?);base64,(.+)$/);
+  if (!match) throw new Error("Invalid image data URL");
+  const [, mime, b64] = match;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const ext = mime.split("/")[1]?.split("+")[0] ?? "png";
+  return { blob: new Blob([bytes], { type: mime }), filename: `input.${ext}` };
 }
 
-async function runReplicate(
-  owner: string,
-  name: string,
-  input: Record<string, unknown>,
-  timeoutMs = 180_000,
-): Promise<any> {
-  // Try official model endpoint first, fall back to community version endpoint.
-  let create = await gatewayFetch(`/models/${owner}/${name}/predictions`, {
-    method: "POST",
-    body: JSON.stringify({ input }),
-  });
-
-  if (create.status === 404) {
-    // community: need version hash
-    const mv = await gatewayFetch(`/models/${owner}/${name}`, { method: "GET" });
-    if (!mv.ok) throw new Error(`Replicate model lookup failed [${mv.status}]: ${await mv.text()}`);
-    const meta = await mv.json();
-    const version = meta?.latest_version?.id;
-    if (!version) throw new Error("Replicate: no latest_version for model");
-    create = await gatewayFetch(`/predictions`, {
-      method: "POST",
-      body: JSON.stringify({ version, input }),
-    });
+/** Upload image bytes to Replicate Files API; return the get URL for predictions. */
+async function uploadReplicateFile(dataUrl: string): Promise<string> {
+  const { blob, filename } = dataUrlToBlob(dataUrl);
+  const fd = new FormData();
+  fd.append("content", blob, filename);
+  const res = await replicateFetch("/files", { method: "POST", body: fd });
+  if (!res.ok) {
+    throw new Error(`Upload failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
   }
+  const json = (await res.json()) as { urls?: { get?: string }; id?: string };
+  if (json.urls?.get) return json.urls.get;
+  throw new Error("Upload returned no URL");
+}
+
+async function runSam2Prediction(input: Record<string, unknown>): Promise<unknown> {
+  const create = await replicateFetch("/predictions", {
+    method: "POST",
+    body: JSON.stringify({ version: SAM2_VERSION, input }),
+  });
 
   if (create.status === 402) {
-    throw new Error("Replicate account has no credit. Enable billing at replicate.com/account/billing.");
-  }
-  if (create.status === 429) {
-    const body = await create.text();
-    throw new Error(`Replicate rate limited: ${body.slice(0, 200)}`);
+    throw new Error(
+      "Replicate account has no credit. Enable billing at replicate.com/account/billing.",
+    );
   }
   if (!create.ok) {
-    throw new Error(`Replicate create failed [${create.status}]: ${(await create.text()).slice(0, 300)}`);
+    throw new Error(`SAM2 start failed [${create.status}]: ${(await create.text()).slice(0, 300)}`);
   }
 
-  const started = await create.json();
+  const started = (await create.json()) as { id: string };
   const id = started.id;
-  const deadline = Date.now() + timeoutMs;
-  let delay = 2000;
+  if (!id) throw new Error("SAM2 create returned no prediction id");
+
+  const deadline = Date.now() + 180_000;
+  let delay = 3000;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay + 1000, 5000);
-    const pr = await gatewayFetch(`/predictions/${id}`, { method: "GET" });
+    const pr = await replicateFetch(`/predictions/${id}`, { method: "GET" });
     if (!pr.ok) continue;
-    const p = await pr.json();
+    const p = (await pr.json()) as {
+      status: string;
+      output?: { combined_mask?: string; individual_masks?: string[] } | string[] | null;
+      error?: string | null;
+    };
     if (p.status === "succeeded") return p.output;
     if (p.status === "failed" || p.status === "canceled") {
-      throw new Error(`Replicate prediction ${p.status}: ${p.error ?? "unknown"}`);
+      throw new Error(`SAM2 ${p.status}: ${p.error ?? "unknown"}`);
     }
   }
-  throw new Error("Replicate prediction timed out");
+  throw new Error("SAM2 prediction timed out");
 }
 
-async function discoverLabels(imageDataUrl: string): Promise<string[]> {
-  requireOpenAIKey();
-  const prompt = `List every distinct visual element/object in this image as short lowercase noun phrases (1-3 words each), comma separated. Include characters, icons, titles/text-blocks, cards, arrows, footer, robots/mascots, etc. Merge tiny sub-parts into their parent. Max 15 items. Output ONLY the comma-separated list, no prose.`;
-  const res = await fetch(`${OPENAI_API}/chat/completions`, {
-    method: "POST",
-    headers: openAIHeaders(),
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: imageDataUrl } },
-          ],
-        },
-      ],
-    }),
-  });
-  if (!res.ok) throw new Error(`Label discovery failed [${res.status}]: ${(await res.text()).slice(0, 200)}`);
-  const j = await res.json();
-  const text: string = j?.choices?.[0]?.message?.content ?? "";
-  return text
-    .replace(/[\n\r]/g, ",")
-    .split(",")
-    .map((s) => s.trim().toLowerCase().replace(/^[-*•\d.\s]+/, "").replace(/\.$/, ""))
-    .filter((s) => s.length > 0 && s.length < 40)
-    .slice(0, 15);
-}
-
+/**
+ * Segment a composite into SAM 2 masks (B/W PNG URLs).
+ * Follows image-to-layer-sam2-reference.md (community /predictions + version).
+ */
 export const segmentImageLayers = createServerFn({ method: "POST" })
   .middleware([requireAuth])
-  .inputValidator((d: unknown) => Input.parse(d))
+  .inputValidator((d: unknown) => StartInput.parse(d))
   .handler(async ({ data }): Promise<SegmentImageLayersResult> => {
     try {
       requireReplicateKey();
@@ -121,33 +108,33 @@ export const segmentImageLayers = createServerFn({ method: "POST" })
       };
     }
 
-    // SAM 2 automatic mask generation — segments EVERY distinct region instead
-    // of relying on a single text prompt (which collapsed our infographics into
-    // a few coarse card outlines). Labels are used only for naming afterwards.
-    let output: any;
+    let output: unknown;
     try {
-      output = await runReplicate(
-        "meta",
-        "sam-2",
-        {
-          image: data.imageDataUrl,
-          points_per_side: 32,
-          pred_iou_thresh: 0.85,
-          stability_score_thresh: 0.9,
-          use_m2m: true,
-          multimask_output: true,
-        },
-      );
-    } catch (e: any) {
-      return { layers: [], fallback: true, error: `SAM2: ${e?.message ?? e}` };
+      const imageUrl = await uploadReplicateFile(data.imageDataUrl);
+      output = await runSam2Prediction({
+        image: imageUrl,
+        points_per_side: data.pointsPerSide ?? 32,
+        pred_iou_thresh: data.predIouThresh ?? 0.9,
+        stability_score_thresh: data.stabilityScoreThresh ?? 0.96,
+        use_m2m: data.useM2m ?? true,
+        mask_limit: data.maskLimit ?? 24,
+      });
+    } catch (e: unknown) {
+      return {
+        layers: [],
+        fallback: true,
+        error: `SAM2: ${e instanceof Error ? e.message : String(e)}`,
+      };
     }
 
-    // meta/sam-2 output: { combined_mask, individual_masks: [urls...] }
     let maskUrls: string[] = [];
-    if (output && Array.isArray(output.individual_masks)) {
-      maskUrls = output.individual_masks.filter((u: any) => typeof u === "string");
+    if (output && typeof output === "object" && !Array.isArray(output)) {
+      const o = output as { individual_masks?: unknown };
+      if (Array.isArray(o.individual_masks)) {
+        maskUrls = o.individual_masks.filter((u): u is string => typeof u === "string");
+      }
     } else if (Array.isArray(output)) {
-      maskUrls = output.filter((u) => typeof u === "string");
+      maskUrls = output.filter((u): u is string => typeof u === "string");
     }
 
     if (maskUrls.length === 0) {
@@ -158,14 +145,29 @@ export const segmentImageLayers = createServerFn({ method: "POST" })
       };
     }
 
-    const capped = maskUrls.slice(0, 50);
-    const providedLabels = data.labels?.map((l) => l.toLowerCase().trim()).filter(Boolean) ?? [];
-
-    const layers: ReplicateSegment[] = capped.map((url, i) => ({
+    const layers: ReplicateSegment[] = maskUrls.slice(0, 50).map((url, i) => ({
       id: `layer-${i}`,
-      label: providedLabels[i] ?? `region-${i + 1}`,
+      label: `Layer ${i + 1}`,
       maskUrl: url,
     }));
 
     return { layers };
+  });
+
+const ProxyInput = z.object({
+  url: z.string().url().min(8).max(4000),
+});
+
+/** Same-origin proxy: fetch remote mask/image → data URL (avoids canvas taint). */
+export const fetchImageAsDataUrl = createServerFn({ method: "POST" })
+  .middleware([requireAuth])
+  .inputValidator((d: unknown) => ProxyInput.parse(d))
+  .handler(async ({ data }) => {
+    const res = await fetch(data.url);
+    if (!res.ok) {
+      throw new Error(`Fetch image failed (${res.status})`);
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    const mime = res.headers.get("content-type")?.split(";")[0]?.trim() || "image/png";
+    return { dataUrl: `data:${mime};base64,${buf.toString("base64")}` };
   });

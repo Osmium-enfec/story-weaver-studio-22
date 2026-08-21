@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { hostAppDbPath } from "@/lib/host-storage";
 
 export interface ImageAssetHit {
   id: string;
@@ -12,7 +13,7 @@ export interface ImageAssetHit {
 let db: Database.Database | null = null;
 
 function dbPath(): string {
-  return process.env.LOCAL_APP_DB ?? path.join(process.cwd(), ".data", "app.db");
+  return hostAppDbPath();
 }
 
 function getDb(): Database.Database {
