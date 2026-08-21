@@ -33,6 +33,7 @@ function ProjectsPage() {
           </div>
           <Link
             to="/compose"
+            search={{}}
             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
             <Plus size={14} /> New project
@@ -46,6 +47,7 @@ function ProjectsPage() {
             <p className="text-muted-foreground">No saved projects yet.</p>
             <Link
               to="/compose"
+            search={{}}
               className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               <Plus size={14} /> Create your first project
