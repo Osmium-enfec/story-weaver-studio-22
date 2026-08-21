@@ -749,22 +749,6 @@ export function drawRecordingSceneFrame(
           opts.elapsedSpeechMs ?? 0,
         );
       }
-    } else if (isVideoClip) {
-      // Fallback: contain full frame (no stretch).
-      const ir = iw / Math.max(1, ih);
-      const cr = vw / Math.max(1, vh);
-      let dw = vw;
-      let dh = vh;
-      if (ir > cr) {
-        dw = vw;
-        dh = vw / ir;
-      } else {
-        dh = vh;
-        dw = vh * ir;
-      }
-      const dx = vx + (vw - dw) / 2;
-      const dy = vy + (vh - dh) / 2;
-      ctx.drawImage(src, 0, 0, iw, ih, dx, dy, dw, dh);
     } else {
       // Fallback: stretch cropped content edge-to-edge (no letterbox).
       ctx.drawImage(src, crop.x, crop.y, crop.w, crop.h, vx, vy, vw, vh);
