@@ -15,8 +15,26 @@ export const Route = createFileRoute("/api/public/bundles/$")({
       GET: async ({ params, request }) => {
         if (!hasValidRenderKey(request)) return renderKeyError();
         const { id } = splat(params._splat);
-        const row = id ? await getRenderBundle(id) : null;
+        if (!id) {
+          // `/api/public/bundles` also resolves here — serve the ready list.
+          const status = new URL(request.url).searchParams.get("status") ?? "ready";
+          const { listRenderBundles, toListItem } = await import(
+            "@/lib/render-bundles-db"
+          );
+          const rows = await listRenderBundles({
+            status:
+              status === "all" ||
+              status === "rendering" ||
+              status === "done" ||
+              status === "failed"
+                ? (status as "all")
+                : "ready",
+          });
+          return Response.json({ bundles: rows.map(toListItem) });
+        }
+        const row = await getRenderBundle(id);
         if (!row) return json({ error: "Bundle not found" }, 404);
+
         return Response.json({
           id: row.id,
           status: row.status,
