@@ -76,7 +76,7 @@ export const getProject = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const local = localGetProject(context.userId, data.id);
     if (!local) throw new Error("Project not found.");
-    return normalizeProjectRecord(local as unknown as Record<string, unknown>);
+    return normalizeProjectRecord(local as unknown as Record<string, any>);
   });
 
 export const deleteProject = createServerFn({ method: "POST" })
