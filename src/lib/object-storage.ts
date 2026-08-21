@@ -118,6 +118,51 @@ export async function putAsset(opts: {
   return `${prefix}/${rel}`;
 }
 
+/**
+ * Direct, time-limited download URL for an object, so large media (e.g. .mov
+ * screen recordings) never streams through the app server / edge worker.
+ * Returns null when assets live on local disk (dev), where proxying is fine.
+ */
+export async function signedAssetUrl(
+  kind: AssetKind,
+  relPath: string,
+  expiresInSeconds = 60 * 60 * 6,
+): Promise<string | null> {
+  const rel = relPath.replace(/^\/+/, "");
+  if (!rel || rel.includes("..")) return null;
+
+  if (useCloudStorage()) {
+    const base = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
+    const prefix = kind === "app" ? "app-assets" : "project-assets";
+    const res = await fetch(
+      `${base}/storage/v1/object/sign/${CLOUD_BUCKET}/${prefix}/${rel}`,
+      {
+        method: "POST",
+        headers: { ...cloudHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ expiresIn: expiresInSeconds }),
+      },
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { signedURL?: string; signedUrl?: string };
+    const signed = json.signedURL ?? json.signedUrl;
+    if (!signed) return null;
+    return `${base}/storage/v1${signed.startsWith("/") ? signed : `/${signed}`}`;
+  }
+
+  if (useSpaces()) {
+    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+    const client = await spacesClient();
+    return getSignedUrl(
+      client,
+      new GetObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }),
+      { expiresIn: expiresInSeconds },
+    );
+  }
+
+  return null;
+}
+
 export type AssetReadResult = {
   status: 200 | 206;
   body: ReadableStream;
