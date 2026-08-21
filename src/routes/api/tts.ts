@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
-import { generateTtsAudioUrl } from "@/lib/tts.server";
+import { generateTtsAudioUrl, TtsError } from "@/lib/tts.server";
 
 const Body = z.object({ text: z.string().min(1).max(4000) });
 
@@ -30,6 +30,7 @@ export const Route = createFileRoute("/api/tts")({
         try {
           return jsonResponse(await generateTtsAudioUrl(parsed.data.text));
         } catch (e) {
+          if (e instanceof TtsError) return jsonError(e.message, e.status);
           return jsonError(e instanceof Error ? e.message : "TTS failed", 500);
         }
       },

@@ -1,6 +1,15 @@
 import { generateKokoroMp3Buffer } from "@/lib/kokoro-tts.server";
 import { normalizeNarrationText } from "@/lib/narration-text";
 
+export class TtsError extends Error {
+  status: number;
+  constructor(message: string, status = 500) {
+    super(message);
+    this.name = "TtsError";
+    this.status = status;
+  }
+}
+
 const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ";
 const ELEVEN_MODEL = "eleven_v3";
 
