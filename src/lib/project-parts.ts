@@ -23,6 +23,9 @@ export interface ProjectPart {
   /** Collaborator assigned to this part (admin handoff). */
   assignedUserId?: string | null;
   assignedUserEmail?: string | null;
+  /** Reviewer assigned to this part (admin handoff). */
+  reviewerUserId?: string | null;
+  reviewerUserEmail?: string | null;
   created_at: string;
   updated_at: string;
 }
