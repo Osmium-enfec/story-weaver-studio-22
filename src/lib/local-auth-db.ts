@@ -13,15 +13,37 @@ const SESSION_DAYS = 30;
 
 let db: Database.Database | null = null;
 
+function candidateDirs(): string[] {
+  const dirs: string[] = [];
+  if (process.env.LOCAL_APP_DB) dirs.push(path.dirname(process.env.LOCAL_APP_DB));
+  const cwd = process.cwd();
+  if (cwd && cwd !== "/") dirs.push(path.join(cwd, ".data"));
+  dirs.push("/dev-server/.data", "/tmp/.explainer-data");
+  return dirs;
+}
+
 function dbPath(): string {
-  return process.env.LOCAL_APP_DB ?? path.join(process.cwd(), ".data", "app.db");
+  let lastErr: unknown = null;
+  for (const dir of candidateDirs()) {
+    try {
+      mkdirSync(dir, { recursive: true });
+      return process.env.LOCAL_APP_DB && dir === path.dirname(process.env.LOCAL_APP_DB)
+        ? process.env.LOCAL_APP_DB
+        : path.join(dir, "app.db");
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw new Error(
+    `Unable to create local database directory: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
+  );
 }
 
 function getDb(): Database.Database {
   if (db) return db;
-  mkdirSync(path.dirname(dbPath()), { recursive: true });
   db = new Database(dbPath());
   db.pragma("journal_mode = WAL");
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
