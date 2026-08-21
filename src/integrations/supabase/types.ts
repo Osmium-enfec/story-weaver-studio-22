@@ -91,6 +91,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      app_exec_sql: { Args: { params?: string[]; q: string }; Returns: Json }
       bump_image_asset_usage: { Args: { asset_id: string }; Returns: undefined }
       match_image_asset: {
         Args: {
