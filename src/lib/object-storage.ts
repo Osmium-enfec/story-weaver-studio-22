@@ -83,7 +83,20 @@ export async function putAsset(opts: {
   const rel = opts.relPath.replace(/^\/+/, "");
   if (!rel || rel.includes("..")) throw new Error("Invalid asset path");
 
-  if (useSpaces()) {
+  if (useCloudStorage()) {
+    const res = await fetch(cloudObjectUrl(opts.kind, rel), {
+      method: "POST",
+      headers: {
+        ...cloudHeaders(),
+        "Content-Type": opts.contentType ?? "application/octet-stream",
+        "x-upsert": "true",
+      },
+      body: new Uint8Array(opts.body),
+    });
+    if (!res.ok) {
+      throw new Error(`Asset upload failed [${res.status}]: ${await res.text()}`);
+    }
+  } else if (useSpaces()) {
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await spacesClient();
     await client.send(
