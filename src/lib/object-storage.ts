@@ -2,9 +2,23 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from
 import { Readable } from "node:stream";
 import path from "node:path";
 import { hostAppAssetsRoot, hostProjectAssetsRoot } from "@/lib/host-storage";
-import { useSpaces } from "@/lib/runtime-backends";
+import { useCloudStorage, useSpaces } from "@/lib/runtime-backends";
 
 export type AssetKind = "project" | "app";
+
+/** Cloud bucket layout mirrors the disk layout: `<kind>/<relPath>`. */
+const CLOUD_BUCKET = "project-assets";
+
+function cloudObjectUrl(kind: AssetKind, rel: string): string {
+  const base = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
+  const prefix = kind === "app" ? "app-assets" : "project-assets";
+  return `${base}/storage/v1/object/${CLOUD_BUCKET}/${prefix}/${rel}`;
+}
+
+function cloudHeaders(): Record<string, string> {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!.trim();
+  return { apikey: key, Authorization: `Bearer ${key}` };
+}
 
 type S3Like = {
   send: (command: unknown) => Promise<any>;
