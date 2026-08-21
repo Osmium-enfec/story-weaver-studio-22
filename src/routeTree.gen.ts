@@ -41,6 +41,7 @@ import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 import { Route as AuthenticatedEpisodeIdRouteImport } from './routes/_authenticated/episode.$id'
 import { Route as AuthenticatedCourseIdRouteImport } from './routes/_authenticated/course.$id'
+import { Route as ApiPublicAssetsSplatRouteImport } from './routes/api/public/assets/$'
 
 const ExportRunnerRoute = ExportRunnerRouteImport.update({
   id: '/export-runner',
@@ -204,6 +205,11 @@ const AuthenticatedCourseIdRoute = AuthenticatedCourseIdRouteImport.update({
   path: '/course/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicAssetsSplatRoute = ApiPublicAssetsSplatRouteImport.update({
+  id: '/api/public/assets/$',
+  path: '/api/public/assets/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -237,6 +243,7 @@ export interface FileRoutesByFullPath {
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
+  '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -270,6 +277,7 @@ export interface FileRoutesByTo {
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
+  '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -305,6 +313,7 @@ export interface FileRoutesById {
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
+  '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -340,6 +349,7 @@ export interface FileRouteTypes {
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
+    | '/api/public/assets/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
+    | '/api/public/assets/$'
   id:
     | '__root__'
     | '/'
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/api/public/runtime-info'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
+    | '/api/public/assets/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -433,6 +445,7 @@ export interface RootRouteChildren {
   ApiPublicRuntimeInfoRoute: typeof ApiPublicRuntimeInfoRoute
   ApiRenderAgentUpdatesSplatRoute: typeof ApiRenderAgentUpdatesSplatRoute
   ApiSyncFeedSplatRoute: typeof ApiSyncFeedSplatRoute
+  ApiPublicAssetsSplatRoute: typeof ApiPublicAssetsSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -661,6 +674,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCourseIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/assets/$': {
+      id: '/api/public/assets/$'
+      path: '/api/public/assets/$'
+      fullPath: '/api/public/assets/$'
+      preLoaderRoute: typeof ApiPublicAssetsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -715,6 +735,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicRuntimeInfoRoute: ApiPublicRuntimeInfoRoute,
   ApiRenderAgentUpdatesSplatRoute: ApiRenderAgentUpdatesSplatRoute,
   ApiSyncFeedSplatRoute: ApiSyncFeedSplatRoute,
+  ApiPublicAssetsSplatRoute: ApiPublicAssetsSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
