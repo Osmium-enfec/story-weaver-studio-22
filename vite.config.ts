@@ -20,9 +20,11 @@ export default defineConfig({
       port: 8080,
       strictPort: true,
       allowedHosts: true,
-      // node_modules is a symlink into do-deploy — Vite must serve those files.
+      // node_modules is a symlink into do-deploy on the LAN Mac — Vite must serve
+      // those files. process.cwd() keeps this working in other environments too.
       fs: {
         allow: [
+          process.cwd(),
           "/Users/enfecsolutions/Enfec Content/divStudio-lan-stable",
           "/Users/enfecsolutions/Enfec Content/divStudio-do-deploy/node_modules",
         ],
