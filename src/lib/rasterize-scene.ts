@@ -214,7 +214,7 @@ export function drawImageSceneFrame(
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(dx, dy, dw, dh);
 
-    if (covers.length > 0) {
+    if (covers.length > 0 && bg) {
       const iw = bg.naturalWidth || 1;
       const ih = bg.naturalHeight || 1;
       covers.forEach((c, i) => {
