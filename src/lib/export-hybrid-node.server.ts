@@ -5,11 +5,37 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { createCanvas, loadImage as napiLoadImage } from "@napi-rs/canvas";
-import {
-  AudioContext as NodeAudioContext,
-  OfflineAudioContext as NodeOfflineAudioContext,
-} from "node-web-audio-api";
+// Native modules are loaded lazily with runtime specifiers so bundlers targeting
+// non-Node runtimes never try to inline the .node binaries.
+type CanvasMod = typeof import("@napi-rs/canvas");
+type AudioMod = typeof import("node-web-audio-api");
+
+let canvasMod: CanvasMod | null = null;
+let audioMod: AudioMod | null = null;
+
+async function loadNativeModules(): Promise<void> {
+  if (!canvasMod) {
+    canvasMod = (await import(
+      /* @vite-ignore */ ["@napi-rs", "canvas"].join("/")
+    )) as CanvasMod;
+  }
+  if (!audioMod) {
+    audioMod = (await import(
+      /* @vite-ignore */ ["node-web", "audio-api"].join("-")
+    )) as AudioMod;
+  }
+}
+
+function createCanvas(w: number, h: number) {
+  if (!canvasMod) throw new Error("Native canvas not loaded");
+  return canvasMod.createCanvas(w, h);
+}
+
+function napiLoadImage(src: string | Buffer) {
+  if (!canvasMod) throw new Error("Native canvas not loaded");
+  return canvasMod.loadImage(src as never);
+}
+
 import {
   resolveExportAssetUrl,
   setExportNodeRuntime,
@@ -149,8 +175,9 @@ function installNodeGlobals(): GlobalBag {
     hadWindow: Object.prototype.hasOwnProperty.call(g, "window"),
   };
 
-  g.AudioContext = NodeAudioContext;
-  g.OfflineAudioContext = NodeOfflineAudioContext;
+  g.AudioContext = audioMod?.AudioContext;
+  g.OfflineAudioContext = audioMod?.OfflineAudioContext;
+
   // TanStack: `if (typeof document !== "undefined") self.__TSR_ROUTER__ = this`
   if (typeof g.self === "undefined") g.self = globalThis;
   if (typeof g.window === "undefined") g.window = globalThis;
@@ -198,6 +225,7 @@ export async function withHybridExportEnv<T>(
   baseUrl: string,
   fn: () => Promise<T>,
 ): Promise<T> {
+  await loadNativeModules();
   const bag = installNodeGlobals();
   setExportNodeRuntime({
     enabled: true,
