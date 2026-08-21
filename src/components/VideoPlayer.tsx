@@ -830,10 +830,10 @@ function RecordingSceneStage({
   const videoBg = background.kind === "video" ? background.url : null;
   /** Stretch over loop BG after cropping baked black/white mattes. */
   const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
-  /** Video clip: contain (no stretch). Screen recordings keep fill. */
+  /** All recordings/clips: crop baked mattes, then stretch edge-to-edge (no black bars). */
   const isVideoClip =
     scene.recordingUseEmbeddedAudio === true && scene.recordingVoiceReplace !== true;
-  const cameraFit = isVideoClip ? "contain" : "fill";
+  const cameraFit = "fill" as const;
   const cam = recordingCameraAt(scene.recordingCameraKeyframes, elapsedSpeechMs);
   const zoomSfxUrl = recordingCameraZoomSfxUrl(scene.recordingCameraZoomSfx);
   const blurRegion = normalizeRecordingBlurRegion(scene.recordingBlurRegion);
