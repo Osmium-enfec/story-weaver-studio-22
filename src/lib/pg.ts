@@ -1,5 +1,5 @@
 import pg from "pg";
-import { postgresUrl } from "@/lib/runtime-backends";
+import { postgresUrl, useCloudRest } from "@/lib/runtime-backends";
 
 /** Cloud fallback (published app) keeps app tables in the private `app` schema. */
 function usingCloudFallback(): boolean {
@@ -117,6 +117,7 @@ export function getPgPool(): pg.Pool {
 
 /** Create tables/indexes if missing. Safe to call repeatedly. */
 export async function ensurePgSchema(): Promise<void> {
+  if (useCloudRest()) return;
   if (!postgresUrl()) return;
   // Cloud fallback: schema is provisioned by migration; the app role cannot DDL.
   if (usingCloudFallback()) return;
