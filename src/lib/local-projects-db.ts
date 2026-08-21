@@ -383,6 +383,13 @@ function sqliteListProjects(
 ): LocalProjectListItem[] {
   const conn = getDb();
   let rows: Record<string, unknown>[];
+  /** Natural sort so "Episode 2" comes before "Episode 10". */
+  const naturalByTitle = (a: Record<string, unknown>, b: Record<string, unknown>) =>
+    String(a.title ?? "").localeCompare(String(b.title ?? ""), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+
 
   if (opts?.asAdmin) {
     if (opts && "courseId" in opts) {
