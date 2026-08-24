@@ -40,12 +40,22 @@ export const Route = createFileRoute("/api/extract-video-audio")({
           return jsonError(parsed.error.issues[0]?.message ?? "Invalid request", 400);
         }
 
-        const videoPath = await resolveUserAssetLocalPath(
-          parsed.data.videoUrl,
-          user.id,
-          `extract-${user.id}`,
-        );
+        let videoPath: string | null = null;
+        try {
+          videoPath = await resolveUserAssetLocalPath(
+            parsed.data.videoUrl,
+            user.id,
+            `extract-${user.id}`,
+          );
+        } catch (e) {
+          console.error("[extract-video-audio] resolve failed", e);
+          return jsonError(
+            e instanceof Error ? e.message : "Video asset not found",
+            404,
+          );
+        }
         if (!videoPath) return jsonError("Video asset not found", 404);
+
 
         let ffmpegBin: string;
         try {
