@@ -574,8 +574,13 @@ function ComposePage() {
               : d,
           );
         });
-      } catch {
-        if (!cancelled) setMarkDefaultLoaded(true);
+      } catch (err) {
+        if (!cancelled) {
+          setMarkDefaultLoaded(true);
+          toast.error(
+            `Default narration failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     })();
     return () => {
