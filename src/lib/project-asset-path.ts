@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { hostProjectAssetsRoot } from "@/lib/host-storage";
 import { materializeAssetToFile, putAsset } from "@/lib/object-storage";
@@ -23,7 +24,13 @@ export async function resolveUserAssetLocalPath(
   void userId;
 
   if (useSpaces() || useCloudStorage()) {
-    const dest = path.join(scratchRoot(), scratchSubdir, path.basename(rel));
+    // Never reuse a materialized filename: concurrent/retried requests can
+    // otherwise collide while ffmpeg still has the previous copy open.
+    const dest = path.join(
+      scratchRoot(),
+      scratchSubdir,
+      `${randomUUID()}-${path.basename(rel)}`,
+    );
     let lastErr: unknown = null;
     // Object storage can lag a beat right after upload — retry briefly.
     for (let attempt = 0; attempt < 3; attempt += 1) {
