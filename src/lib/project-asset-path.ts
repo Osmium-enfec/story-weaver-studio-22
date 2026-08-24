@@ -51,7 +51,7 @@ export async function persistProjectLocalFile(opts: {
   contentType?: string;
 }): Promise<string> {
   const relPath = path.posix.join(opts.userId, opts.projectId, opts.filename);
-  if (useSpaces()) {
+  if (useSpaces() || useCloudStorage()) {
     const body = readFileSync(opts.localPath);
     return putAsset({
       kind: "project",

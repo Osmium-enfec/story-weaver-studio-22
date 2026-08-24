@@ -6,7 +6,7 @@ import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import { hostProjectAssetsRoot } from "@/lib/host-storage";
 import { persistProjectLocalFile, resolveUserAssetLocalPath } from "@/lib/project-asset-path";
-import { scratchRoot, useSpaces } from "@/lib/runtime-backends";
+import { scratchRoot, useCloudStorage, useSpaces } from "@/lib/runtime-backends";
 import {
   probeMediaDurationMs,
   resolveFfmpegBin,
@@ -54,7 +54,7 @@ export const Route = createFileRoute("/api/extract-video-audio")({
           return jsonError(e instanceof Error ? e.message : "ffmpeg missing", 503);
         }
 
-        const workDir = useSpaces()
+        const workDir = useSpaces() || useCloudStorage()
           ? path.join(scratchRoot(), "extract", user.id, parsed.data.projectId)
           : path.join(hostProjectAssetsRoot(), user.id, parsed.data.projectId);
         mkdirSync(workDir, { recursive: true });
