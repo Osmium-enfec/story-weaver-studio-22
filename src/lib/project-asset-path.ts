@@ -24,14 +24,31 @@ export async function resolveUserAssetLocalPath(
 
   if (useSpaces() || useCloudStorage()) {
     const dest = path.join(scratchRoot(), scratchSubdir, path.basename(rel));
-    try {
-      await materializeAssetToFile("project", rel, dest);
-      return dest;
-    } catch {
-      return null;
+    let lastErr: unknown = null;
+    // Object storage can lag a beat right after upload — retry briefly.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await materializeAssetToFile("project", rel, dest);
+        return dest;
+      } catch (e) {
+        lastErr = e;
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      }
     }
+    // Fall through to disk (hybrid hosts keep a local copy).
+    const localFull = path.resolve(path.join(hostProjectAssetsRoot(), rel));
+    if (
+      localFull.startsWith(path.resolve(hostProjectAssetsRoot())) &&
+      existsSync(localFull)
+    ) {
+      return localFull;
+    }
+    throw new Error(
+      `Could not read the uploaded video from storage (${rel}): ${
+        lastErr instanceof Error ? lastErr.message : String(lastErr)
+      }`,
+    );
   }
-
 
   const full = path.join(hostProjectAssetsRoot(), rel);
   const resolved = path.resolve(full);
@@ -40,6 +57,7 @@ export async function resolveUserAssetLocalPath(
   if (!existsSync(resolved)) return null;
   return resolved;
 }
+
 
 
 /** Persist a finished file under project assets (disk or Spaces) and return `/api/assets/...`. */

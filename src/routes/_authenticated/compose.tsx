@@ -1533,15 +1533,27 @@ function ComposePage() {
       }));
       setOpenSteps(["setup", "edit", "preview"]);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      // Audio demux failed — keep the clip usable with its embedded sound
+      // instead of blocking the upload.
+      setError(
+        `${e instanceof Error ? e.message : String(e)} — using the clip's own audio.`,
+      );
       setRecordingDraft((d) => ({
         ...d,
+        mediaUrl: result.url,
+        sourceDurationMs: result.durationMs,
+        trimStartMs: 0,
+        trimEndMs: result.durationMs,
+        useEmbeddedAudio: true,
+        voiceReplace: false,
         audioUrl: null,
         audioDurationMs: 0,
         audioSegments: [],
-        ready: false,
+        ready: true,
       }));
+      setOpenSteps(["setup", "edit", "preview"]);
     } finally {
+
       setExtractingClipAudio(false);
     }
   }
