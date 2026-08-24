@@ -3,7 +3,6 @@ import { hostProjectsDbPath } from "@/lib/host-storage";
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { localAssignedCourseIds } from "@/lib/local-projects-db";
 import { usePostgres } from "@/lib/runtime-backends";
 
 /**
@@ -148,11 +147,10 @@ async function sqliteGetCourse(
     .prepare("SELECT * FROM courses WHERE id = ?")
     .get(id) as Record<string, unknown> | undefined;
   if (!row) return null;
-  const course = rowToCourse(row);
-  if (course.user_id === userId) return course;
-  // Collaborators can open a course if they have an assigned episode/part in it.
-  if ((await localAssignedCourseIds(userId, userEmail)).includes(id)) return course;
-  return null;
+  void userId;
+  void userEmail;
+  // Shared catalog: any signed-in user can open any course.
+  return rowToCourse(row);
 }
 
 function sqliteGetCourseById(id: string): LocalCourseRow | null {
@@ -167,32 +165,17 @@ async function sqliteListCourses(
   userEmail: string,
   opts?: { asAdmin?: boolean },
 ): Promise<LocalCourseListItem[]> {
+  void userId;
+  void userEmail;
+  void opts;
   const conn = getDb();
-  const owned = conn
+  // Shared catalog: all courses are visible to every signed-in user.
+  const rows = conn
     .prepare(
       `SELECT id, title, description, thumbnail_url, created_at, updated_at, user_id
-       FROM courses WHERE user_id = ? ORDER BY updated_at DESC`,
+       FROM courses ORDER BY updated_at DESC`,
     )
-    .all(userId) as Record<string, unknown>[];
-
-  let rows = owned;
-  if (!opts?.asAdmin) {
-    const assignedIds = await localAssignedCourseIds(userId, userEmail);
-    if (assignedIds.length) {
-      const ownedIds = new Set(owned.map((r) => String(r.id)));
-      const extra = assignedIds
-        .filter((cid: string) => !ownedIds.has(cid))
-        .map((cid: string) =>
-          conn
-            .prepare(
-              `SELECT id, title, description, thumbnail_url, created_at, updated_at, user_id FROM courses WHERE id = ?`,
-            )
-            .get(cid),
-        )
-        .filter(Boolean) as Record<string, unknown>[];
-      rows = [...owned, ...extra];
-    }
-  }
+    .all() as Record<string, unknown>[];
 
   const countStmt = conn.prepare(
     `SELECT COUNT(*) AS n FROM projects WHERE course_id = ?`,
