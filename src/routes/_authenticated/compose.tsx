@@ -2840,6 +2840,7 @@ function ComposePage() {
           const audio = await apiExtractVideoAudio({
             projectId,
             videoUrl: mediaUrl,
+            durationMs: mediaMs,
           });
           const audioDurationMs = audio.durationMs || mediaMs;
           const nextRec: ComposeRecordingDraft = {
