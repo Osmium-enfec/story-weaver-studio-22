@@ -1,5 +1,4 @@
-import { mkdirSync, existsSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { assetExists, putAsset } from "@/lib/object-storage";
 import {
   QUESTION_INTRO_SCREEN_TEXT_DEFAULT,
   isDefaultIntroText,
@@ -7,14 +6,6 @@ import {
 import { normalizeNarrationText } from "@/lib/narration-text";
 
 const DEFAULT_FILENAME = "question-intro-default.mp3";
-
-function appAssetsRoot(): string {
-  return path.join(process.cwd(), ".data", "app-assets");
-}
-
-function defaultFilePath(): string {
-  return path.join(appAssetsRoot(), DEFAULT_FILENAME);
-}
 
 export function defaultIntroTtsUrl(): string {
   return `/api/app-assets/${DEFAULT_FILENAME}`;
@@ -54,31 +45,34 @@ async function synthesizeMp3(rawText: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
-function writeDefaultFile(buf: Buffer): string {
-  const dir = appAssetsRoot();
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(defaultFilePath(), buf);
+async function writeDefaultFile(buf: Buffer): Promise<string> {
+  await putAsset({
+    kind: "app",
+    relPath: DEFAULT_FILENAME,
+    body: buf,
+    contentType: "audio/mpeg",
+  });
   return defaultIntroTtsUrl();
 }
 
 export async function ensureDefaultIntroTts() {
   const url = defaultIntroTtsUrl();
-  if (existsSync(defaultFilePath())) {
+  if ((await assetExists("app", DEFAULT_FILENAME))) {
     return { audioUrl: url, text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: true };
   }
   const buf = await synthesizeMp3(QUESTION_INTRO_SCREEN_TEXT_DEFAULT);
-  writeDefaultFile(buf);
+  await writeDefaultFile(buf);
   return { audioUrl: url, text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: false };
 }
 
 export async function generateIntroTts(text: string) {
   const trimmed = text.trim();
-  if (isDefaultIntroText(trimmed) && existsSync(defaultFilePath())) {
+  if (isDefaultIntroText(trimmed) && (await assetExists("app", DEFAULT_FILENAME))) {
     return { audioUrl: defaultIntroTtsUrl(), text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: true };
   }
   if (isDefaultIntroText(trimmed)) {
     const buf = await synthesizeMp3(QUESTION_INTRO_SCREEN_TEXT_DEFAULT);
-    const url = writeDefaultFile(buf);
+    const url = await writeDefaultFile(buf);
     return { audioUrl: url, text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: false };
   }
   const buf = await synthesizeMp3(trimmed);
