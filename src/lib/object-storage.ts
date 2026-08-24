@@ -326,6 +326,14 @@ export async function materializeAssetToFile(
   const rel = relPath.replace(/^\/+/, "");
   mkdirSync(path.dirname(destPath), { recursive: true });
 
+  if (useCloudStorage()) {
+    const res = await fetch(cloudObjectUrl(kind, rel), { headers: cloudHeaders() });
+    if (!res.ok) throw new Error(`Missing cloud object: ${rel} (${res.status})`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    writeFileSync(destPath, Buffer.from(bytes));
+    return;
+  }
+
   if (!useSpaces()) {
     const { copyFileSync } = await import("node:fs");
     const src = path.join(localRoot(kind), rel);
