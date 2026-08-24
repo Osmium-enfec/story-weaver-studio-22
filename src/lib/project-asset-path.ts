@@ -22,7 +22,7 @@ export async function resolveUserAssetLocalPath(
   if (segments.length < 2) return null;
   void userId;
 
-  if (useSpaces()) {
+  if (useSpaces() || useCloudStorage()) {
     const dest = path.join(scratchRoot(), scratchSubdir, path.basename(rel));
     try {
       await materializeAssetToFile("project", rel, dest);
@@ -31,6 +31,7 @@ export async function resolveUserAssetLocalPath(
       return null;
     }
   }
+
 
   const full = path.join(hostProjectAssetsRoot(), rel);
   const resolved = path.resolve(full);
