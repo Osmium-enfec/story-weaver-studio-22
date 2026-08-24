@@ -41,6 +41,20 @@ export const Route = createFileRoute("/api/extract-video-audio")({
           return jsonError(parsed.error.issues[0]?.message ?? "Invalid request", 400);
         }
 
+        // Try ffmpeg first. If it is not available (Cloudflare Workers), we can
+        // simply use the clip's embedded audio directly — no need to even resolve
+        // the local file.
+        let ffmpegBin: string;
+        try {
+          ffmpegBin = await resolveFfmpegBin();
+        } catch (e) {
+          console.warn("[extract-video-audio] ffmpeg unavailable, using embedded audio:", e);
+          return jsonResponse({
+            url: parsed.data.videoUrl,
+            durationMs: parsed.data.durationMs || 0,
+          });
+        }
+
         let videoPath: string | null = null;
         try {
           videoPath = await resolveUserAssetLocalPath(
@@ -60,22 +74,6 @@ export const Route = createFileRoute("/api/extract-video-audio")({
             `Could not locate the uploaded clip (${parsed.data.videoUrl})`,
             404,
           );
-        }
-
-
-
-        let ffmpegBin: string;
-        try {
-          ffmpegBin = await resolveFfmpegBin();
-        } catch (e) {
-          // ffmpeg is unavailable on the hosted runtime (Cloudflare Workers). A clip is
-          // fully usable with its embedded audio, so we just point the audio track at
-          // the video URL instead of failing with a red error banner.
-          console.warn("[extract-video-audio] ffmpeg unavailable, using embedded audio:", e);
-          return jsonResponse({
-            url: parsed.data.videoUrl,
-            durationMs: parsed.data.durationMs || 0,
-          });
         }
 
         const workDir = useSpaces() || useCloudStorage()
