@@ -1,5 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
+import { assetExists, putAsset } from "@/lib/object-storage";
 import {
   FIXED_TEMPLATE_PRESETS,
   type FixedTemplatePresetId,
@@ -7,14 +6,6 @@ import {
   isFixedTemplatePresetId,
 } from "@/lib/template-fixed-presets";
 import { normalizeNarrationText } from "@/lib/narration-text";
-
-function appAssetsRoot(): string {
-  return path.join(process.cwd(), ".data", "app-assets");
-}
-
-function presetFilePath(id: FixedTemplatePresetId): string {
-  return path.join(appAssetsRoot(), getFixedTemplatePreset(id).audioFilename);
-}
 
 export function fixedTemplateTtsUrl(id: FixedTemplatePresetId): string {
   return `/api/app-assets/${getFixedTemplatePreset(id).audioFilename}`;
@@ -54,10 +45,13 @@ async function synthesizeMp3(rawText: string): Promise<Buffer> {
   return Buffer.from(await res.arrayBuffer());
 }
 
-function writePresetFile(id: FixedTemplatePresetId, buf: Buffer): string {
-  const dir = appAssetsRoot();
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(presetFilePath(id), buf);
+async function writePresetFile(id: FixedTemplatePresetId, buf: Buffer): Promise<string> {
+  await putAsset({
+    kind: "app",
+    relPath: getFixedTemplatePreset(id).audioFilename,
+    body: buf,
+    contentType: "audio/mpeg",
+  });
   return fixedTemplateTtsUrl(id);
 }
 
@@ -67,11 +61,11 @@ export async function ensureFixedTemplateTts(presetId: string) {
   }
   const preset = getFixedTemplatePreset(presetId);
   const url = fixedTemplateTtsUrl(presetId);
-  if (existsSync(presetFilePath(presetId))) {
+  if ((await assetExists("app", preset.audioFilename))) {
     return { audioUrl: url, text: preset.script, cached: true, presetId };
   }
   const buf = await synthesizeMp3(preset.script);
-  writePresetFile(presetId, buf);
+  await writePresetFile(presetId, buf);
   return { audioUrl: url, text: preset.script, cached: false, presetId };
 }
 

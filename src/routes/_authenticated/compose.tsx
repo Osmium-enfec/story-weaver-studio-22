@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { NavBar } from "@/components/NavBar";
 import { ComposeProjectPanel } from "@/components/compose/ComposeProjectPanel";
 import { ComposeStepsAccordion } from "@/components/compose/ComposeStepsAccordion";
@@ -574,8 +575,13 @@ function ComposePage() {
               : d,
           );
         });
-      } catch {
-        if (!cancelled) setMarkDefaultLoaded(true);
+      } catch (err) {
+        if (!cancelled) {
+          setMarkDefaultLoaded(true);
+          toast.error(
+            `Default narration failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
       }
     })();
     return () => {
