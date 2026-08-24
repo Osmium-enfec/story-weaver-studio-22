@@ -6,9 +6,16 @@ import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import { isAdminUser } from "@/lib/admin";
 import { localGetProjectById } from "@/lib/local-projects-db";
 import { putAsset } from "@/lib/object-storage";
+import { useCloudStorage } from "@/lib/runtime-backends";
 
 const JsonBody = z.object({
   url: z.string().min(1),
+  projectId: z.string().uuid(),
+  ext: z.string().min(1).max(10),
+});
+
+const DirectUploadBody = z.object({
+  action: z.literal("create-direct-upload"),
   projectId: z.string().uuid(),
   ext: z.string().min(1).max(10),
 });
@@ -59,6 +66,28 @@ async function writeAsset(
   });
 }
 
+async function createDirectUpload(
+  userId: string,
+  projectId: string,
+  ext: string,
+): Promise<{ path: string; token: string; url: string }> {
+  const filename = `${randomUUID()}.${ext.replace(/^\./, "")}`;
+  const relPath = path.posix.join(userId, projectId, filename);
+  const storagePath = `project-assets/${relPath}`;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.storage
+    .from("project-assets")
+    .createSignedUploadUrl(storagePath);
+  if (error || !data?.token) {
+    throw new Error(error?.message ?? "Could not prepare upload");
+  }
+  return {
+    path: storagePath,
+    token: data.token,
+    url: `/api/assets/${relPath}`,
+  };
+}
+
 export const Route = createFileRoute("/api/persist-asset")({
   server: {
     handlers: {
@@ -72,6 +101,58 @@ export const Route = createFileRoute("/api/persist-asset")({
 
         const asAdmin = isAdminUser(user);
         const contentType = request.headers.get("content-type") ?? "";
+
+        // Hosted uploads go straight from the browser to object storage. This
+        // avoids request.formData()/arrayBuffer(), both of which duplicate a
+        // large recording in the worker and can exceed its memory ceiling.
+        if (contentType.includes("application/json")) {
+          let raw: unknown;
+          try {
+            raw = await request.json();
+          } catch {
+            return jsonError("Invalid JSON", 400);
+          }
+          const direct = DirectUploadBody.safeParse(raw);
+          if (direct.success) {
+            if (!useCloudStorage()) {
+              return jsonResponse({ direct: false });
+            }
+            try {
+              const ownerId = await resolveAssetOwnerUserId(
+                user.id,
+                direct.data.projectId,
+                asAdmin,
+              );
+              const upload = await createDirectUpload(
+                ownerId,
+                direct.data.projectId,
+                direct.data.ext,
+              );
+              return jsonResponse({ direct: true, ...upload });
+            } catch (e) {
+              return jsonError(e instanceof Error ? e.message : "Could not prepare upload", 500);
+            }
+          }
+
+          const parsed = JsonBody.safeParse(raw);
+          if (!parsed.success) {
+            return jsonError(parsed.error.issues[0]?.message ?? "Invalid request", 400);
+          }
+
+          const data = parsed.data;
+          if (!data.url) return jsonResponse({ url: data.url });
+          if (/^https?:\/\//.test(data.url)) return jsonResponse({ url: data.url });
+          if (data.url.startsWith("/api/assets/")) return jsonResponse({ url: data.url });
+
+          try {
+            const { buffer, contentType: ct } = decodeAssetUrl(data.url);
+            const ownerId = await resolveAssetOwnerUserId(user.id, data.projectId, asAdmin);
+            const url = await writeAsset(ownerId, data.projectId, data.ext, buffer, ct);
+            return jsonResponse({ url });
+          } catch (e) {
+            return jsonError(e instanceof Error ? e.message : "Persist failed", 500);
+          }
+        }
 
         // Multipart: preferred for large screen recordings (avoids huge data URLs).
         if (contentType.includes("multipart/form-data")) {
@@ -103,31 +184,7 @@ export const Route = createFileRoute("/api/persist-asset")({
           }
         }
 
-        let body: unknown;
-        try {
-          body = await request.json();
-        } catch {
-          return jsonError("Invalid JSON", 400);
-        }
-
-        const parsed = JsonBody.safeParse(body);
-        if (!parsed.success) {
-          return jsonError(parsed.error.issues[0]?.message ?? "Invalid request", 400);
-        }
-
-        const data = parsed.data;
-        if (!data.url) return jsonResponse({ url: data.url });
-        if (/^https?:\/\//.test(data.url)) return jsonResponse({ url: data.url });
-        if (data.url.startsWith("/api/assets/")) return jsonResponse({ url: data.url });
-
-        try {
-          const { buffer, contentType: ct } = decodeAssetUrl(data.url);
-          const ownerId = await resolveAssetOwnerUserId(user.id, data.projectId, asAdmin);
-          const url = await writeAsset(ownerId, data.projectId, data.ext, buffer, ct);
-          return jsonResponse({ url });
-        } catch (e) {
-          return jsonError(e instanceof Error ? e.message : "Persist failed", 500);
-        }
+        return jsonError("Unsupported content type", 415);
       },
     },
   },
