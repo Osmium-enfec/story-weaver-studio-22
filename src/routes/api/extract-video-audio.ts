@@ -54,7 +54,13 @@ export const Route = createFileRoute("/api/extract-video-audio")({
             404,
           );
         }
-        if (!videoPath) return jsonError("Video asset not found", 404);
+        if (!videoPath) {
+          return jsonError(
+            `Could not locate the uploaded clip (${parsed.data.videoUrl})`,
+            404,
+          );
+        }
+
 
 
         let ffmpegBin: string;

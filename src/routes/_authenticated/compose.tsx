@@ -2873,13 +2873,44 @@ function ComposePage() {
             setOpenSteps(["setup", "edit", "preview"]);
           }
         } catch (e: unknown) {
+          // Demux failed — keep the clip usable with its own embedded audio
+          // instead of dropping the user back to an unusable setup step.
+          const fallback: ComposeRecordingDraft = {
+            ...(fromExisting ??
+              emptyComposeRecordingDraft({ useEmbeddedAudio: true })),
+            script: script || fromExisting?.script || "",
+            title: title || fromExisting?.title || "",
+            mediaUrl,
+            sourceDurationMs: mediaMs,
+            trimStartMs: 0,
+            trimEndMs: mediaMs,
+            videoOffsetMs: 0,
+            videoSegments: [
+              {
+                id: `vid-${Date.now().toString(36)}`,
+                trimStartMs: 0,
+                trimEndMs: mediaMs,
+                offsetMs: 0,
+                rate: 1,
+              },
+            ],
+            useEmbeddedAudio: true,
+            voiceReplace: false,
+            cameraZoomSfx: fromExisting?.cameraZoomSfx ?? "none",
+            audioUrl: null,
+            audioDurationMs: 0,
+            audioSegments: [],
+            ready: true,
+          };
+          setRecordingDraft(fallback);
           setError(
-            e instanceof Error
-              ? e.message
-              : "Recording loaded — finish audio on the Video clip tab if needed.",
+            `${
+              e instanceof Error ? e.message : String(e)
+            } — using the clip's own audio.`,
           );
-          setOpenSteps(["setup"]);
+          setOpenSteps(["setup", "edit", "preview"]);
         }
+
       } else {
         setOpenSteps(["setup"]);
       }
