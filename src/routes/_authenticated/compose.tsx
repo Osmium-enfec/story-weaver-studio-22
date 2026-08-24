@@ -2903,11 +2903,8 @@ function ComposePage() {
             ready: true,
           };
           setRecordingDraft(fallback);
-          setError(
-            `${
-              e instanceof Error ? e.message : String(e)
-            } — using the clip's own audio.`,
-          );
+          console.warn("[clip] audio extraction skipped:", e);
+
           setOpenSteps(["setup", "edit", "preview"]);
         }
 
