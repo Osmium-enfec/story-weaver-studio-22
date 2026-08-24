@@ -1520,6 +1520,7 @@ function ComposePage() {
       const audio = await apiExtractVideoAudio({
         projectId,
         videoUrl: result.url,
+        durationMs: result.durationMs,
       });
       setRecordingDraft((d) => ({
         ...d,
