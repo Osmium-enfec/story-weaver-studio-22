@@ -496,12 +496,16 @@ function ComposePage() {
   const recordingStatus = useMemo(
     () => ({
       setup: !!recordingDraft.mediaUrl && recordingDraft.sourceDurationMs > 0,
-      tts: recordingDraft.ready && !!recordingDraft.audioUrl,
+      // A clip with embedded audio is fully audio-ready even when we could not
+      // demux a separate audio file on the hosted runtime.
+      tts:
+        recordingDraft.ready &&
+        (!!recordingDraft.audioUrl || recordingDraft.useEmbeddedAudio),
       preview: showPreview,
       saveReady:
         !!recordingDraft.mediaUrl &&
         recordingDraft.ready &&
-        !!recordingDraft.audioUrl &&
+        (!!recordingDraft.audioUrl || recordingDraft.useEmbeddedAudio) &&
         recordingDraft.sourceDurationMs > 0,
     }),
     [recordingDraft, showPreview],
@@ -1516,6 +1520,7 @@ function ComposePage() {
       const audio = await apiExtractVideoAudio({
         projectId,
         videoUrl: result.url,
+        durationMs: result.durationMs,
       });
       setRecordingDraft((d) => ({
         ...d,
@@ -2835,6 +2840,7 @@ function ComposePage() {
           const audio = await apiExtractVideoAudio({
             projectId,
             videoUrl: mediaUrl,
+            durationMs: mediaMs,
           });
           const audioDurationMs = audio.durationMs || mediaMs;
           const nextRec: ComposeRecordingDraft = {

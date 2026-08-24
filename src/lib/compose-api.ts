@@ -112,6 +112,7 @@ export async function apiPersistAsset(input: {
 export async function apiExtractVideoAudio(input: {
   projectId: string;
   videoUrl: string;
+  durationMs?: number;
 }): Promise<{ url: string; durationMs: number }> {
   const token = getStoredSessionToken();
   if (!token) throw new Error("Sign in required");
@@ -122,7 +123,11 @@ export async function apiExtractVideoAudio(input: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      projectId: input.projectId,
+      videoUrl: input.videoUrl,
+      durationMs: input.durationMs,
+    }),
   });
   const data = (await res.json()) as {
     url?: string;
@@ -130,7 +135,7 @@ export async function apiExtractVideoAudio(input: {
     error?: string;
   };
   if (!res.ok) throw new Error(data.error ?? "Could not extract audio");
-  if (!data.url || !data.durationMs) throw new Error("Could not extract audio");
+  if (!data.url || data.durationMs == null) throw new Error("Could not extract audio");
   return { url: data.url, durationMs: data.durationMs };
 }
 
