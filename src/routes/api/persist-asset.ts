@@ -28,12 +28,19 @@ function decodeAssetUrl(url: string): { buffer: Buffer; contentType: string } {
 async function resolveAssetOwnerUserId(
   requesterId: string,
   projectId: string,
-  asAdmin: boolean,
+  _asAdmin: boolean,
 ): Promise<string> {
-  if (!asAdmin) return requesterId;
-  const project = await localGetProjectById(projectId);
-  return project?.user_id ?? requesterId;
+  // Shared catalog: any signed-in collaborator may upload into a project.
+  // Assets are always stored under the project owner's namespace so every
+  // viewer resolves the same paths, regardless of who uploaded them.
+  try {
+    const project = await localGetProjectById(projectId);
+    return project?.user_id ?? requesterId;
+  } catch {
+    return requesterId;
+  }
 }
+
 
 async function writeAsset(
   userId: string,
