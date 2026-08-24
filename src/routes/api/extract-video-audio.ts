@@ -16,6 +16,7 @@ import {
 const Body = z.object({
   projectId: z.string().uuid(),
   videoUrl: z.string().min(1),
+  durationMs: z.number().int().nonnegative().optional(),
 });
 
 export const Route = createFileRoute("/api/extract-video-audio")({
