@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { pgQuery } from "@/lib/pg";
-import { pgAssignedCourseIds } from "@/lib/pg-projects-db";
 import type {
   LocalCourseAdminItem,
   LocalCourseListItem,
@@ -93,11 +92,11 @@ export async function pgGetCourse(
   );
   const row = res.rows[0];
   if (!row) return null;
-  const course = rowToCourse(row);
-  if (course.user_id === userId) return course;
-  // Collaborators can open a course if they have an assigned episode/part in it.
-  if ((await pgAssignedCourseIds(userId, userEmail)).includes(id)) return course;
-  return null;
+  // Shared catalog: every signed-in user can open any course (read-only unless
+  // they own it, are assigned a part, or are an admin — writes are guarded separately).
+  void userId;
+  void userEmail;
+  return rowToCourse(row);
 }
 
 export async function pgGetCourseById(id: string): Promise<LocalCourseRow | null> {
@@ -114,32 +113,16 @@ export async function pgListCourses(
   userEmail: string,
   opts?: { asAdmin?: boolean },
 ): Promise<LocalCourseListItem[]> {
-  const ownedRes = await pgQuery<Record<string, unknown>>(
+  void userId;
+  void userEmail;
+  void opts;
+  // Shared catalog: all courses are visible to every signed-in user.
+  const allRes = await pgQuery<Record<string, unknown>>(
     `SELECT id, title, description, thumbnail_url,
             created_at::text AS created_at, updated_at::text AS updated_at, user_id
-     FROM courses WHERE user_id = $1 ORDER BY updated_at DESC`,
-    [userId],
+     FROM courses ORDER BY updated_at DESC`,
   );
-
-  let rows = ownedRes.rows;
-  if (!opts?.asAdmin) {
-    const assignedIds = await pgAssignedCourseIds(userId, userEmail);
-    if (assignedIds.length) {
-      const ownedIds = new Set(ownedRes.rows.map((r) => String(r.id)));
-      const extraIds = assignedIds.filter((cid) => !ownedIds.has(cid));
-      const extra: Record<string, unknown>[] = [];
-      for (const cid of extraIds) {
-        const one = await pgQuery<Record<string, unknown>>(
-          `SELECT id, title, description, thumbnail_url,
-                  created_at::text AS created_at, updated_at::text AS updated_at, user_id
-           FROM courses WHERE id = $1`,
-          [cid],
-        );
-        if (one.rows[0]) extra.push(one.rows[0]);
-      }
-      rows = [...ownedRes.rows, ...extra];
-    }
-  }
+  const rows = allRes.rows;
 
   return Promise.all(
     rows.map(async (row) => {

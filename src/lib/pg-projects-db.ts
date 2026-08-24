@@ -242,7 +242,9 @@ export async function pgGetProject(
   const row = res.rows[0];
   if (!row) return null;
   const project = rowToProject(row);
-  if (!userCanAccessProject({ userId, userEmail }, project)) return null;
+  void userId;
+  void userEmail;
+  // Shared catalog: episodes are readable by any signed-in user; writes stay guarded.
   return project;
 }
 
@@ -320,23 +322,8 @@ export async function pgListProjects(
     rows = res.rows;
   }
 
-  return rows
-    .filter((row) =>
-      userCanAccessProject(
-        { userId, userEmail },
-        {
-          user_id: String(row.user_id),
-          assigned_user_id:
-            row.assigned_user_id != null ? String(row.assigned_user_id) : null,
-          assigned_user_email:
-            row.assigned_user_email != null
-              ? String(row.assigned_user_email)
-              : null,
-          parts: parseJsonColumn(row.parts),
-        },
-      ),
-    )
-    .map(toListItem);
+  // Shared catalog: every signed-in user sees all episodes of a course.
+  return rows.map(toListItem);
 }
 
 /** Admin-only: set / clear episode-level assignee. */
