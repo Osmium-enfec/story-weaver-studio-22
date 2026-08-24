@@ -88,11 +88,16 @@ export function useSpaces(): boolean {
 }
 
 export function scratchRoot(): string {
-  return (
+  const configured =
     process.env.ENFEC_SCRATCH_ROOT?.trim() ||
-    process.env.HOST_SCRATCH_ROOT?.trim() ||
-    `${process.cwd()}/.data/scratch`
-  );
+    process.env.HOST_SCRATCH_ROOT?.trim();
+  if (configured) return configured;
+
+  // Hosted deployments mount the application bundle read-only. Media jobs
+  // must materialize uploads under the runtime's writable temporary volume.
+  if (isHostedBuild()) return "/tmp/divstudio";
+
+  return `${process.cwd()}/.data/scratch`;
 }
 
 export function describeBackends(): {
