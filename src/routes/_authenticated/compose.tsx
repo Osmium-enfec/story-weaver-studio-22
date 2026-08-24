@@ -1533,11 +1533,11 @@ function ComposePage() {
       }));
       setOpenSteps(["setup", "edit", "preview"]);
     } catch (e: unknown) {
-      // Audio demux failed — keep the clip usable with its embedded sound
-      // instead of blocking the upload.
-      setError(
-        `${e instanceof Error ? e.message : String(e)} — using the clip's own audio.`,
-      );
+      // Audio demux is unavailable on the hosted runtime (no ffmpeg process).
+      // The clip stays fully usable with its embedded sound, so this is not
+      // an error the user needs to see.
+      console.warn("[clip] audio extraction skipped:", e);
+
       setRecordingDraft((d) => ({
         ...d,
         mediaUrl: result.url,
