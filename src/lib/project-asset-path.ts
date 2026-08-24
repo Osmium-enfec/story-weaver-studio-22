@@ -14,9 +14,13 @@ export async function resolveUserAssetLocalPath(
   scratchSubdir: string,
 ): Promise<string | null> {
   if (!url.startsWith("/api/assets/")) return null;
-  const rel = url.slice("/api/assets/".length);
+  const rel = decodeURIComponent(url.slice("/api/assets/".length).split("?")[0]);
   if (!rel || rel.includes("..")) return null;
-  if (!rel.startsWith(`${userId}/`)) return null;
+  // Shared catalog: assets may be owned by another collaborator/admin, so we
+  // only enforce the `{ownerId}/{projectId}/{file}` shape, not the requester id.
+  const segments = rel.split("/").filter(Boolean);
+  if (segments.length < 2) return null;
+  void userId;
 
   if (useSpaces()) {
     const dest = path.join(scratchRoot(), scratchSubdir, path.basename(rel));
@@ -30,11 +34,12 @@ export async function resolveUserAssetLocalPath(
 
   const full = path.join(hostProjectAssetsRoot(), rel);
   const resolved = path.resolve(full);
-  const userRoot = path.resolve(path.join(hostProjectAssetsRoot(), userId));
-  if (!resolved.startsWith(userRoot)) return null;
+  const assetsRoot = path.resolve(hostProjectAssetsRoot());
+  if (!resolved.startsWith(assetsRoot)) return null;
   if (!existsSync(resolved)) return null;
   return resolved;
 }
+
 
 /** Persist a finished file under project assets (disk or Spaces) and return `/api/assets/...`. */
 export async function persistProjectLocalFile(opts: {
