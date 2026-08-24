@@ -1,4 +1,5 @@
 import { getStoredSessionToken } from "@/lib/auth-client";
+import { supabase } from "@/integrations/supabase/client";
 import type { ParsedQuestion } from "@/lib/parse-question-text";
 
 async function composeFetch<T>(body: Record<string, unknown>): Promise<T> {
@@ -218,6 +219,40 @@ export async function apiPersistAssetFile(input: {
     input.ext ??
     (input.file.name.split(".").pop()?.toLowerCase() ||
       (input.file.type.includes("webm") ? "webm" : "mp4"));
+
+  // In the hosted app, ask for a short-lived upload token and send the File
+  // directly to object storage. Large recordings must not pass through the
+  // app worker because parsing multipart there buffers the whole file.
+  const initRes = await fetch("/api/persist-asset", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      action: "create-direct-upload",
+      projectId: input.projectId,
+      ext,
+    }),
+  });
+  const init = (await initRes.json()) as {
+    direct?: boolean;
+    path?: string;
+    token?: string;
+    url?: string;
+    error?: string;
+  };
+  if (!initRes.ok) throw new Error(init.error ?? "Could not prepare upload");
+  if (init.direct) {
+    if (!init.path || !init.token || !init.url) throw new Error("Invalid upload details");
+    const { error } = await supabase.storage
+      .from("project-assets")
+      .uploadToSignedUrl(init.path, init.token, input.file, {
+        contentType: input.file.type || "application/octet-stream",
+      });
+    if (error) throw new Error(error.message || "Upload failed");
+    return init.url;
+  }
 
   const form = new FormData();
   form.set("projectId", input.projectId);
