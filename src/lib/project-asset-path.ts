@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { hostProjectAssetsRoot } from "@/lib/host-storage";
 import { materializeAssetToFile, putAsset } from "@/lib/object-storage";
-import { scratchRoot, useSpaces } from "@/lib/runtime-backends";
+import { scratchRoot, useCloudStorage, useSpaces } from "@/lib/runtime-backends";
 
 /**
  * Resolve `/api/assets/{userId}/...` to a local file path for ffmpeg.
