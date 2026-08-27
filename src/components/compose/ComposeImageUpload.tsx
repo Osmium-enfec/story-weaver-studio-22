@@ -1,21 +1,55 @@
 import { useCallback, useRef, useState } from "react";
 import { RefreshCw, Trash2, Upload } from "lucide-react";
+import { apiPersistAssetFile } from "@/lib/compose-api";
 
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
 interface ComposeImageUploadProps {
   value: string | null;
   onChange: (dataUrl: string | null) => void;
+  /** When set, uploads are stored as project assets so they survive refresh. */
+  projectId?: string | null;
   disabled?: boolean;
 }
 
-export function ComposeImageUpload({ value, onChange, disabled }: ComposeImageUploadProps) {
+export function ComposeImageUpload({
+  value,
+  onChange,
+  projectId = null,
+  disabled,
+}: ComposeImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const readFile = useCallback(
-    (file: File) => {
+    async (file: File) => {
       if (!file.type.startsWith("image/")) return;
+      setError(null);
+
+      // Persist to project storage first: a data: URL is too large to keep in
+      // the autosaved working draft, so it vanishes on refresh.
+      if (projectId) {
+        setBusy(true);
+        try {
+          const ext =
+            file.name.split(".").pop()?.toLowerCase() ||
+            (file.type.split("/")[1] ?? "png");
+          const url = await apiPersistAssetFile({ file, projectId, ext });
+          onChange(url);
+          return;
+        } catch (e) {
+          setError(
+            e instanceof Error
+              ? `${e.message} — using a temporary copy that may not survive refresh.`
+              : "Upload failed",
+          );
+        } finally {
+          setBusy(false);
+        }
+      }
+
       const reader = new FileReader();
       reader.onload = () => {
         const url = reader.result;
@@ -23,8 +57,9 @@ export function ComposeImageUpload({ value, onChange, disabled }: ComposeImageUp
       };
       reader.readAsDataURL(file);
     },
-    [onChange],
+    [onChange, projectId],
   );
+
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
