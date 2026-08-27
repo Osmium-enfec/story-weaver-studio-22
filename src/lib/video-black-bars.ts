@@ -117,6 +117,19 @@ export function detectVideoContentCropFromImageData(
     bottom -= 1;
   }
 
+  // Ignore sub-pixel / hairline edges: a clip without real black borders must
+  // be shown untouched.
+  const minBarX = Math.max(2, Math.round(w * MinBarFrac));
+  const minBarY = Math.max(2, Math.round(h * MinBarFrac));
+  if (left < minBarX) left = 0;
+  if (top < minBarY) top = 0;
+  if (right > w - 1 - minBarX) right = w - 1;
+  if (bottom > h - 1 - minBarY) bottom = h - 1;
+
+  if (left === 0 && top === 0 && right === w - 1 && bottom === h - 1) {
+    return { x: 0, y: 0, w, h };
+  }
+
   let cw = right - left + 1;
   let ch = bottom - top + 1;
 
@@ -124,6 +137,7 @@ export function detectVideoContentCropFromImageData(
   if (cw < w * MinContentFrac || ch < h * MinContentFrac) {
     return { x: 0, y: 0, w, h };
   }
+
 
   // Slight inset only on detected edges so anti-aliased matte remnants vanish.
   const insetX = Math.min(4, Math.floor(cw * 0.01));
