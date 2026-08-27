@@ -107,14 +107,17 @@ export function ComposeImageUpload({
             dragOver
               ? "border-primary bg-primary/5"
               : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
-          } ${disabled ? "pointer-events-none opacity-60" : ""}`}
+          } ${disabled || busy ? "pointer-events-none opacity-60" : ""}`}
         >
           <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-          <p className="text-sm font-medium">Drag and drop an image here</p>
+          <p className="text-sm font-medium">
+            {busy ? "Uploading…" : "Drag and drop an image here"}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">
             or click to browse (PNG, JPG, WebP)
           </p>
         </div>
+
       ) : (
         <div
           className={`space-y-2 rounded-lg border bg-muted/10 p-2 ${
