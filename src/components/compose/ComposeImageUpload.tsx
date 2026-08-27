@@ -137,12 +137,12 @@ export function ComposeImageUpload({
           />
           <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
             <span className="text-xs text-muted-foreground">
-              Image ready — drop a file to replace
+              {busy ? "Uploading…" : "Image ready — drop a file to replace"}
             </span>
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                disabled={disabled}
+                disabled={disabled || busy}
                 onClick={openPicker}
                 className="inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
               >
@@ -151,7 +151,7 @@ export function ComposeImageUpload({
               </button>
               <button
                 type="button"
-                disabled={disabled}
+                disabled={disabled || busy}
                 onClick={() => onChange(null)}
                 className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50"
               >
@@ -162,6 +162,9 @@ export function ComposeImageUpload({
           </div>
         </div>
       )}
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
+
   );
 }
