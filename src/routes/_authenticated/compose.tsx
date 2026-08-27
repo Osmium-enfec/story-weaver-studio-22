@@ -1071,8 +1071,12 @@ function ComposePage() {
         segment: runSegment,
         fetchMask: runFetchMask,
       });
-      setDraft((d) => ({ ...d, crops, placements: [] }));
-      if (crops.length > 0) setSelectedCropId(crops[0]!.id);
+      const persisted = await Promise.all(
+        crops.map(async (c) => ({ ...c, imageUrl: await persistCropImageUrl(c.imageUrl) })),
+      );
+      setDraft((d) => ({ ...d, crops: persisted, placements: [] }));
+      if (persisted.length > 0) setSelectedCropId(persisted[0]!.id);
+
       if (warning) setError(warning);
     } catch (segErr: unknown) {
       setError(segErr instanceof Error ? `Layering failed: ${segErr.message}` : "Layering failed.");
@@ -1895,8 +1899,29 @@ function ComposePage() {
     });
   }
 
+  /**
+   * Crop images are produced as inline data: URLs. Those are far too large for
+   * the tab draft (quota) and are dropped on refresh, which used to wipe every
+   * layer. Upload them to project storage and keep a short /api/assets URL.
+   */
+  async function persistCropImageUrl(url: string): Promise<string> {
+    if (!projectId || !url.startsWith("data:")) return url;
+    try {
+      return await apiPersistAsset({ url, projectId, ext: "png" });
+    } catch {
+      return url;
+    }
+  }
+
   function addCrop(crop: ComposeCrop) {
     setDraft((d) => ({ ...d, crops: [...d.crops, crop] }));
+    void persistCropImageUrl(crop.imageUrl).then((imageUrl) => {
+      if (imageUrl === crop.imageUrl) return;
+      setDraft((d) => ({
+        ...d,
+        crops: d.crops.map((c) => (c.id === crop.id ? { ...c, imageUrl } : c)),
+      }));
+    });
   }
 
   function removeCrop(id: string) {
@@ -1914,7 +1939,15 @@ function ComposePage() {
       ...d,
       crops: d.crops.map((c) => (c.id === cropId ? { ...c, imageUrl } : c)),
     }));
+    void persistCropImageUrl(imageUrl).then((next) => {
+      if (next === imageUrl) return;
+      setDraft((d) => ({
+        ...d,
+        crops: d.crops.map((c) => (c.id === cropId ? { ...c, imageUrl: next } : c)),
+      }));
+    });
   }
+
 
   function addPlacement(cropId: string, startMs: number, sfxUrl?: string | null) {
     const id = `pl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
