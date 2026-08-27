@@ -1528,6 +1528,7 @@ function ComposePage() {
         videoUrl: result.url,
         durationMs: result.durationMs,
       });
+      const clipAudioMs = audio.durationMs || result.durationMs;
       setRecordingDraft((d) => ({
         ...d,
         mediaUrl: result.url,
@@ -1537,8 +1538,8 @@ function ComposePage() {
         useEmbeddedAudio: true,
         voiceReplace: false,
         audioUrl: audio.url,
-        audioDurationMs: audio.durationMs,
-        audioSegments: [singleRecordingAudioSegment(audio.durationMs)],
+        audioDurationMs: clipAudioMs,
+        audioSegments: [singleRecordingAudioSegment(clipAudioMs)],
         cameraZoomSfx: "none",
         ready: true,
       }));
@@ -1557,9 +1558,11 @@ function ComposePage() {
         trimEndMs: result.durationMs,
         useEmbeddedAudio: true,
         voiceReplace: false,
-        audioUrl: null,
-        audioDurationMs: 0,
-        audioSegments: [],
+        // Fall back to the clip itself as the audio source so the scene can
+        // still be saved (the player reads the embedded track).
+        audioUrl: result.url,
+        audioDurationMs: result.durationMs,
+        audioSegments: [singleRecordingAudioSegment(result.durationMs)],
         ready: true,
       }));
       setOpenSteps(["setup", "edit", "preview"]);
@@ -2909,9 +2912,9 @@ function ComposePage() {
             useEmbeddedAudio: true,
             voiceReplace: false,
             cameraZoomSfx: fromExisting?.cameraZoomSfx ?? "none",
-            audioUrl: null,
-            audioDurationMs: 0,
-            audioSegments: [],
+            audioUrl: mediaUrl,
+            audioDurationMs: mediaMs,
+            audioSegments: [singleRecordingAudioSegment(mediaMs)],
             ready: true,
           };
           setRecordingDraft(fallback);
