@@ -3078,8 +3078,10 @@ export function ComposeStepsAccordion({
               <ComposeImageUpload
                 value={uploadDataUrl}
                 onChange={onUploadChange}
+                projectId={projectId}
                 disabled={generatingImage}
               />
+
               {draft.compositeUrl && (
                 <img
                   src={draft.compositeUrl}

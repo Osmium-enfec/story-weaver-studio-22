@@ -116,6 +116,22 @@ export function readComposeWorkingDraft(projectId: string | null | undefined): C
   }
 }
 
+/** Replace every inline data: URL with null so the draft fits in storage. */
+function stripInlineData<T>(value: T): T {
+  if (typeof value === "string") {
+    return (value.startsWith("data:") ? null : value) as unknown as T;
+  }
+  if (Array.isArray(value)) return value.map(stripInlineData) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = stripInlineData(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
 export function writeComposeWorkingDraft(
   projectId: string | null | undefined,
   draft: Omit<ComposeWorkingDraft, "updatedAt">,
@@ -125,21 +141,17 @@ export function writeComposeWorkingDraft(
   try {
     sessionStorage.setItem(storageKey(projectId), JSON.stringify(payload));
   } catch (e) {
-    // Quota: retry without large data: upload preview.
+    // Quota: retry without any inline data: URLs (uploads, crops, previews).
+    // Uploaded images are persisted as /api/assets URLs, so this keeps the
+    // rest of the draft (script, steps, question, timings) recoverable.
     try {
-      const slim = {
-        ...payload,
-        uploadDataUrl:
-          payload.uploadDataUrl && payload.uploadDataUrl.startsWith("data:")
-            ? null
-            : payload.uploadDataUrl,
-      };
-      sessionStorage.setItem(storageKey(projectId), JSON.stringify(slim));
+      sessionStorage.setItem(storageKey(projectId), JSON.stringify(stripInlineData(payload)));
     } catch {
       console.warn("[compose-working-draft] sessionStorage full or blocked", e);
     }
   }
 }
+
 
 export function clearComposeWorkingDraft(projectId: string | null | undefined): void {
   if (!projectId || typeof sessionStorage === "undefined") return;
