@@ -13,7 +13,7 @@ export interface VideoContentCrop {
   h: number;
 }
 
-const BlackLumaThreshold = 28;
+const BlackLumaThreshold = 16;
 const RowColMatteFrac = 0.985;
 const MaxScanFrac = 0.42;
 const MinContentFrac = 0.35;
