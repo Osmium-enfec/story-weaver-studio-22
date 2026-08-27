@@ -13,25 +13,28 @@ export interface VideoContentCrop {
   h: number;
 }
 
-const BlackLumaThreshold = 35;
-const WhiteLumaThreshold = 235;
-const RowColMatteFrac = 0.9;
+const BlackLumaThreshold = 28;
+const RowColMatteFrac = 0.985;
 const MaxScanFrac = 0.42;
 const MinContentFrac = 0.35;
+/** Ignore hairline edges — only real letterbox bars are cropped. */
+const MinBarFrac = 0.012;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-function matteKind(data: Uint8ClampedArray, i: number): "black" | "white" | null {
+/**
+ * Only true black letterboxing counts as matte. White/light padding is left
+ * alone: many screen recordings are light-themed edge to edge, and cropping
+ * those zoomed into the content.
+ */
+function isMatte(data: Uint8ClampedArray, i: number): boolean {
   const r = data[i]!;
   const g = data[i + 1]!;
   const b = data[i + 2]!;
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  const chroma = Math.max(r, g, b) - Math.min(r, g, b);
-  if (luma <= BlackLumaThreshold) return "black";
-  if (luma >= WhiteLumaThreshold && chroma <= 18) return "white";
-  return null;
+  return luma <= BlackLumaThreshold;
 }
 
 function isMostlyMatteRow(
@@ -42,37 +45,30 @@ function isMostlyMatteRow(
   x1: number,
 ): boolean {
   const row = y * width * 4;
-  let black = 0;
-  let white = 0;
+  let matte = 0;
   const count = Math.max(1, x1 - x0 + 1);
   for (let x = x0; x <= x1; x++) {
-    const i = row + x * 4;
-    const kind = matteKind(data, i);
-    if (kind === "black") black += 1;
-    if (kind === "white") white += 1;
+    if (isMatte(data, row + x * 4)) matte += 1;
   }
-  return Math.max(black, white) / count >= RowColMatteFrac;
+  return matte / count >= RowColMatteFrac;
 }
 
 function isMostlyMatteCol(
   data: Uint8ClampedArray,
   width: number,
-  height: number,
+  _height: number,
   x: number,
   y0: number,
   y1: number,
 ): boolean {
-  let black = 0;
-  let white = 0;
+  let matte = 0;
   const count = Math.max(1, y1 - y0 + 1);
   for (let y = y0; y <= y1; y++) {
-    const i = (y * width + x) * 4;
-    const kind = matteKind(data, i);
-    if (kind === "black") black += 1;
-    if (kind === "white") white += 1;
+    if (isMatte(data, (y * width + x) * 4)) matte += 1;
   }
-  return Math.max(black, white) / count >= RowColMatteFrac;
+  return matte / count >= RowColMatteFrac;
 }
+
 
 /**
  * Find content inside black letterboxing or white canvas padding.
@@ -121,6 +117,19 @@ export function detectVideoContentCropFromImageData(
     bottom -= 1;
   }
 
+  // Ignore sub-pixel / hairline edges: a clip without real black borders must
+  // be shown untouched.
+  const minBarX = Math.max(2, Math.round(w * MinBarFrac));
+  const minBarY = Math.max(2, Math.round(h * MinBarFrac));
+  if (left < minBarX) left = 0;
+  if (top < minBarY) top = 0;
+  if (right > w - 1 - minBarX) right = w - 1;
+  if (bottom > h - 1 - minBarY) bottom = h - 1;
+
+  if (left === 0 && top === 0 && right === w - 1 && bottom === h - 1) {
+    return { x: 0, y: 0, w, h };
+  }
+
   let cw = right - left + 1;
   let ch = bottom - top + 1;
 
@@ -128,6 +137,7 @@ export function detectVideoContentCropFromImageData(
   if (cw < w * MinContentFrac || ch < h * MinContentFrac) {
     return { x: 0, y: 0, w, h };
   }
+
 
   // Slight inset only on detected edges so anti-aliased matte remnants vanish.
   const insetX = Math.min(4, Math.floor(cw * 0.01));

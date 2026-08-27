@@ -226,6 +226,8 @@ export async function persistSceneAssetsForSave(
     ? await persistClientAsset(scene.backgroundUrl, projectId, persist, "png", "Scene background")
     : undefined;
 
+  // The composite thumbnail is a preview-only convenience. An expired blob URL
+  // from an older session must never block saving or stitching a scene.
   const compositeThumbUrl = scene.compositeThumbUrl
     ? await persistClientAsset(
         scene.compositeThumbUrl,
@@ -233,8 +235,9 @@ export async function persistSceneAssetsForSave(
         persist,
         "png",
         "Scene thumbnail",
-      )
+      ).catch(() => undefined)
     : undefined;
+
 
   const questionMarkAudioUrl = scene.questionMarkAudioUrl
     ? await persistClientAsset(
@@ -277,7 +280,7 @@ export async function persistSceneAssetsForSave(
     audioUrl,
     ...(mediaUrl != null ? { mediaUrl } : {}),
     ...(backgroundUrl != null ? { backgroundUrl } : {}),
-    ...(compositeThumbUrl != null ? { compositeThumbUrl } : {}),
+    ...(scene.compositeThumbUrl ? { compositeThumbUrl } : {}),
     ...(questionMarkAudioUrl != null ? { questionMarkAudioUrl } : {}),
     ...(questionIntroAudioUrl != null ? { questionIntroAudioUrl } : {}),
     ...(elements != null ? { elements } : {}),
