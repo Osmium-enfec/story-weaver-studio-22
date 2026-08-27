@@ -126,9 +126,28 @@ export function detectVideoContentCropFromImageData(
   if (right > w - 1 - minBarX) right = w - 1;
   if (bottom > h - 1 - minBarY) bottom = h - 1;
 
+  // Real letterboxing is symmetric: bars appear on BOTH sides and are close in
+  // size. A one-sided or lopsided dark band is UI chrome (VS Code title bar,
+  // sidebar, terminal) and must never be cropped away.
+  const leftBar = left;
+  const rightBar = w - 1 - right;
+  const topBar = top;
+  const bottomBar = h - 1 - bottom;
+  const lopsided = (a: number, b: number) =>
+    a === 0 || b === 0 || Math.abs(a - b) > Math.max(a, b) * 0.35;
+  if (lopsided(leftBar, rightBar)) {
+    left = 0;
+    right = w - 1;
+  }
+  if (lopsided(topBar, bottomBar)) {
+    top = 0;
+    bottom = h - 1;
+  }
+
   if (left === 0 && top === 0 && right === w - 1 && bottom === h - 1) {
     return { x: 0, y: 0, w, h };
   }
+
 
   let cw = right - left + 1;
   let ch = bottom - top + 1;
