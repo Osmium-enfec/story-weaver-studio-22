@@ -538,7 +538,11 @@ function ComposePage() {
     const introAudioOk =
       !!questionDraft.introAudioUrl &&
       questionDraft.introAudioForText.trim() === questionDraft.introText.trim();
-    const setup = contentOk && markTextOk && markAudioOk && introTextOk && introAudioOk;
+    // Setup is considered done once the question content itself is filled in.
+    // The intro/mark voice lines have built-in defaults, and their audio is
+    // generated in the background — on hosted runtimes that default TTS can be
+    // unavailable, so it must not block the "checked" state or saving.
+    const setup = contentOk && markTextOk && introTextOk;
     return {
       contentOk,
       introAudioOk,
@@ -546,7 +550,7 @@ function ComposePage() {
       setup,
       tts: questionDraft.ready && !!questionDraft.audioUrl,
       preview: showPreview,
-      saveReady: setup && questionDraft.ready && !!questionDraft.audioUrl,
+      saveReady: contentOk && questionDraft.ready && !!questionDraft.audioUrl,
     };
   }, [questionDraft, showPreview]);
 
