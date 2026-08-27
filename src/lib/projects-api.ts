@@ -96,6 +96,8 @@ export function apiSaveProject(data: {
   course_id?: string | null;
   /** Only set true for intentional scene deletes. */
   allow_scene_shrink?: boolean;
+  /** Script-only autosave: never overwrite newer scene media. */
+  preserve_part_scenes?: boolean;
 }): Promise<{ id: string; store: "sqlite" }> {
   return projectsFetch({ action: "save", ...data });
 }

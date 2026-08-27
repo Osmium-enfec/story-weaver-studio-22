@@ -34,6 +34,7 @@ const Body = z.discriminatedUnion("action", [
     workshop_draft: z.any().optional(),
     course_id: z.string().uuid().nullable().optional(),
     allow_scene_shrink: z.boolean().optional(),
+    preserve_part_scenes: z.boolean().optional(),
   }),
   z.object({ action: z.literal("delete"), id: z.string().uuid() }),
   z.object({

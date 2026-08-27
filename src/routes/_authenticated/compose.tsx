@@ -3209,6 +3209,7 @@ function ComposePage() {
         parts: nextParts,
         thumbnail_url: fresh.record.thumbnail_url ?? undefined,
         course_id: fresh.record.course_id ?? undefined,
+        preserve_part_scenes: true,
       });
       if (seq !== scriptAutosaveSeqRef.current) return;
       lastSavedScriptKeyRef.current = JSON.stringify(planToSave.scenes);
