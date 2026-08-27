@@ -1557,9 +1557,11 @@ function ComposePage() {
         trimEndMs: result.durationMs,
         useEmbeddedAudio: true,
         voiceReplace: false,
-        audioUrl: null,
-        audioDurationMs: 0,
-        audioSegments: [],
+        // Fall back to the clip itself as the audio source so the scene can
+        // still be saved (the player reads the embedded track).
+        audioUrl: result.url,
+        audioDurationMs: result.durationMs,
+        audioSegments: [singleRecordingAudioSegment(result.durationMs)],
         ready: true,
       }));
       setOpenSteps(["setup", "edit", "preview"]);
