@@ -1071,8 +1071,12 @@ function ComposePage() {
         segment: runSegment,
         fetchMask: runFetchMask,
       });
-      setDraft((d) => ({ ...d, crops, placements: [] }));
-      if (crops.length > 0) setSelectedCropId(crops[0]!.id);
+      const persisted = await Promise.all(
+        crops.map(async (c) => ({ ...c, imageUrl: await persistCropImageUrl(c.imageUrl) })),
+      );
+      setDraft((d) => ({ ...d, crops: persisted, placements: [] }));
+      if (persisted.length > 0) setSelectedCropId(persisted[0]!.id);
+
       if (warning) setError(warning);
     } catch (segErr: unknown) {
       setError(segErr instanceof Error ? `Layering failed: ${segErr.message}` : "Layering failed.");
