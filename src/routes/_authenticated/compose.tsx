@@ -2911,9 +2911,9 @@ function ComposePage() {
             useEmbeddedAudio: true,
             voiceReplace: false,
             cameraZoomSfx: fromExisting?.cameraZoomSfx ?? "none",
-            audioUrl: null,
-            audioDurationMs: 0,
-            audioSegments: [],
+            audioUrl: mediaUrl,
+            audioDurationMs: mediaMs,
+            audioSegments: [singleRecordingAudioSegment(mediaMs)],
             ready: true,
           };
           setRecordingDraft(fallback);
