@@ -64,13 +64,13 @@ export function ComposeImageUpload({
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    if (disabled) return;
+    if (disabled || busy) return;
     const file = e.dataTransfer.files[0];
-    if (file) readFile(file);
+    if (file) void readFile(file);
   }
 
   function openPicker() {
-    if (!disabled) inputRef.current?.click();
+    if (!disabled && !busy) inputRef.current?.click();
   }
 
   return (
@@ -80,13 +80,14 @@ export function ComposeImageUpload({
         type="file"
         accept={ACCEPT}
         className="hidden"
-        disabled={disabled}
+        disabled={disabled || busy}
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) readFile(file);
+          if (file) void readFile(file);
           e.target.value = "";
         }}
       />
+
 
       {!value ? (
         <div
