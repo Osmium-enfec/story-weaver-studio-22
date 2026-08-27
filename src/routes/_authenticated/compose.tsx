@@ -1528,6 +1528,7 @@ function ComposePage() {
         videoUrl: result.url,
         durationMs: result.durationMs,
       });
+      const clipAudioMs = audio.durationMs || result.durationMs;
       setRecordingDraft((d) => ({
         ...d,
         mediaUrl: result.url,
@@ -1537,8 +1538,8 @@ function ComposePage() {
         useEmbeddedAudio: true,
         voiceReplace: false,
         audioUrl: audio.url,
-        audioDurationMs: audio.durationMs,
-        audioSegments: [singleRecordingAudioSegment(audio.durationMs)],
+        audioDurationMs: clipAudioMs,
+        audioSegments: [singleRecordingAudioSegment(clipAudioMs)],
         cameraZoomSfx: "none",
         ready: true,
       }));
