@@ -163,6 +163,8 @@ export function mergePartsForCollaborativeSave(opts: {
   now?: string;
   /** When true, missing scene ids are treated as intentional deletes. */
   allowSceneShrink?: boolean;
+  /** Script-only autosaves must never replace a newer scene payload. */
+  preserveScenes?: boolean;
 }): ProjectPart[] {
   const existing = opts.existingParts;
   const incoming = getProjectParts({ parts: opts.incomingParts });
@@ -183,28 +185,17 @@ export function mergePartsForCollaborativeSave(opts: {
       return ep;
     }
 
-    // Stale-tab guard: if the client part is older than DB, keep DB scenes —
-    // unless this save explicitly allows shrinking (Delete scene / clear all).
-    const inT = Date.parse(String(ip.updated_at ?? ""));
-    const exT = Date.parse(String(ep.updated_at ?? ""));
-    const incomingIsStale =
-      Number.isFinite(inT) && Number.isFinite(exT) && inT < exT;
-    if (incomingIsStale && !allowSceneShrink) {
-      return {
-        ...ep,
-        script: ip.script !== undefined ? ip.script : ep.script,
-        scriptScenes:
-          ip.scriptScenes !== undefined ? ip.scriptScenes : ep.scriptScenes,
-        title: ip.title?.trim() ? ip.title : ep.title,
-        updated_at: now,
-      };
-    }
-
-    const scenes = mergePartScenesPreserving(
-      ep.scenes,
-      ip.scenes,
-      allowSceneShrink,
-    ) as ProjectPart["scenes"];
+    // Scene saves may legitimately start from an older part snapshot after a
+    // large asset upload. Merge them by scene id instead of silently dropping
+    // the edit based on client wall-clock timestamps. Script-only autosaves
+    // explicitly preserve the latest DB scene payload.
+    const scenes = opts.preserveScenes
+      ? ep.scenes
+      : (mergePartScenesPreserving(
+          ep.scenes,
+          ip.scenes,
+          allowSceneShrink,
+        ) as ProjectPart["scenes"]);
 
     return {
       ...ip,

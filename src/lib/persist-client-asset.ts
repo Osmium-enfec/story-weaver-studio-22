@@ -9,8 +9,10 @@ export function isEphemeralAssetUrl(url: string | undefined | null): boolean {
   return url.startsWith("blob:") || url.startsWith("data:");
 }
 
-export function isPersistedAssetUrl(url: string): boolean {
-  return url.startsWith("/api/assets/");
+export function isPersistedAssetUrl(url: string, projectId?: string): boolean {
+  if (!url.startsWith("/api/assets/")) return false;
+  if (!projectId) return true;
+  return url.split("?")[0]?.split("/").includes(projectId) === true;
 }
 
 /** Static files served from public/ — safe to fetch across sessions. */
@@ -96,7 +98,10 @@ export async function persistClientAsset(
   label = "Media",
 ): Promise<string | undefined> {
   if (!url) return undefined;
-  if (isPersistedAssetUrl(url) || isPublicAssetUrl(url)) return url;
+  // A durable URL from this episode can be reused directly. Older imports can
+  // contain valid URLs under another episode namespace; fetch and copy those
+  // into the current episode so future cleanup cannot break this scene.
+  if (isPersistedAssetUrl(url, projectId) || isPublicAssetUrl(url)) return url;
   if (/^https?:\/\//.test(url)) return url;
 
   // data: — write straight to assets (no fetch; large TTS data URLs often break fetch).

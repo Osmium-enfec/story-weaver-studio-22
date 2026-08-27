@@ -223,6 +223,8 @@ function sqliteSaveProject(
     course_id?: string | null;
     /** When true, missing scene ids on an editable part are treated as deletes. */
     allow_scene_shrink?: boolean;
+    /** Script-only autosave: retain the database's latest scene payloads. */
+    preserve_part_scenes?: boolean;
   },
   opts?: { asAdmin?: boolean },
 ): string {
@@ -290,6 +292,7 @@ function sqliteSaveProject(
         isOwner: existing.user_id === userId,
         now,
         allowSceneShrink: data.allow_scene_shrink === true,
+        preserveScenes: data.preserve_part_scenes === true,
       });
       partsJson = JSON.stringify(merged);
     } else {
