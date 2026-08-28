@@ -100,7 +100,7 @@ import type { Scene } from "@/components/VideoPlayer";
 import type { ProjectPart } from "@/lib/project-parts";
 import { probeAudioDurationMs } from "@/lib/audio-duration";
 import { toPlayableAudioUrl } from "@/lib/playable-audio-url";
-import { persistSceneAssetsForSave } from "@/lib/persist-client-asset";
+import { persistSceneAssetsForSave, imageUrlToDataUrl } from "@/lib/persist-client-asset";
 import { createSilentAudioUrl } from "@/lib/audio-concat";
 import {
   beatsToFullCode,
