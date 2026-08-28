@@ -331,3 +331,14 @@ export async function persistPartScenesForSave(
     })),
   };
 }
+
+/**
+ * Ensure an image URL is a base64 data URL (Replicate upload needs raw bytes).
+ * Persisted uploads are served from /api/assets/..., which SAM 2 cannot read.
+ */
+export async function imageUrlToDataUrl(url: string): Promise<string> {
+  if (url.startsWith("data:")) return url;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not read image (${res.status})`);
+  return blobToDataUrl(await res.blob());
+}
