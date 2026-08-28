@@ -1067,10 +1067,12 @@ function ComposePage() {
     setError(null);
     setSegmentingLayers(true);
     try {
-      const { crops, warning } = await autoLayersFromComposite(composite, {
+      const compositeData = await imageUrlToDataUrl(composite);
+      const { crops, warning } = await autoLayersFromComposite(compositeData, {
         segment: runSegment,
         fetchMask: runFetchMask,
       });
+
       const persisted = await Promise.all(
         crops.map(async (c) => ({ ...c, imageUrl: await persistCropImageUrl(c.imageUrl) })),
       );
