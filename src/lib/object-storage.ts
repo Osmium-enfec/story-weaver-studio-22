@@ -219,6 +219,9 @@ export async function signedAssetUrl(
   }
 
   if (useSpaces()) {
+    if (isEdgeRuntime()) {
+      return spacesPresign("GET", kind, rel, expiresInSeconds);
+    }
     const { GetObjectCommand } = await import("@aws-sdk/client-s3");
     const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
     const client = await spacesClient();
