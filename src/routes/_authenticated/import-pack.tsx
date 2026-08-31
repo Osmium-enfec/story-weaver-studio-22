@@ -562,7 +562,13 @@ function ImportPackPage() {
                   {episodes.length > 0 ? (
                     <select
                       value={targetEpisodeId ?? ""}
-                      onChange={(e) => setTargetEpisodeId(e.target.value)}
+                      onChange={(e) => {
+                        setTargetEpisodeId(e.target.value);
+                        setTargetParts([]);
+                        setTargetPartId(null);
+                        if (phase.kind === "ready")
+                          void loadTargetParts(e.target.value, phase.pack, selectedPartId);
+                      }}
                       className="max-w-[22rem] rounded-md border bg-background px-2 py-1 text-sm"
                     >
                       {episodes.map((e) => (
@@ -600,11 +606,18 @@ function ImportPackPage() {
                 <p className="text-xs text-amber-600">{episodesNote}</p>
               )}
               <div className="flex items-center gap-2">
-                <dt className="w-28 shrink-0 text-muted-foreground">Part</dt>
+                <dt className="w-28 shrink-0 text-muted-foreground">
+                  Part from zip
+                </dt>
                 <dd>
                   <select
                     value={selectedPartId ?? ""}
-                    onChange={(e) => setSelectedPartId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedPartId(e.target.value);
+                      setTargetPartId(
+                        guessTargetPart(targetParts, phase.pack, e.target.value),
+                      );
+                    }}
                     className="rounded-md border bg-background px-2 py-1 text-sm"
                   >
                     {phase.pack.parts.map((p) => (
@@ -613,6 +626,37 @@ function ImportPackPage() {
                       </option>
                     ))}
                   </select>
+                </dd>
+              </div>
+              <div className="flex items-center gap-2">
+                <dt className="w-28 shrink-0 text-muted-foreground">Into part</dt>
+                <dd>
+                  {partsLoading ? (
+                    <span className="text-xs text-muted-foreground">
+                      Loading parts…
+                    </span>
+                  ) : targetParts.length > 0 ? (
+                    <>
+                      <select
+                        value={targetPartId ?? ""}
+                        onChange={(e) => setTargetPartId(e.target.value)}
+                        className="rounded-md border bg-background px-2 py-1 text-sm"
+                      >
+                        {targetParts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} ({p.sceneCount} scenes)
+                          </option>
+                        ))}
+                      </select>
+                      <span className="ml-2 text-xs text-amber-600">
+                        this part's current content will be wiped
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Pick an episode first
+                    </span>
+                  )}
                 </dd>
               </div>
             </dl>
