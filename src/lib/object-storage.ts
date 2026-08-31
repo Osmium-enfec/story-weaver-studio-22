@@ -2,7 +2,8 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from
 import { Readable } from "node:stream";
 import path from "node:path";
 import { hostAppAssetsRoot, hostProjectAssetsRoot } from "@/lib/host-storage";
-import { useCloudStorage, useSpaces } from "@/lib/runtime-backends";
+import { isEdgeRuntime, useCloudStorage, useSpaces } from "@/lib/runtime-backends";
+import { presignS3Url } from "@/lib/s3-sigv4";
 
 export type AssetKind = "project" | "app";
 
@@ -68,6 +69,29 @@ function spacesKey(kind: AssetKind, rel: string): string {
   return `${spacesBasePrefix()}${kindPrefix}/${clean}`;
 }
 
+/**
+ * Presign with WebCrypto instead of the AWS SDK. The SDK's S3 client does not
+ * work in the published edge worker, which made every stored asset 404 there.
+ */
+function spacesPresign(
+  method: "GET" | "PUT" | "HEAD",
+  kind: AssetKind,
+  rel: string,
+  expiresIn = 3600,
+  _contentType?: string,
+): Promise<string> {
+  return presignS3Url({
+    method,
+    endpoint: spacesEndpoint(),
+    region: process.env.SPACES_REGION?.trim() || "blr1",
+    bucket: bucket(),
+    key: spacesKey(kind, rel),
+    accessKeyId: process.env.SPACES_KEY!.trim(),
+    secretAccessKey: process.env.SPACES_SECRET!.trim(),
+    expiresIn,
+  });
+}
+
 function localRoot(kind: AssetKind): string {
   return kind === "app" ? hostAppAssetsRoot() : hostProjectAssetsRoot();
 }
@@ -91,6 +115,16 @@ export async function putAsset(opts: {
         "Content-Type": opts.contentType ?? "application/octet-stream",
         "x-upsert": "true",
       },
+      body: new Uint8Array(opts.body),
+    });
+    if (!res.ok) {
+      throw new Error(`Asset upload failed [${res.status}]: ${await res.text()}`);
+    }
+  } else if (useSpaces() && isEdgeRuntime()) {
+    const url = await spacesPresign("PUT", opts.kind, rel, 900);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": opts.contentType ?? "application/octet-stream" },
       body: new Uint8Array(opts.body),
     });
     if (!res.ok) {
@@ -137,18 +171,23 @@ export async function signedUploadUrl(
   if (!useSpaces()) return null;
   const rel = relPath.replace(/^\/+/, "");
   if (!rel || rel.includes("..")) return null;
-  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
-  const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-  const client = await spacesClient();
-  const uploadUrl = await getSignedUrl(
-    client,
-    new PutObjectCommand({
-      Bucket: bucket(),
-      Key: spacesKey(kind, rel),
-      ...(contentType ? { ContentType: contentType } : {}),
-    }),
-    { expiresIn: expiresInSeconds },
-  );
+  let uploadUrl: string;
+  if (isEdgeRuntime()) {
+    uploadUrl = await spacesPresign("PUT", kind, rel, expiresInSeconds, contentType);
+  } else {
+    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+    const client = await spacesClient();
+    uploadUrl = await getSignedUrl(
+      client,
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: spacesKey(kind, rel),
+        ...(contentType ? { ContentType: contentType } : {}),
+      }),
+      { expiresIn: expiresInSeconds },
+    );
+  }
   const prefix = kind === "app" ? "/api/app-assets" : "/api/assets";
   return { uploadUrl, appUrl: `${prefix}/${rel}` };
 }
@@ -180,6 +219,9 @@ export async function signedAssetUrl(
   }
 
   if (useSpaces()) {
+    if (isEdgeRuntime()) {
+      return spacesPresign("GET", kind, rel, expiresInSeconds);
+    }
     const { GetObjectCommand } = await import("@aws-sdk/client-s3");
     const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
     const client = await spacesClient();
@@ -246,6 +288,16 @@ export async function assetExists(kind: AssetKind, relPath: string): Promise<boo
   }
 
   if (useSpaces()) {
+    if (isEdgeRuntime()) {
+      try {
+        const res = await fetch(await spacesPresign("HEAD", kind, rel, 300), {
+          method: "HEAD",
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
     try {
       const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
       const client = await spacesClient();
@@ -280,6 +332,26 @@ export async function readAsset(opts: {
         ...cloudHeaders(),
         ...(opts.rangeHeader ? { Range: opts.rangeHeader } : {}),
       },
+    });
+    if (!res.ok || !res.body) return null;
+    const len = res.headers.get("content-length");
+    const contentRange = res.headers.get("content-range");
+    return {
+      status: res.status === 206 ? 206 : 200,
+      body: res.body,
+      headers: {
+        ...common,
+        ...(len ? { "Content-Length": len } : {}),
+        ...(contentRange ? { "Content-Range": contentRange } : {}),
+      },
+    };
+  }
+
+  if (useSpaces() && isEdgeRuntime()) {
+    // Edge worker: sign with WebCrypto and stream the object straight through.
+    const url = await spacesPresign("GET", opts.kind, rel, 900);
+    const res = await fetch(url, {
+      headers: opts.rangeHeader ? { Range: opts.rangeHeader } : {},
     });
     if (!res.ok || !res.body) return null;
     const len = res.headers.get("content-length");
