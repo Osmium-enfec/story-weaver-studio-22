@@ -360,7 +360,7 @@ function ImportPackPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ action: "importPart", id: pack.projectId, part }),
+          body: JSON.stringify({ action: "importPart", id: targetId, part }),
         });
         const data = (await res.json()) as {
           ok?: boolean;
@@ -373,6 +373,7 @@ function ImportPackPage() {
           pack,
           partTitle: part.title,
           replaced: data.replaced === true,
+          targetId,
         });
       } catch (e) {
         setPhase({
