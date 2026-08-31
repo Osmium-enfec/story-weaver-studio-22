@@ -14,6 +14,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { supabase } from "@/integrations/supabase/client";
 import { apiListCourses } from "@/lib/courses-api";
 import {
+  apiGetProject,
   apiListProjects,
   type ProjectListItem,
 } from "@/lib/projects-api";
@@ -278,31 +279,99 @@ function ImportPackPage() {
   const [courses, setCourses] = useState<Map<string, string>>(new Map());
   const [targetEpisodeId, setTargetEpisodeId] = useState<string | null>(null);
   const [episodesNote, setEpisodesNote] = useState<string | null>(null);
+  // Parts of the chosen destination episode (fetched on selection).
+  const [targetParts, setTargetParts] = useState<
+    { id: string; title: string; sceneCount: number }[]
+  >([]);
+  const [targetPartId, setTargetPartId] = useState<string | null>(null);
+  const [partsLoading, setPartsLoading] = useState(false);
 
-  const loadTargets = useCallback(async (pack: PackData) => {
-    setEpisodesNote(null);
-    try {
-      const [list, courseList] = await Promise.all([
-        apiListProjects(),
-        apiListCourses().catch(() => []),
-      ]);
-      setEpisodes(list);
-      setCourses(new Map(courseList.map((c) => [c.id, c.title])));
-      const match = list.find((e) => e.id === pack.projectId);
-      if (match) {
-        setTargetEpisodeId(match.id);
-      } else {
-        setTargetEpisodeId(list[0]?.id ?? null);
-        setEpisodesNote(
-          "This pack's episode isn't in the system yet — pick which episode to merge it into.",
+  /** Pick the destination part that best matches the pack's part. */
+  const guessTargetPart = useCallback(
+    (
+      parts: { id: string; title: string; sceneCount: number }[],
+      pack: PackData,
+      partId: string | null,
+    ): string | null => {
+      const src =
+        pack.parts.find((p) => p.id === partId) ??
+        pack.parts.find((p) => p.title === pack.manifest.part) ??
+        pack.parts[0];
+      if (!src) return parts[0]?.id ?? null;
+      const byId = parts.find((p) => p.id === src.id);
+      if (byId) return byId.id;
+      const norm = (v: string) => v.toLowerCase().replace(/\s+/g, " ").trim();
+      const byTitle = parts.find((p) => norm(p.title) === norm(src.title));
+      if (byTitle) return byTitle.id;
+      const num = /(?:^|\bpart\s*)(\d+)/i.exec(src.title);
+      if (num) {
+        const byNum = parts.find(
+          (p) => /(?:^|\bpart\s*)(\d+)/i.exec(p.title)?.[1] === num[1],
         );
+        if (byNum) return byNum.id;
       }
-    } catch {
-      setEpisodesNote("Could not load the episode list — refresh and try again.");
-      setEpisodes([]);
-      setTargetEpisodeId(null);
-    }
-  }, []);
+      return parts[0]?.id ?? null;
+    },
+    [],
+  );
+
+  const loadTargetParts = useCallback(
+    async (episodeId: string, pack: PackData, partId: string | null) => {
+      setPartsLoading(true);
+      try {
+        const project = await apiGetProject(episodeId);
+        const rawParts = Array.isArray(project.parts)
+          ? (project.parts as Record<string, unknown>[])
+          : [];
+        const parts = rawParts.map((p, i) => ({
+          id: String(p.id ?? `part-${i}`),
+          title: String(p.title ?? `Part ${i + 1}`),
+          sceneCount: Array.isArray(p.scenes) ? p.scenes.length : 0,
+        }));
+        setTargetParts(parts);
+        setTargetPartId(guessTargetPart(parts, pack, partId));
+      } catch {
+        setTargetParts([]);
+        setTargetPartId(null);
+        setEpisodesNote("Could not load parts of that episode — try again.");
+      } finally {
+        setPartsLoading(false);
+      }
+    },
+    [guessTargetPart],
+  );
+
+  const loadTargets = useCallback(
+    async (pack: PackData) => {
+      setEpisodesNote(null);
+      try {
+        const [list, courseList] = await Promise.all([
+          apiListProjects(),
+          apiListCourses().catch(() => []),
+        ]);
+        setEpisodes(list);
+        setCourses(new Map(courseList.map((c) => [c.id, c.title])));
+        const match = list.find((e) => e.id === pack.projectId);
+        const chosen = match ?? list[0];
+        if (chosen) {
+          setTargetEpisodeId(chosen.id);
+          void loadTargetParts(chosen.id, pack, null);
+        } else {
+          setTargetEpisodeId(null);
+        }
+        if (!match) {
+          setEpisodesNote(
+            "This pack's episode isn't in the system yet — pick which episode to merge it into.",
+          );
+        }
+      } catch {
+        setEpisodesNote("Could not load the episode list — refresh and try again.");
+        setEpisodes([]);
+        setTargetEpisodeId(null);
+      }
+    },
+    [loadTargetParts],
+  );
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -327,7 +396,12 @@ function ImportPackPage() {
   );
 
   const runImport = useCallback(
-    async (pack: PackData, partId: string, targetId: string) => {
+    async (
+      pack: PackData,
+      partId: string,
+      targetId: string,
+      targetPart: string | null,
+    ) => {
       const token = getStoredSessionToken();
       if (!token) {
         setPhase({ kind: "error", message: "Sign in required." });
@@ -360,7 +434,12 @@ function ImportPackPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ action: "importPart", id: targetId, part }),
+          body: JSON.stringify({
+            action: "importPart",
+            id: targetId,
+            part,
+            target_part_id: targetPart ?? undefined,
+          }),
         });
         const data = (await res.json()) as {
           ok?: boolean;
@@ -483,7 +562,13 @@ function ImportPackPage() {
                   {episodes.length > 0 ? (
                     <select
                       value={targetEpisodeId ?? ""}
-                      onChange={(e) => setTargetEpisodeId(e.target.value)}
+                      onChange={(e) => {
+                        setTargetEpisodeId(e.target.value);
+                        setTargetParts([]);
+                        setTargetPartId(null);
+                        if (phase.kind === "ready")
+                          void loadTargetParts(e.target.value, phase.pack, selectedPartId);
+                      }}
                       className="max-w-[22rem] rounded-md border bg-background px-2 py-1 text-sm"
                     >
                       {episodes.map((e) => (
@@ -521,11 +606,18 @@ function ImportPackPage() {
                 <p className="text-xs text-amber-600">{episodesNote}</p>
               )}
               <div className="flex items-center gap-2">
-                <dt className="w-28 shrink-0 text-muted-foreground">Part</dt>
+                <dt className="w-28 shrink-0 text-muted-foreground">
+                  Part from zip
+                </dt>
                 <dd>
                   <select
                     value={selectedPartId ?? ""}
-                    onChange={(e) => setSelectedPartId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedPartId(e.target.value);
+                      setTargetPartId(
+                        guessTargetPart(targetParts, phase.pack, e.target.value),
+                      );
+                    }}
                     className="rounded-md border bg-background px-2 py-1 text-sm"
                   >
                     {phase.pack.parts.map((p) => (
@@ -536,14 +628,50 @@ function ImportPackPage() {
                   </select>
                 </dd>
               </div>
+              <div className="flex items-center gap-2">
+                <dt className="w-28 shrink-0 text-muted-foreground">Into part</dt>
+                <dd>
+                  {partsLoading ? (
+                    <span className="text-xs text-muted-foreground">
+                      Loading parts…
+                    </span>
+                  ) : targetParts.length > 0 ? (
+                    <>
+                      <select
+                        value={targetPartId ?? ""}
+                        onChange={(e) => setTargetPartId(e.target.value)}
+                        className="rounded-md border bg-background px-2 py-1 text-sm"
+                      >
+                        {targetParts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.title} ({p.sceneCount} scenes)
+                          </option>
+                        ))}
+                      </select>
+                      <span className="ml-2 text-xs text-amber-600">
+                        this part's current content will be wiped
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      Pick an episode first
+                    </span>
+                  )}
+                </dd>
+              </div>
             </dl>
             <div className="mt-5 flex items-center gap-3">
               <button
-                disabled={!selectedPartId || !targetEpisodeId}
+                disabled={!selectedPartId || !targetEpisodeId || !targetPartId}
                 onClick={() =>
                   selectedPartId &&
                   targetEpisodeId &&
-                  void runImport(phase.pack, selectedPartId, targetEpisodeId)
+                  void runImport(
+                    phase.pack,
+                    selectedPartId,
+                    targetEpisodeId,
+                    targetPartId,
+                  )
                 }
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
