@@ -273,27 +273,61 @@ function ImportPackPage() {
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Where the pack goes: course is fixed by the chosen episode.
+  const [episodes, setEpisodes] = useState<ProjectListItem[]>([]);
+  const [courses, setCourses] = useState<Map<string, string>>(new Map());
+  const [targetEpisodeId, setTargetEpisodeId] = useState<string | null>(null);
+  const [episodesNote, setEpisodesNote] = useState<string | null>(null doda);
 
-  const handleFile = useCallback(async (file: File) => {
-    setPhase({ kind: "reading", note: "Starting…" });
+  const loadTargets = useCallback(async (pack: PackData) => {
+    setEpisodesNote(null);
     try {
-      const pack = await readPack(file, (note) =>
-        setPhase({ kind: "reading", note }),
-      );
-      const preferred =
-        pack.parts.find((p) => p.title === pack.manifest.part) ?? pack.parts[0];
-      setSelectedPartId(preferred?.id ?? null);
-      setPhase({ kind: "ready", pack });
-    } catch (e) {
-      setPhase({
-        kind: "error",
-        message: e instanceof Error ? e.message : "Could not read this zip.",
-      });
+      const [list, courseList] = await Promise.all([
+        apiListProjects(),
+        apiListCourses().catch(() => []),
+      ]);
+      setEpisodes(list);
+      setCourses(new Map(courseList.map((c) => [c.id, c.title])));
+      const match = list.find((e) => e.id === pack.projectId);
+      if (match) {
+        setTargetEpisodeId(match.id);
+      } else {
+        setTargetEpisodeId(list[0]?.id ?? null);
+        setEpisodesNote(
+          "This pack's episode isn't in the system yet — pick which episode to merge it into.",
+        );
+      }
+    } catch {
+      setEpisodesNote("Could not load the episode list — refresh and try again.");
+      setEpisodes([]);
+      setTargetEpisodeId(null);
     }
   }, []);
 
+  const handleFile = useCallback(
+    async (file: File) => {
+      setPhase({ kind: "reading", note: "Starting…" });
+      try {
+        const pack = await readPack(file, (note) =>
+          setPhase({ kind: "reading", note }),
+        );
+        const preferred =
+          pack.parts.find((p) => p.title === pack.manifest.part) ?? pack.parts[0];
+        setSelectedPartId(preferred?.id ?? null);
+        setPhase({ kind: "ready", pack });
+        void loadTargets(pack);
+      } catch (e) {
+        setPhase({
+          kind: "error",
+          message: e instanceof Error ? e.message : "Could not read this zip.",
+        });
+      }
+    },
+    [loadTargets],
+  );
+
   const runImport = useCallback(
-    async (pack: PackData, partId: string) => {
+    async (pack: PackData, partId: string, targetId: string) => {
       const token = getStoredSessionToken();
       if (!token) {
         setPhase({ kind: "error", message: "Sign in required." });
