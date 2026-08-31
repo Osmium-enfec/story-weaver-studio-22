@@ -528,6 +528,35 @@ function sqliteAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
+/** Admin-only data pack import: replace the part with the same id, or append. */
+function sqliteImportPart(
+  episodeId: string,
+  part: Record<string, unknown>,
+): { partCount: number; replaced: boolean } {
+  const conn = getDb();
+  const row = conn
+    .prepare("SELECT parts FROM projects WHERE id = ?")
+    .get(episodeId) as Record<string, unknown> | undefined;
+  if (!row) throw new Error("Episode not found.");
+  let partsRaw: unknown = [];
+  try {
+    partsRaw = JSON.parse(String(row.parts ?? "[]"));
+  } catch {
+    partsRaw = [];
+  }
+  const parts = getProjectParts({ parts: partsRaw });
+  const now = new Date().toISOString();
+  const stamped = { ...part, updated_at: now } as (typeof parts)[number];
+  const idx = parts.findIndex((p) => p.id === stamped.id);
+  const replaced = idx >= 0;
+  if (replaced) parts[idx] = stamped;
+  else parts.push(stamped);
+  conn
+    .prepare(`UPDATE projects SET parts = ?, updated_at = ? WHERE id = ?`)
+    .run(JSON.stringify(parts), now, episodeId);
+  return { partCount: parts.length, replaced };
+}
+
 /** Course IDs the user can open via episode/part assignment (not ownership). */
 function sqliteAssignedCourseIds(userId: string, userEmail: string): string[] {
   const rows = getDb()
@@ -775,6 +804,14 @@ export async function localAssignPart(...args: any[]): Promise<any> {
     return pgAssignPart(...(args as [any, any, any]));
   }
   return sqliteAssignPart(...(args as [any, any, any]));
+}
+
+export async function localImportPart(...args: any[]): Promise<any> {
+  if (usePostgres()) {
+    const { pgImportPart } = await import("@/lib/pg-projects-db");
+    return pgImportPart(...(args as [any, any]));
+  }
+  return sqliteImportPart(...(args as [any, any]));
 }
 
 export async function localAssignedCourseIds(...args: any[]): Promise<any> {

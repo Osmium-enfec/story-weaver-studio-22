@@ -49,6 +49,11 @@ const Body = z.discriminatedUnion("action", [
     part_id: z.string().uuid(),
     assigned_user_id: z.string().uuid().nullable(),
   }),
+  z.object({
+    action: z.literal("importPart"),
+    id: z.string().uuid(),
+    part: z.record(z.string(), z.unknown()),
+  }),
 ]);
 
 function normalizeProjectRecord(p: Record<string, unknown>): Record<string, unknown> {
@@ -144,6 +149,29 @@ export const Route = createFileRoute("/api/projects")({
             );
           } catch (e) {
             return jsonError(e instanceof Error ? e.message : "Assign failed", 400);
+          }
+        }
+
+        if (data.action === "importPart") {
+          if (!asAdmin) return jsonError("Admin only.", 403);
+          const part = data.part as {
+            id?: unknown;
+            title?: unknown;
+            scenes?: unknown;
+          };
+          if (
+            typeof part.id !== "string" ||
+            typeof part.title !== "string" ||
+            !Array.isArray(part.scenes)
+          ) {
+            return jsonError("Invalid part payload.", 400);
+          }
+          try {
+            const { localImportPart } = await import("@/lib/local-projects-db");
+            const result = await localImportPart(data.id, data.part);
+            return jsonResponse({ ok: true, ...result });
+          } catch (e) {
+            return jsonError(e instanceof Error ? e.message : "Import failed", 400);
           }
         }
 

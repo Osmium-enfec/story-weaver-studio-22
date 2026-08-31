@@ -19,6 +19,17 @@ const DirectUploadBody = z.object({
   projectId: z.string().uuid(),
   ext: z.string().min(1).max(10),
   contentType: z.string().max(100).optional(),
+  /**
+   * Admin-only (data pack import): keep the asset's original storage key so
+   * existing `/api/assets/<owner>/<project>/<file>` references keep working.
+   */
+  key: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9._/-]+$/)
+    .refine((k) => !k.includes("..") && !k.startsWith("/"), "Invalid key")
+    .optional(),
 });
 
 function decodeAssetUrl(url: string): { buffer: Buffer; contentType: string } {
@@ -76,9 +87,10 @@ async function createDirectUpload(
   projectId: string,
   ext: string,
   contentType?: string,
+  key?: string,
 ): Promise<DirectUpload> {
   const filename = `${randomUUID()}.${ext.replace(/^\./, "")}`;
-  const relPath = path.posix.join(userId, projectId, filename);
+  const relPath = key ?? path.posix.join(userId, projectId, filename);
 
   // Spaces / S3: presigned PUT straight from the browser.
   if (useSpaces()) {
@@ -89,6 +101,11 @@ async function createDirectUpload(
 
   const storagePath = `project-assets/${relPath}`;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  if (key) {
+    // Re-imports overwrite the same key; signed upload URLs reject existing
+    // objects, so clear it first.
+    await supabaseAdmin.storage.from("project-assets").remove([storagePath]);
+  }
   const { data, error } = await supabaseAdmin.storage
     .from("project-assets")
     .createSignedUploadUrl(storagePath);
@@ -144,6 +161,8 @@ export const Route = createFileRoute("/api/persist-asset")({
                 direct.data.projectId,
                 direct.data.ext,
                 direct.data.contentType,
+                // Original-key preservation is an admin import feature.
+                asAdmin ? direct.data.key : undefined,
               );
               return jsonResponse({ ...upload });
             } catch (e) {
