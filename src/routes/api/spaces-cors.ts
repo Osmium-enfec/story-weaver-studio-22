@@ -53,7 +53,13 @@ export const Route = createFileRoute("/api/spaces-cors")({
           const res = await client.send(new GetBucketCorsCommand({ Bucket: bucket }));
           return jsonResponse({ ok: true, rules: res.CORSRules });
         } catch (e) {
-          return jsonError(e instanceof Error ? e.message : "CORS update failed", 500);
+          const message = e instanceof Error ? e.message : "CORS update failed";
+          // The Spaces key is scoped to object read/write, not bucket config,
+          // so this always needs the DigitalOcean control panel instead.
+          const hint = /access denied/i.test(message)
+            ? "The Spaces key cannot change bucket settings. Add the CORS rule in DigitalOcean → Spaces → Settings → CORS (origins https://*.lovableproject.com and https://*.lovable.app, methods GET/PUT/HEAD, headers *)."
+            : message;
+          return jsonError(hint, 400);
         }
       },
     },
