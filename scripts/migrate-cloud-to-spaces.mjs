@@ -52,23 +52,35 @@ const supaHeaders = { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` };
 
 async function listAll(prefix) {
   const out = [];
-  let offset = 0;
-  const limit = 1000;
-  for (;;) {
-    const res = await fetch(`${SUPA_URL}/storage/v1/object/list/${BUCKET}`, {
-      method: "POST",
-      headers: { ...supaHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({ prefix, limit, offset, sortBy: { column: "name", order: "asc" } }),
-    });
-    if (!res.ok) throw new Error(`List failed [${res.status}]: ${await res.text()}`);
-    const rows = await res.json();
-    const files = rows.filter((r) => r.id); // folders have no id
-    for (const f of files) out.push({ key: `${prefix}${f.name}`, size: f.metadata?.size ?? null });
-    if (rows.length < limit) break;
-    offset += limit;
+  const queue = [prefix];
+  while (queue.length) {
+    const current = queue.shift();
+    let offset = 0;
+    const limit = 1000;
+    for (;;) {
+      const res = await fetch(`${SUPA_URL}/storage/v1/object/list/${BUCKET}`, {
+        method: "POST",
+        headers: { ...supaHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prefix: current,
+          limit,
+          offset,
+          sortBy: { column: "name", order: "asc" },
+        }),
+      });
+      if (!res.ok) throw new Error(`List failed [${res.status}]: ${await res.text()}`);
+      const rows = await res.json();
+      for (const r of rows) {
+        if (r.id) out.push({ key: `${current}${r.name}`, size: r.metadata?.size ?? null });
+        else queue.push(`${current}${r.name}/`); // folder → recurse
+      }
+      if (rows.length < limit) break;
+      offset += limit;
+    }
   }
   return out;
 }
+
 
 async function existsInSpaces(key, size) {
   try {
@@ -80,52 +92,65 @@ async function existsInSpaces(key, size) {
   }
 }
 
+const CONCURRENCY = Number(process.env.MIGRATE_CONCURRENCY ?? 12);
+
 async function main() {
-  console.log(`Mode: ${DRY_RUN ? "DRY RUN" : "COPY"}`);
+  console.log(`Mode: ${DRY_RUN ? "DRY RUN" : "COPY"} (concurrency ${CONCURRENCY})`);
   let total = 0, copied = 0, skipped = 0, failed = 0;
 
   for (const prefix of PREFIXES) {
     const objects = await listAll(prefix);
     console.log(`\n${prefix}: ${objects.length} objects`);
-    for (const obj of objects) {
-      total++;
-      const destKey = (BASE_PREFIX ? `${BASE_PREFIX}/` : "") + obj.key;
-      try {
-        if (await existsInSpaces(destKey, obj.size)) {
-          skipped++;
-          continue;
-        }
-        if (DRY_RUN) {
-          console.log(`  would copy ${obj.key} (${obj.size ?? "?"} bytes)`);
+    let idx = 0;
+
+    async function worker() {
+      for (;;) {
+        const i = idx++;
+        if (i >= objects.length) return;
+        const obj = objects[i];
+        total++;
+        const destKey = (BASE_PREFIX ? `${BASE_PREFIX}/` : "") + obj.key;
+        try {
+          if (await existsInSpaces(destKey, obj.size)) {
+            skipped++;
+            continue;
+          }
+          if (DRY_RUN) {
+            copied++;
+            continue;
+          }
+          const res = await fetch(`${SUPA_URL}/storage/v1/object/${BUCKET}/${obj.key}`, {
+            headers: supaHeaders,
+          });
+          if (!res.ok) throw new Error(`download ${res.status}`);
+          const body = Buffer.from(await res.arrayBuffer());
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: SPACES_BUCKET,
+              Key: destKey,
+              Body: body,
+              ContentType: res.headers.get("content-type") ?? "application/octet-stream",
+              ACL: "private",
+            }),
+          );
           copied++;
-          continue;
+          if ((copied + skipped) % 100 === 0) {
+            console.log(`  progress ${copied + skipped}/${objects.length} (copied ${copied}, skipped ${skipped})`);
+          }
+        } catch (e) {
+          failed++;
+          console.error(`  FAILED ${obj.key}: ${e.message}`);
         }
-        const res = await fetch(`${SUPA_URL}/storage/v1/object/${BUCKET}/${obj.key}`, {
-          headers: supaHeaders,
-        });
-        if (!res.ok) throw new Error(`download ${res.status}`);
-        const body = Buffer.from(await res.arrayBuffer());
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: SPACES_BUCKET,
-            Key: destKey,
-            Body: body,
-            ContentType: res.headers.get("content-type") ?? "application/octet-stream",
-            ACL: "private",
-          }),
-        );
-        copied++;
-        if (copied % 25 === 0) console.log(`  copied ${copied}...`);
-      } catch (e) {
-        failed++;
-        console.error(`  FAILED ${obj.key}: ${e.message}`);
       }
     }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   }
 
   console.log(`\nDone. total=${total} copied=${copied} skipped=${skipped} failed=${failed}`);
   if (failed > 0) process.exit(2);
 }
+
 
 main().catch((e) => {
   console.error(e);
