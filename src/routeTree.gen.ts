@@ -29,6 +29,7 @@ import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiAdminRouteImport } from './routes/api/admin'
 import { Route as AuthenticatedSegmentLabRouteImport } from './routes/_authenticated/segment-lab'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as AuthenticatedImportPackRouteImport } from './routes/_authenticated/import-pack'
 import { Route as AuthenticatedExportRouteImport } from './routes/_authenticated/export'
 import { Route as AuthenticatedCoursesRouteImport } from './routes/_authenticated/courses'
 import { Route as AuthenticatedComposeRouteImport } from './routes/_authenticated/compose'
@@ -146,6 +147,11 @@ const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedImportPackRoute = AuthenticatedImportPackRouteImport.update({
+  id: '/import-pack',
+  path: '/import-pack',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedExportRoute = AuthenticatedExportRouteImport.update({
   id: '/export',
   path: '/export',
@@ -237,6 +243,7 @@ export interface FileRoutesByFullPath {
   '/compose': typeof AuthenticatedComposeRoute
   '/courses': typeof AuthenticatedCoursesRoute
   '/export': typeof AuthenticatedExportRoute
+  '/import-pack': typeof AuthenticatedImportPackRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/admin': typeof ApiAdminRoute
@@ -274,6 +281,7 @@ export interface FileRoutesByTo {
   '/compose': typeof AuthenticatedComposeRoute
   '/courses': typeof AuthenticatedCoursesRoute
   '/export': typeof AuthenticatedExportRoute
+  '/import-pack': typeof AuthenticatedImportPackRoute
   '/projects': typeof AuthenticatedProjectsRoute
   '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/admin': typeof ApiAdminRoute
@@ -313,6 +321,7 @@ export interface FileRoutesById {
   '/_authenticated/compose': typeof AuthenticatedComposeRoute
   '/_authenticated/courses': typeof AuthenticatedCoursesRoute
   '/_authenticated/export': typeof AuthenticatedExportRoute
+  '/_authenticated/import-pack': typeof AuthenticatedImportPackRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
   '/_authenticated/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/admin': typeof ApiAdminRoute
@@ -352,6 +361,7 @@ export interface FileRouteTypes {
     | '/compose'
     | '/courses'
     | '/export'
+    | '/import-pack'
     | '/projects'
     | '/segment-lab'
     | '/api/admin'
@@ -389,6 +399,7 @@ export interface FileRouteTypes {
     | '/compose'
     | '/courses'
     | '/export'
+    | '/import-pack'
     | '/projects'
     | '/segment-lab'
     | '/api/admin'
@@ -427,6 +438,7 @@ export interface FileRouteTypes {
     | '/_authenticated/compose'
     | '/_authenticated/courses'
     | '/_authenticated/export'
+    | '/_authenticated/import-pack'
     | '/_authenticated/projects'
     | '/_authenticated/segment-lab'
     | '/api/admin'
@@ -628,6 +640,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/import-pack': {
+      id: '/_authenticated/import-pack'
+      path: '/import-pack'
+      fullPath: '/import-pack'
+      preLoaderRoute: typeof AuthenticatedImportPackRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/export': {
       id: '/_authenticated/export'
       path: '/export'
@@ -748,6 +767,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedComposeRoute: typeof AuthenticatedComposeRoute
   AuthenticatedCoursesRoute: typeof AuthenticatedCoursesRoute
   AuthenticatedExportRoute: typeof AuthenticatedExportRoute
+  AuthenticatedImportPackRoute: typeof AuthenticatedImportPackRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
   AuthenticatedSegmentLabRoute: typeof AuthenticatedSegmentLabRoute
   AuthenticatedCourseIdRoute: typeof AuthenticatedCourseIdRoute
@@ -760,6 +780,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedComposeRoute: AuthenticatedComposeRoute,
   AuthenticatedCoursesRoute: AuthenticatedCoursesRoute,
   AuthenticatedExportRoute: AuthenticatedExportRoute,
+  AuthenticatedImportPackRoute: AuthenticatedImportPackRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
   AuthenticatedSegmentLabRoute: AuthenticatedSegmentLabRoute,
   AuthenticatedCourseIdRoute: AuthenticatedCourseIdRoute,

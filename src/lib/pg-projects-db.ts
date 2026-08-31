@@ -408,6 +408,34 @@ export async function pgAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
+/**
+ * Admin-only data pack import: replace the part with the same id, or append
+ * it. The incoming part is trusted whole (scenes, timings, assignment).
+ */
+export async function pgImportPart(
+  episodeId: string,
+  part: Record<string, unknown>,
+): Promise<{ partCount: number; replaced: boolean }> {
+  const res = await pgQuery<{ parts: unknown }>(
+    `SELECT parts FROM projects WHERE id = $1`,
+    [episodeId],
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Episode not found.");
+  const parts = getProjectParts({ parts: parseJsonColumn(row.parts) });
+  const now = new Date().toISOString();
+  const stamped = { ...part, updated_at: now } as (typeof parts)[number];
+  const idx = parts.findIndex((p) => p.id === stamped.id);
+  const replaced = idx >= 0;
+  if (replaced) parts[idx] = stamped;
+  else parts.push(stamped);
+  await pgQuery(
+    `UPDATE projects SET parts = $1::jsonb, updated_at = $2::timestamptz WHERE id = $3`,
+    [JSON.stringify(parts), now, episodeId],
+  );
+  return { partCount: parts.length, replaced };
+}
+
 /** Course IDs the user can open via episode/part assignment (not ownership). */
 export async function pgAssignedCourseIds(
   userId: string,

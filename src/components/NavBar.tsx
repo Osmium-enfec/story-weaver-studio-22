@@ -7,7 +7,7 @@ import {
   getStoredSessionToken,
   subscribeAuth,
 } from "@/lib/auth-client";
-import { Sparkles, LogOut, FolderOpen, Film, Shield, Upload, Loader2 } from "lucide-react";
+import { Sparkles, LogOut, FolderOpen, Film, Shield, Upload, Loader2, PackageOpen } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin";
 
 export function NavBar() {
@@ -113,6 +113,14 @@ export function NavBar() {
                   className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
                 >
                   <Shield size={14} /> Admin
+                </Link>
+              )}
+              {isAdmin && (
+                <Link
+                  to="/import-pack"
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
+                >
+                  <PackageOpen size={14} /> Import pack
                 </Link>
               )}
               <Link
