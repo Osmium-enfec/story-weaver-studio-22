@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { NavBar } from "@/components/NavBar";
 import { ComposeProjectPanel } from "@/components/compose/ComposeProjectPanel";
+import { ImportPartPack } from "@/components/ImportPartPack";
 import { ComposeStepsAccordion } from "@/components/compose/ComposeStepsAccordion";
 import { CropAnnotateDialog } from "@/components/compose/CropAnnotateDialog";
 import { generateComposeImage } from "@/lib/compose.functions";
@@ -3534,6 +3535,17 @@ function ComposePage() {
             {activeComposeScenes.length === 1 ? "" : "s"}
           </p>
         </div>
+
+        {projectId && activePartId && (
+          <div className="mb-4">
+            <ImportPartPack
+              projectId={projectId}
+              partId={activePartId}
+              partTitle={partTitle.trim() || "this part"}
+              episodeTitle={project?.title?.trim() || undefined}
+            />
+          </div>
+        )}
 
         {projectId && projectLoading && (
           <div className="mb-4 flex items-center gap-2 rounded-md border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
