@@ -93,10 +93,32 @@ const PROJECT_SELECT = `
   created_at::text AS created_at, updated_at::text AS updated_at
 `;
 
+/**
+ * List rows must never carry the full `scenes` / `parts` payloads: those blobs
+ * are megabytes per episode and buffering them all blew the worker's memory
+ * ceiling (502s on POST /api/projects). Counts are computed in SQL and `parts`
+ * is trimmed to just the assignment fields the list UI needs.
+ */
 const LIST_SELECT = `
   id, title, thumbnail_url, created_at::text AS created_at, updated_at::text AS updated_at,
-  audio_mode, scenes, parts, course_id, assigned_user_id, assigned_user_email, user_id
+  audio_mode,
+  CASE WHEN jsonb_typeof(scenes) = 'array' THEN jsonb_array_length(scenes) ELSE 0 END AS scene_count,
+  CASE WHEN jsonb_typeof(parts) = 'array' THEN jsonb_array_length(parts) ELSE 0 END AS part_count,
+  (
+    SELECT COALESCE(
+      jsonb_agg(jsonb_build_object(
+        'assignedUserId', p->>'assignedUserId',
+        'assignedUserEmail', p->>'assignedUserEmail'
+      )),
+      '[]'::jsonb
+    )
+    FROM jsonb_array_elements(
+      CASE WHEN jsonb_typeof(parts) = 'array' THEN parts ELSE '[]'::jsonb END
+    ) AS p
+  )::text AS parts,
+  course_id, assigned_user_id, assigned_user_email, user_id
 `;
+
 
 export async function pgSaveProject(
   userId: string,
