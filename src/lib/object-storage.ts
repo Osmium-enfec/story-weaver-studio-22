@@ -69,6 +69,29 @@ function spacesKey(kind: AssetKind, rel: string): string {
   return `${spacesBasePrefix()}${kindPrefix}/${clean}`;
 }
 
+/**
+ * Presign with WebCrypto instead of the AWS SDK. The SDK's S3 client does not
+ * work in the published edge worker, which made every stored asset 404 there.
+ */
+function spacesPresign(
+  method: "GET" | "PUT" | "HEAD",
+  kind: AssetKind,
+  rel: string,
+  expiresIn = 3600,
+  _contentType?: string,
+): Promise<string> {
+  return presignS3Url({
+    method,
+    endpoint: spacesEndpoint(),
+    region: process.env.SPACES_REGION?.trim() || "blr1",
+    bucket: bucket(),
+    key: spacesKey(kind, rel),
+    accessKeyId: process.env.SPACES_KEY!.trim(),
+    secretAccessKey: process.env.SPACES_SECRET!.trim(),
+    expiresIn,
+  });
+}
+
 function localRoot(kind: AssetKind): string {
   return kind === "app" ? hostAppAssetsRoot() : hostProjectAssetsRoot();
 }
