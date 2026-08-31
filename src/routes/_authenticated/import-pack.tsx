@@ -175,8 +175,9 @@ async function readPack(
 
   onNote("Reading episode database…");
   const { default: initSqlJs } = await import("sql.js");
-  const wasmUrl = (await import("sql.js/dist/sql-wasm.wasm?url")).default;
-  const SQL = await initSqlJs({ locateFile: () => wasmUrl });
+  // The wasm binary lives in public/wasm/ and is fetched by URL — never
+  // import it from source, or it lands in the server bundle.
+  const SQL = await initSqlJs({ locateFile: () => "/wasm/sql-wasm.wasm" });
   const db = new SQL.Database(concatChunks(dbChunks));
   try {
     const result = db.exec(
