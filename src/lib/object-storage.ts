@@ -171,18 +171,23 @@ export async function signedUploadUrl(
   if (!useSpaces()) return null;
   const rel = relPath.replace(/^\/+/, "");
   if (!rel || rel.includes("..")) return null;
-  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
-  const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-  const client = await spacesClient();
-  const uploadUrl = await getSignedUrl(
-    client,
-    new PutObjectCommand({
-      Bucket: bucket(),
-      Key: spacesKey(kind, rel),
-      ...(contentType ? { ContentType: contentType } : {}),
-    }),
-    { expiresIn: expiresInSeconds },
-  );
+  let uploadUrl: string;
+  if (isEdgeRuntime()) {
+    uploadUrl = await spacesPresign("PUT", kind, rel, expiresInSeconds, contentType);
+  } else {
+    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+    const client = await spacesClient();
+    uploadUrl = await getSignedUrl(
+      client,
+      new PutObjectCommand({
+        Bucket: bucket(),
+        Key: spacesKey(kind, rel),
+        ...(contentType ? { ContentType: contentType } : {}),
+      }),
+      { expiresIn: expiresInSeconds },
+    );
+  }
   const prefix = kind === "app" ? "/api/app-assets" : "/api/assets";
   return { uploadUrl, appUrl: `${prefix}/${rel}` };
 }
