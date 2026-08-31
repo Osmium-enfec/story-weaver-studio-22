@@ -528,7 +528,7 @@ function sqliteAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
-/** Admin-only data pack import: replace the part with the same id, or append. */
+/** Admin-only data pack import: the pack fully replaces the matching part. */
 function sqliteImportPart(
   episodeId: string,
   part: Record<string, unknown>,
@@ -546,9 +546,13 @@ function sqliteImportPart(
   }
   const parts = getProjectParts({ parts: partsRaw });
   const now = new Date().toISOString();
-  const stamped = { ...part, updated_at: now } as (typeof parts)[number];
-  const idx = parts.findIndex((p) => p.id === stamped.id);
+  const idx = findImportTargetIndex(parts as Record<string, unknown>[], part);
   const replaced = idx >= 0;
+  const stamped = buildImportedPart(
+    replaced ? (parts[idx] as Record<string, unknown>) : undefined,
+    part,
+    now,
+  ) as (typeof parts)[number];
   if (replaced) parts[idx] = stamped;
   else parts.push(stamped);
   conn
@@ -556,6 +560,7 @@ function sqliteImportPart(
     .run(JSON.stringify(parts), now, episodeId);
   return { partCount: parts.length, replaced };
 }
+
 
 /** Course IDs the user can open via episode/part assignment (not ownership). */
 function sqliteAssignedCourseIds(userId: string, userEmail: string): string[] {
