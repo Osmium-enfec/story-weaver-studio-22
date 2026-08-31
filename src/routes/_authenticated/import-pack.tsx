@@ -69,9 +69,9 @@ type Phase =
   | { kind: "done"; pack: PackData; partTitle: string; replaced: boolean }
   | { kind: "error"; message: string };
 
-function concatChunks(chunks: Uint8Array[]): Uint8Array {
+function concatChunks(chunks: Uint8Array[]): Uint8Array<ArrayBuffer> {
   const total = chunks.reduce((n, c) => n + c.length, 0);
-  const out = new Uint8Array(total);
+  const out = new Uint8Array(new ArrayBuffer(total));
   let offset = 0;
   for (const c of chunks) {
     out.set(c, offset);
