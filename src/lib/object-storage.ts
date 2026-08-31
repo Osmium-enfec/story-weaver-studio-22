@@ -288,6 +288,16 @@ export async function assetExists(kind: AssetKind, relPath: string): Promise<boo
   }
 
   if (useSpaces()) {
+    if (isEdgeRuntime()) {
+      try {
+        const res = await fetch(await spacesPresign("HEAD", kind, rel, 300), {
+          method: "HEAD",
+        });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
     try {
       const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
       const client = await spacesClient();
