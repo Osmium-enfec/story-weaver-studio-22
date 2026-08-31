@@ -394,9 +394,10 @@ function ImportPackPage() {
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Drop an episode data pack zip. Media goes straight to storage and the
-          part&apos;s scenes are merged into the episode — no size limit worries,
-          everything happens in your browser.
+          part is <strong>fully replaced</strong> by the zip version — anything
+          previously saved in that part is removed, so there are no conflicts.
         </p>
+
 
         {(phase.kind === "pick" || phase.kind === "error") && (
           <div

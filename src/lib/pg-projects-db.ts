@@ -409,13 +409,17 @@ export async function pgAssignPart(
 }
 
 /**
- * Admin-only data pack import: replace the part with the same id, or append
- * it. The incoming part is trusted whole (scenes, timings, assignment).
+ * Admin-only data pack import: the pack fully REPLACES the matching part
+ * (same id, title, or part number) — all previously saved scenes of that part
+ * are removed so nothing conflicts with the imported version.
  */
 export async function pgImportPart(
   episodeId: string,
   part: Record<string, unknown>,
 ): Promise<{ partCount: number; replaced: boolean }> {
+  const { findImportTargetIndex, buildImportedPart } = await import(
+    "@/lib/import-part-merge"
+  );
   const res = await pgQuery<{ parts: unknown }>(
     `SELECT parts FROM projects WHERE id = $1`,
     [episodeId],
@@ -424,9 +428,13 @@ export async function pgImportPart(
   if (!row) throw new Error("Episode not found.");
   const parts = getProjectParts({ parts: parseJsonColumn(row.parts) });
   const now = new Date().toISOString();
-  const stamped = { ...part, updated_at: now } as (typeof parts)[number];
-  const idx = parts.findIndex((p) => p.id === stamped.id);
+  const idx = findImportTargetIndex(parts as unknown as Record<string, unknown>[], part);
   const replaced = idx >= 0;
+  const stamped = buildImportedPart(
+    replaced ? (parts[idx] as unknown as Record<string, unknown>) : undefined,
+    part,
+    now,
+  ) as unknown as (typeof parts)[number];
   if (replaced) parts[idx] = stamped;
   else parts.push(stamped);
   await pgQuery(
@@ -435,6 +443,7 @@ export async function pgImportPart(
   );
   return { partCount: parts.length, replaced };
 }
+
 
 /** Course IDs the user can open via episode/part assignment (not ownership). */
 export async function pgAssignedCourseIds(
