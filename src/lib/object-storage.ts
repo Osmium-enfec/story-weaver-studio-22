@@ -347,6 +347,26 @@ export async function readAsset(opts: {
     };
   }
 
+  if (useSpaces() && isEdgeRuntime()) {
+    // Edge worker: sign with WebCrypto and stream the object straight through.
+    const url = await spacesPresign("GET", opts.kind, rel, 900);
+    const res = await fetch(url, {
+      headers: opts.rangeHeader ? { Range: opts.rangeHeader } : {},
+    });
+    if (!res.ok || !res.body) return null;
+    const len = res.headers.get("content-length");
+    const contentRange = res.headers.get("content-range");
+    return {
+      status: res.status === 206 ? 206 : 200,
+      body: res.body,
+      headers: {
+        ...common,
+        ...(len ? { "Content-Length": len } : {}),
+        ...(contentRange ? { "Content-Range": contentRange } : {}),
+      },
+    };
+  }
+
   if (useSpaces()) {
     const { GetObjectCommand, HeadObjectCommand } = await import("@aws-sdk/client-s3");
     const key = spacesKey(opts.kind, rel);
