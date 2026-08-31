@@ -140,10 +140,14 @@ function rowToProject(row: Record<string, unknown>): LocalProjectRow {
 }
 
 function partAssigneeEmailsFromRaw(parts: unknown): string[] {
+  // List queries return trimmed parts ({assignedUserId, assignedUserEmail}
+  // only), so don't go through getProjectParts' full-shape predicate here.
   const emails = new Set<string>();
-  for (const p of getProjectParts({ parts })) {
-    const email = p.assignedUserEmail?.trim();
-    if (email) emails.add(email);
+  if (!Array.isArray(parts)) return [];
+  for (const p of parts) {
+    if (!p || typeof p !== "object") continue;
+    const email = (p as { assignedUserEmail?: unknown }).assignedUserEmail;
+    if (typeof email === "string" && email.trim()) emails.add(email.trim());
   }
   return [...emails].sort((a, b) => a.localeCompare(b));
 }
