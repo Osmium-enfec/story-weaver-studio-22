@@ -396,7 +396,12 @@ function ImportPackPage() {
   );
 
   const runImport = useCallback(
-    async (pack: PackData, partId: string, targetId: string) => {
+    async (
+      pack: PackData,
+      partId: string,
+      targetId: string,
+      targetPart: string | null,
+    ) => {
       const token = getStoredSessionToken();
       if (!token) {
         setPhase({ kind: "error", message: "Sign in required." });
@@ -429,7 +434,12 @@ function ImportPackPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ action: "importPart", id: targetId, part }),
+          body: JSON.stringify({
+            action: "importPart",
+            id: targetId,
+            part,
+            target_part_id: targetPart ?? undefined,
+          }),
         });
         const data = (await res.json()) as {
           ok?: boolean;
