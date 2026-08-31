@@ -460,7 +460,9 @@ function ImportPackPage() {
                 <dd>{phase.pack.manifest.name ?? "—"}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="w-28 shrink-0 text-muted-foreground">Episode</dt>
+                <dt className="w-28 shrink-0 text-muted-foreground">
+                  Episode in pack
+                </dt>
                 <dd>
                   {phase.pack.projectTitle}
                   {phase.pack.manifest.builtAt && (
@@ -474,6 +476,49 @@ function ImportPackPage() {
                 <dt className="w-28 shrink-0 text-muted-foreground">Media files</dt>
                 <dd>{phase.pack.media.size}</dd>
               </div>
+              <div className="flex items-center gap-2">
+                <dt className="w-28 shrink-0 text-muted-foreground">Import into</dt>
+                <dd>
+                  {episodes.length > 0 ? (
+                    <select
+                      value={targetEpisodeId ?? ""}
+                      onChange={(e) => setTargetEpisodeId(e.target.value)}
+                      className="max-w-[22rem] rounded-md border bg-background px-2 py-1 text-sm"
+                    >
+                      {episodes.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.title}
+                          {e.part_count ? ` · ${e.part_count} parts` : ""}
+                          {e.assigned_user_email ? ` · ${e.assigned_user_email}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Loading…</span>
+                  )}
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="w-28 shrink-0 text-muted-foreground">Course</dt>
+                <dd>
+                  {targetEpisodeId
+                    ? (courses.get(
+                        episodes.find((e) => e.id === targetEpisodeId)?.course_id ??
+                          "",
+                      ) ?? (
+                        <span className="text-muted-foreground">
+                          No course (standalone episode)
+                        </span>
+                      ))
+                    : "—"}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    (comes from the selected episode)
+                  </span>
+                </dd>
+              </div>
+              {episodesNote && (
+                <p className="text-xs text-amber-600">{episodesNote}</p>
+              )}
               <div className="flex items-center gap-2">
                 <dt className="w-28 shrink-0 text-muted-foreground">Part</dt>
                 <dd>
@@ -493,9 +538,11 @@ function ImportPackPage() {
             </dl>
             <div className="mt-5 flex items-center gap-3">
               <button
-                disabled={!selectedPartId}
+                disabled={!selectedPartId || !targetEpisodeId}
                 onClick={() =>
-                  selectedPartId && void runImport(phase.pack, selectedPartId)
+                  selectedPartId &&
+                  targetEpisodeId &&
+                  void runImport(phase.pack, selectedPartId, targetEpisodeId)
                 }
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
