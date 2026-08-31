@@ -14,6 +14,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { supabase } from "@/integrations/supabase/client";
 import { apiListCourses } from "@/lib/courses-api";
 import {
+  apiGetProject,
   apiListProjects,
   type ProjectListItem,
 } from "@/lib/projects-api";
@@ -278,31 +279,99 @@ function ImportPackPage() {
   const [courses, setCourses] = useState<Map<string, string>>(new Map());
   const [targetEpisodeId, setTargetEpisodeId] = useState<string | null>(null);
   const [episodesNote, setEpisodesNote] = useState<string | null>(null);
+  // Parts of the chosen destination episode (fetched on selection).
+  const [targetParts, setTargetParts] = useState<
+    { id: string; title: string; sceneCount: number }[]
+  >([]);
+  const [targetPartId, setTargetPartId] = useState<string | null>(null);
+  const [partsLoading, setPartsLoading] = useState(false);
 
-  const loadTargets = useCallback(async (pack: PackData) => {
-    setEpisodesNote(null);
-    try {
-      const [list, courseList] = await Promise.all([
-        apiListProjects(),
-        apiListCourses().catch(() => []),
-      ]);
-      setEpisodes(list);
-      setCourses(new Map(courseList.map((c) => [c.id, c.title])));
-      const match = list.find((e) => e.id === pack.projectId);
-      if (match) {
-        setTargetEpisodeId(match.id);
-      } else {
-        setTargetEpisodeId(list[0]?.id ?? null);
-        setEpisodesNote(
-          "This pack's episode isn't in the system yet — pick which episode to merge it into.",
+  /** Pick the destination part that best matches the pack's part. */
+  const guessTargetPart = useCallback(
+    (
+      parts: { id: string; title: string; sceneCount: number }[],
+      pack: PackData,
+      partId: string | null,
+    ): string | null => {
+      const src =
+        pack.parts.find((p) => p.id === partId) ??
+        pack.parts.find((p) => p.title === pack.manifest.part) ??
+        pack.parts[0];
+      if (!src) return parts[0]?.id ?? null;
+      const byId = parts.find((p) => p.id === src.id);
+      if (byId) return byId.id;
+      const norm = (v: string) => v.toLowerCase().replace(/\s+/g, " ").trim();
+      const byTitle = parts.find((p) => norm(p.title) === norm(src.title));
+      if (byTitle) return byTitle.id;
+      const num = /(?:^|\bpart\s*)(\d+)/i.exec(src.title);
+      if (num) {
+        const byNum = parts.find(
+          (p) => /(?:^|\bpart\s*)(\d+)/i.exec(p.title)?.[1] === num[1],
         );
+        if (byNum) return byNum.id;
       }
-    } catch {
-      setEpisodesNote("Could not load the episode list — refresh and try again.");
-      setEpisodes([]);
-      setTargetEpisodeId(null);
-    }
-  }, []);
+      return parts[0]?.id ?? null;
+    },
+    [],
+  );
+
+  const loadTargetParts = useCallback(
+    async (episodeId: string, pack: PackData, partId: string | null) => {
+      setPartsLoading(true);
+      try {
+        const project = await apiGetProject(episodeId);
+        const rawParts = Array.isArray(project.parts)
+          ? (project.parts as Record<string, unknown>[])
+          : [];
+        const parts = rawParts.map((p, i) => ({
+          id: String(p.id ?? `part-${i}`),
+          title: String(p.title ?? `Part ${i + 1}`),
+          sceneCount: Array.isArray(p.scenes) ? p.scenes.length : 0,
+        }));
+        setTargetParts(parts);
+        setTargetPartId(guessTargetPart(parts, pack, partId));
+      } catch {
+        setTargetParts([]);
+        setTargetPartId(null);
+        setEpisodesNote("Could not load parts of that episode — try again.");
+      } finally {
+        setPartsLoading(false);
+      }
+    },
+    [guessTargetPart],
+  );
+
+  const loadTargets = useCallback(
+    async (pack: PackData) => {
+      setEpisodesNote(null);
+      try {
+        const [list, courseList] = await Promise.all([
+          apiListProjects(),
+          apiListCourses().catch(() => []),
+        ]);
+        setEpisodes(list);
+        setCourses(new Map(courseList.map((c) => [c.id, c.title])));
+        const match = list.find((e) => e.id === pack.projectId);
+        const chosen = match ?? list[0];
+        if (chosen) {
+          setTargetEpisodeId(chosen.id);
+          void loadTargetParts(chosen.id, pack, null);
+        } else {
+          setTargetEpisodeId(null);
+        }
+        if (!match) {
+          setEpisodesNote(
+            "This pack's episode isn't in the system yet — pick which episode to merge it into.",
+          );
+        }
+      } catch {
+        setEpisodesNote("Could not load the episode list — refresh and try again.");
+        setEpisodes([]);
+        setTargetEpisodeId(null);
+      }
+    },
+    [loadTargetParts],
+  );
 
   const handleFile = useCallback(
     async (file: File) => {
