@@ -177,19 +177,28 @@ function toListItem(row: Record<string, unknown>): LocalProjectListItem {
   let sceneCount = 0;
   let partCount = 0;
   let partsRaw: unknown = [];
-  try {
-    const parsed = JSON.parse(String(row.scenes ?? "[]"));
-    sceneCount = Array.isArray(parsed) ? parsed.length : 0;
-  } catch {
-    sceneCount = 0;
+  if (row.scene_count != null) {
+    sceneCount = Number(row.scene_count) || 0;
+  } else {
+    try {
+      const parsed = JSON.parse(String(row.scenes ?? "[]"));
+      sceneCount = Array.isArray(parsed) ? parsed.length : 0;
+    } catch {
+      sceneCount = 0;
+    }
   }
   try {
-    partsRaw = JSON.parse(String(row.parts ?? "[]"));
-    partCount = Array.isArray(partsRaw) ? partsRaw.length : 0;
+    partsRaw =
+      typeof row.parts === "string" || row.parts == null
+        ? JSON.parse(String(row.parts ?? "[]"))
+        : row.parts;
+    if (row.part_count != null) partCount = Number(row.part_count) || 0;
+    else partCount = Array.isArray(partsRaw) ? partsRaw.length : 0;
   } catch {
     partsRaw = [];
-    partCount = 0;
+    partCount = row.part_count != null ? Number(row.part_count) || 0 : 0;
   }
+
   return {
     id: String(row.id),
     title: String(row.title),
