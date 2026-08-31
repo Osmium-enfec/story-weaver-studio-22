@@ -145,7 +145,7 @@ export const Route = createFileRoute("/api/persist-asset")({
                 direct.data.ext,
                 direct.data.contentType,
               );
-              return jsonResponse({ direct: true, ...upload });
+              return jsonResponse({ ...upload });
             } catch (e) {
               return jsonError(e instanceof Error ? e.message : "Could not prepare upload", 500);
             }
