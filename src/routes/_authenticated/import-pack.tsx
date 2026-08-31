@@ -12,6 +12,11 @@ import { NavBar } from "@/components/NavBar";
 import { getStoredSession, getStoredSessionToken } from "@/lib/auth-client";
 import { isAdminEmail } from "@/lib/admin";
 import { supabase } from "@/integrations/supabase/client";
+import { apiListCourses } from "@/lib/courses-api";
+import {
+  apiListProjects,
+  type ProjectListItem,
+} from "@/lib/projects-api";
 
 export const Route = createFileRoute("/_authenticated/import-pack")({
   ssr: false,
@@ -66,7 +71,13 @@ type Phase =
   | { kind: "reading"; note: string }
   | { kind: "ready"; pack: PackData }
   | { kind: "importing"; pack: PackData; done: number; total: number; note: string }
-  | { kind: "done"; pack: PackData; partTitle: string; replaced: boolean }
+  | {
+      kind: "done";
+      pack: PackData;
+      partTitle: string;
+      replaced: boolean;
+      targetId: string;
+    }
   | { kind: "error"; message: string };
 
 function concatChunks(chunks: Uint8Array[]): Uint8Array<ArrayBuffer> {
@@ -262,27 +273,61 @@ function ImportPackPage() {
   const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Where the pack goes: course is fixed by the chosen episode.
+  const [episodes, setEpisodes] = useState<ProjectListItem[]>([]);
+  const [courses, setCourses] = useState<Map<string, string>>(new Map());
+  const [targetEpisodeId, setTargetEpisodeId] = useState<string | null>(null);
+  const [episodesNote, setEpisodesNote] = useState<string | null>(null);
 
-  const handleFile = useCallback(async (file: File) => {
-    setPhase({ kind: "reading", note: "Starting…" });
+  const loadTargets = useCallback(async (pack: PackData) => {
+    setEpisodesNote(null);
     try {
-      const pack = await readPack(file, (note) =>
-        setPhase({ kind: "reading", note }),
-      );
-      const preferred =
-        pack.parts.find((p) => p.title === pack.manifest.part) ?? pack.parts[0];
-      setSelectedPartId(preferred?.id ?? null);
-      setPhase({ kind: "ready", pack });
-    } catch (e) {
-      setPhase({
-        kind: "error",
-        message: e instanceof Error ? e.message : "Could not read this zip.",
-      });
+      const [list, courseList] = await Promise.all([
+        apiListProjects(),
+        apiListCourses().catch(() => []),
+      ]);
+      setEpisodes(list);
+      setCourses(new Map(courseList.map((c) => [c.id, c.title])));
+      const match = list.find((e) => e.id === pack.projectId);
+      if (match) {
+        setTargetEpisodeId(match.id);
+      } else {
+        setTargetEpisodeId(list[0]?.id ?? null);
+        setEpisodesNote(
+          "This pack's episode isn't in the system yet — pick which episode to merge it into.",
+        );
+      }
+    } catch {
+      setEpisodesNote("Could not load the episode list — refresh and try again.");
+      setEpisodes([]);
+      setTargetEpisodeId(null);
     }
   }, []);
 
+  const handleFile = useCallback(
+    async (file: File) => {
+      setPhase({ kind: "reading", note: "Starting…" });
+      try {
+        const pack = await readPack(file, (note) =>
+          setPhase({ kind: "reading", note }),
+        );
+        const preferred =
+          pack.parts.find((p) => p.title === pack.manifest.part) ?? pack.parts[0];
+        setSelectedPartId(preferred?.id ?? null);
+        setPhase({ kind: "ready", pack });
+        void loadTargets(pack);
+      } catch (e) {
+        setPhase({
+          kind: "error",
+          message: e instanceof Error ? e.message : "Could not read this zip.",
+        });
+      }
+    },
+    [loadTargets],
+  );
+
   const runImport = useCallback(
-    async (pack: PackData, partId: string) => {
+    async (pack: PackData, partId: string, targetId: string) => {
       const token = getStoredSessionToken();
       if (!token) {
         setPhase({ kind: "error", message: "Sign in required." });
@@ -315,7 +360,7 @@ function ImportPackPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ action: "importPart", id: pack.projectId, part }),
+          body: JSON.stringify({ action: "importPart", id: targetId, part }),
         });
         const data = (await res.json()) as {
           ok?: boolean;
@@ -328,6 +373,7 @@ function ImportPackPage() {
           pack,
           partTitle: part.title,
           replaced: data.replaced === true,
+          targetId,
         });
       } catch (e) {
         setPhase({
@@ -414,7 +460,9 @@ function ImportPackPage() {
                 <dd>{phase.pack.manifest.name ?? "—"}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="w-28 shrink-0 text-muted-foreground">Episode</dt>
+                <dt className="w-28 shrink-0 text-muted-foreground">
+                  Episode in pack
+                </dt>
                 <dd>
                   {phase.pack.projectTitle}
                   {phase.pack.manifest.builtAt && (
@@ -428,6 +476,49 @@ function ImportPackPage() {
                 <dt className="w-28 shrink-0 text-muted-foreground">Media files</dt>
                 <dd>{phase.pack.media.size}</dd>
               </div>
+              <div className="flex items-center gap-2">
+                <dt className="w-28 shrink-0 text-muted-foreground">Import into</dt>
+                <dd>
+                  {episodes.length > 0 ? (
+                    <select
+                      value={targetEpisodeId ?? ""}
+                      onChange={(e) => setTargetEpisodeId(e.target.value)}
+                      className="max-w-[22rem] rounded-md border bg-background px-2 py-1 text-sm"
+                    >
+                      {episodes.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.title}
+                          {e.part_count ? ` · ${e.part_count} parts` : ""}
+                          {e.assigned_user_email ? ` · ${e.assigned_user_email}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Loading…</span>
+                  )}
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="w-28 shrink-0 text-muted-foreground">Course</dt>
+                <dd>
+                  {targetEpisodeId
+                    ? (courses.get(
+                        episodes.find((e) => e.id === targetEpisodeId)?.course_id ??
+                          "",
+                      ) ?? (
+                        <span className="text-muted-foreground">
+                          No course (standalone episode)
+                        </span>
+                      ))
+                    : "—"}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    (comes from the selected episode)
+                  </span>
+                </dd>
+              </div>
+              {episodesNote && (
+                <p className="text-xs text-amber-600">{episodesNote}</p>
+              )}
               <div className="flex items-center gap-2">
                 <dt className="w-28 shrink-0 text-muted-foreground">Part</dt>
                 <dd>
@@ -447,9 +538,11 @@ function ImportPackPage() {
             </dl>
             <div className="mt-5 flex items-center gap-3">
               <button
-                disabled={!selectedPartId}
+                disabled={!selectedPartId || !targetEpisodeId}
                 onClick={() =>
-                  selectedPartId && void runImport(phase.pack, selectedPartId)
+                  selectedPartId &&
+                  targetEpisodeId &&
+                  void runImport(phase.pack, selectedPartId, targetEpisodeId)
                 }
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
@@ -496,13 +589,16 @@ function ImportPackPage() {
             <p className="mt-2 text-sm">
               <strong>{phase.partTitle}</strong> was{" "}
               {phase.replaced ? "updated in" : "added to"}{" "}
-              <strong>{phase.pack.projectTitle}</strong> with{" "}
-              {phase.pack.media.size} media files.
+              <strong>
+                {episodes.find((e) => e.id === phase.targetId)?.title ??
+                  phase.pack.projectTitle}
+              </strong>{" "}
+              with {phase.pack.media.size} media files.
             </p>
             <div className="mt-4 flex items-center gap-3">
               <Link
                 to="/episode/$id"
-                params={{ id: phase.pack.projectId }}
+                params={{ id: phase.targetId }}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
               >
                 Open episode
