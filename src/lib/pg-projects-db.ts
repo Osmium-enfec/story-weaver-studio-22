@@ -428,13 +428,13 @@ export async function pgImportPart(
   if (!row) throw new Error("Episode not found.");
   const parts = getProjectParts({ parts: parseJsonColumn(row.parts) });
   const now = new Date().toISOString();
-  const idx = findImportTargetIndex(parts as Record<string, unknown>[], part);
+  const idx = findImportTargetIndex(parts as unknown as Record<string, unknown>[], part);
   const replaced = idx >= 0;
   const stamped = buildImportedPart(
-    replaced ? (parts[idx] as Record<string, unknown>) : undefined,
+    replaced ? (parts[idx] as unknown as Record<string, unknown>) : undefined,
     part,
     now,
-  ) as (typeof parts)[number];
+  ) as unknown as (typeof parts)[number];
   if (replaced) parts[idx] = stamped;
   else parts.push(stamped);
   await pgQuery(
