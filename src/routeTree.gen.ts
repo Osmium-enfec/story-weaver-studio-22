@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
+import { Route as ApiSpacesCorsRouteImport } from './routes/api/spaces-cors'
 import { Route as ApiRenderBundlesRouteImport } from './routes/api/render-bundles'
 import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
@@ -78,6 +79,11 @@ const ApiTranscribeRoute = ApiTranscribeRouteImport.update({
 const ApiSyncRoute = ApiSyncRouteImport.update({
   id: '/api/sync',
   path: '/api/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSpacesCorsRoute = ApiSpacesCorsRouteImport.update({
+  id: '/api/spaces-cors',
+  path: '/api/spaces-cors',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRenderBundlesRoute = ApiRenderBundlesRouteImport.update({
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -287,6 +294,7 @@ export interface FileRoutesByTo {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -326,6 +334,7 @@ export interface FileRoutesById {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/tts': typeof ApiTtsRoute
@@ -365,6 +374,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -402,6 +412,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -440,6 +451,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
     | '/api/tts'
@@ -473,6 +485,7 @@ export interface RootRouteChildren {
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiRecording2VoiceReplaceRoute: typeof ApiRecording2VoiceReplaceRoute
   ApiRenderBundlesRoute: typeof ApiRenderBundlesRoute
+  ApiSpacesCorsRoute: typeof ApiSpacesCorsRoute
   ApiSyncRoute: typeof ApiSyncRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
   ApiTtsRoute: typeof ApiTtsRoute
@@ -535,6 +548,13 @@ declare module '@tanstack/react-router' {
       path: '/api/sync'
       fullPath: '/api/sync'
       preLoaderRoute: typeof ApiSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/spaces-cors': {
+      id: '/api/spaces-cors'
+      path: '/api/spaces-cors'
+      fullPath: '/api/spaces-cors'
+      preLoaderRoute: typeof ApiSpacesCorsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/render-bundles': {
@@ -797,6 +817,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProjectsRoute: ApiProjectsRoute,
   ApiRecording2VoiceReplaceRoute: ApiRecording2VoiceReplaceRoute,
   ApiRenderBundlesRoute: ApiRenderBundlesRoute,
+  ApiSpacesCorsRoute: ApiSpacesCorsRoute,
   ApiSyncRoute: ApiSyncRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
   ApiTtsRoute: ApiTtsRoute,
