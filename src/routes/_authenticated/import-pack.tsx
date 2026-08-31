@@ -589,13 +589,16 @@ function ImportPackPage() {
             <p className="mt-2 text-sm">
               <strong>{phase.partTitle}</strong> was{" "}
               {phase.replaced ? "updated in" : "added to"}{" "}
-              <strong>{phase.pack.projectTitle}</strong> with{" "}
-              {phase.pack.media.size} media files.
+              <strong>
+                {episodes.find((e) => e.id === phase.targetId)?.title ??
+                  phase.pack.projectTitle}
+              </strong>{" "}
+              with {phase.pack.media.size} media files.
             </p>
             <div className="mt-4 flex items-center gap-3">
               <Link
                 to="/episode/$id"
-                params={{ id: phase.pack.projectId }}
+                params={{ id: phase.targetId }}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
               >
                 Open episode
