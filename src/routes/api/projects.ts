@@ -53,6 +53,8 @@ const Body = z.discriminatedUnion("action", [
     action: z.literal("importPart"),
     id: z.string().uuid(),
     part: z.record(z.string(), z.unknown()),
+    /** Explicit destination part chosen in the UI; beats auto-matching. */
+    target_part_id: z.string().optional(),
   }),
 ]);
 
