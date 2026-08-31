@@ -323,11 +323,18 @@ function ImportPackPage() {
         const rawParts = Array.isArray(project.parts)
           ? (project.parts as Record<string, unknown>[])
           : [];
-        const parts = rawParts.map((p, i) => ({
-          id: String(p.id ?? `part-${i}`),
-          title: String(p.title ?? `Part ${i + 1}`),
-          sceneCount: Array.isArray(p.scenes) ? p.scenes.length : 0,
-        }));
+        const partNum = (title: string) => {
+          const m = /(\d+)/.exec(title);
+          return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+        };
+        const parts = rawParts
+          .map((p, i) => ({
+            id: String(p.id ?? `part-${i}`),
+            title: String(p.title ?? `Part ${i + 1}`),
+            sceneCount: Array.isArray(p.scenes) ? p.scenes.length : 0,
+          }))
+          // stored order can be shuffled (e.g. Part 5 saved first) — show by number
+          .sort((a, b) => partNum(a.title) - partNum(b.title));
         setTargetParts(parts);
         setTargetPartId(guessTargetPart(parts, pack, partId));
       } catch {
