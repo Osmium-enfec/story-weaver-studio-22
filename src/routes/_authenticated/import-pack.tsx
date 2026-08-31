@@ -662,11 +662,16 @@ function ImportPackPage() {
             </dl>
             <div className="mt-5 flex items-center gap-3">
               <button
-                disabled={!selectedPartId || !targetEpisodeId}
+                disabled={!selectedPartId || !targetEpisodeId || !targetPartId}
                 onClick={() =>
                   selectedPartId &&
                   targetEpisodeId &&
-                  void runImport(phase.pack, selectedPartId, targetEpisodeId)
+                  void runImport(
+                    phase.pack,
+                    selectedPartId,
+                    targetEpisodeId,
+                    targetPartId,
+                  )
                 }
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
