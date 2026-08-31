@@ -277,7 +277,7 @@ function ImportPackPage() {
   const [episodes, setEpisodes] = useState<ProjectListItem[]>([]);
   const [courses, setCourses] = useState<Map<string, string>>(new Map());
   const [targetEpisodeId, setTargetEpisodeId] = useState<string | null>(null);
-  const [episodesNote, setEpisodesNote] = useState<string | null>(null doda);
+  const [episodesNote, setEpisodesNote] = useState<string | null>(null);
 
   const loadTargets = useCallback(async (pack: PackData) => {
     setEpisodesNote(null);
