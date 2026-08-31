@@ -5,8 +5,8 @@ import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import { isAdminUser } from "@/lib/admin";
 import { localGetProjectById } from "@/lib/local-projects-db";
-import { putAsset } from "@/lib/object-storage";
-import { useCloudStorage } from "@/lib/runtime-backends";
+import { putAsset, signedUploadUrl } from "@/lib/object-storage";
+import { useCloudStorage, useSpaces } from "@/lib/runtime-backends";
 
 const JsonBody = z.object({
   url: z.string().min(1),
@@ -18,6 +18,7 @@ const DirectUploadBody = z.object({
   action: z.literal("create-direct-upload"),
   projectId: z.string().uuid(),
   ext: z.string().min(1).max(10),
+  contentType: z.string().max(100).optional(),
 });
 
 function decodeAssetUrl(url: string): { buffer: Buffer; contentType: string } {
@@ -66,13 +67,26 @@ async function writeAsset(
   });
 }
 
+type DirectUpload =
+  | { direct: true; mode: "supabase"; path: string; token: string; url: string }
+  | { direct: true; mode: "s3-put"; uploadUrl: string; url: string };
+
 async function createDirectUpload(
   userId: string,
   projectId: string,
   ext: string,
-): Promise<{ path: string; token: string; url: string }> {
+  contentType?: string,
+): Promise<DirectUpload> {
   const filename = `${randomUUID()}.${ext.replace(/^\./, "")}`;
   const relPath = path.posix.join(userId, projectId, filename);
+
+  // Spaces / S3: presigned PUT straight from the browser.
+  if (useSpaces()) {
+    const signed = await signedUploadUrl("project", relPath, contentType);
+    if (!signed) throw new Error("Could not prepare upload");
+    return { direct: true, mode: "s3-put", uploadUrl: signed.uploadUrl, url: signed.appUrl };
+  }
+
   const storagePath = `project-assets/${relPath}`;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin.storage
@@ -82,6 +96,8 @@ async function createDirectUpload(
     throw new Error(error?.message ?? "Could not prepare upload");
   }
   return {
+    direct: true,
+    mode: "supabase",
     path: storagePath,
     token: data.token,
     url: `/api/assets/${relPath}`,
@@ -114,7 +130,7 @@ export const Route = createFileRoute("/api/persist-asset")({
           }
           const direct = DirectUploadBody.safeParse(raw);
           if (direct.success) {
-            if (!useCloudStorage()) {
+            if (!useCloudStorage() && !useSpaces()) {
               return jsonResponse({ direct: false });
             }
             try {
@@ -127,6 +143,7 @@ export const Route = createFileRoute("/api/persist-asset")({
                 ownerId,
                 direct.data.projectId,
                 direct.data.ext,
+                direct.data.contentType,
               );
               return jsonResponse({ direct: true, ...upload });
             } catch (e) {
