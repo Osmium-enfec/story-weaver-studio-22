@@ -233,18 +233,39 @@ export async function apiPersistAssetFile(input: {
       action: "create-direct-upload",
       projectId: input.projectId,
       ext,
+      contentType: input.file.type || undefined,
     }),
   });
   const init = (await initRes.json()) as {
     direct?: boolean;
+    mode?: "supabase" | "s3-put";
     path?: string;
     token?: string;
+    uploadUrl?: string;
     url?: string;
     error?: string;
   };
   if (!initRes.ok) throw new Error(init.error ?? "Could not prepare upload");
   if (init.direct) {
-    if (!init.path || !init.token || !init.url) throw new Error("Invalid upload details");
+    if (!init.url) throw new Error("Invalid upload details");
+
+    // Spaces / S3: presigned PUT straight to the bucket.
+    if (init.mode === "s3-put") {
+      if (!init.uploadUrl) throw new Error("Invalid upload details");
+      const putRes = await fetch(init.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": input.file.type || "application/octet-stream",
+        },
+        body: input.file,
+      });
+      if (!putRes.ok) {
+        throw new Error(`Upload failed [${putRes.status}]: ${await putRes.text()}`);
+      }
+      return init.url;
+    }
+
+    if (!init.path || !init.token) throw new Error("Invalid upload details");
     const { error } = await supabase.storage
       .from("project-assets")
       .uploadToSignedUrl(init.path, init.token, input.file, {

@@ -123,6 +123,36 @@ export async function putAsset(opts: {
  * screen recordings) never streams through the app server / edge worker.
  * Returns null when assets live on local disk (dev), where proxying is fine.
  */
+/**
+ * Presigned PUT URL so the browser can upload a large file straight to Spaces
+ * without proxying bytes through the app worker. Returns null when Spaces is
+ * not the active storage backend.
+ */
+export async function signedUploadUrl(
+  kind: AssetKind,
+  relPath: string,
+  contentType?: string,
+  expiresInSeconds = 60 * 30,
+): Promise<{ uploadUrl: string; appUrl: string } | null> {
+  if (!useSpaces()) return null;
+  const rel = relPath.replace(/^\/+/, "");
+  if (!rel || rel.includes("..")) return null;
+  const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+  const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+  const client = await spacesClient();
+  const uploadUrl = await getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: bucket(),
+      Key: spacesKey(kind, rel),
+      ...(contentType ? { ContentType: contentType } : {}),
+    }),
+    { expiresIn: expiresInSeconds },
+  );
+  const prefix = kind === "app" ? "/api/app-assets" : "/api/assets";
+  return { uploadUrl, appUrl: `${prefix}/${rel}` };
+}
+
 export async function signedAssetUrl(
   kind: AssetKind,
   relPath: string,
