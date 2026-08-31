@@ -8,6 +8,11 @@ import {
   mergePartsForCollaborativeSave,
 } from "@/lib/project-parts";
 import { usePostgres } from "@/lib/runtime-backends";
+import {
+  buildImportedPart,
+  findImportTargetIndex,
+} from "@/lib/import-part-merge";
+
 
 /** SQLite row for an episode (legacy table name: projects). */
 export interface LocalProjectRow {
