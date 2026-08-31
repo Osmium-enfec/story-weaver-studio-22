@@ -12,6 +12,11 @@ import { NavBar } from "@/components/NavBar";
 import { getStoredSession, getStoredSessionToken } from "@/lib/auth-client";
 import { isAdminEmail } from "@/lib/admin";
 import { supabase } from "@/integrations/supabase/client";
+import { apiListCourses } from "@/lib/courses-api";
+import {
+  apiListProjects,
+  type ProjectListItem,
+} from "@/lib/projects-api";
 
 export const Route = createFileRoute("/_authenticated/import-pack")({
   ssr: false,
