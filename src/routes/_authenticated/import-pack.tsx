@@ -71,7 +71,13 @@ type Phase =
   | { kind: "reading"; note: string }
   | { kind: "ready"; pack: PackData }
   | { kind: "importing"; pack: PackData; done: number; total: number; note: string }
-  | { kind: "done"; pack: PackData; partTitle: string; replaced: boolean }
+  | {
+      kind: "done";
+      pack: PackData;
+      partTitle: string;
+      replaced: boolean;
+      targetId: string;
+    }
   | { kind: "error"; message: string };
 
 function concatChunks(chunks: Uint8Array[]): Uint8Array<ArrayBuffer> {
