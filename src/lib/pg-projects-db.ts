@@ -416,6 +416,7 @@ export async function pgAssignPart(
 export async function pgImportPart(
   episodeId: string,
   part: Record<string, unknown>,
+  targetPartId?: string | null,
 ): Promise<{ partCount: number; replaced: boolean }> {
   const { findImportTargetIndex, buildImportedPart } = await import(
     "@/lib/import-part-merge"
@@ -428,7 +429,15 @@ export async function pgImportPart(
   if (!row) throw new Error("Episode not found.");
   const parts = getProjectParts({ parts: parseJsonColumn(row.parts) });
   const now = new Date().toISOString();
-  const idx = findImportTargetIndex(parts as unknown as Record<string, unknown>[], part);
+  const rawParts = parts as unknown as Record<string, unknown>[];
+  const idx = targetPartId
+    ? (() => {
+        const i = rawParts.findIndex((p) => p.id === targetPartId);
+        if (i < 0)
+          throw new Error("The chosen part no longer exists — reload and pick again.");
+        return i;
+      })()
+    : findImportTargetIndex(rawParts, part);
   const replaced = idx >= 0;
   const stamped = buildImportedPart(
     replaced ? (parts[idx] as unknown as Record<string, unknown>) : undefined,

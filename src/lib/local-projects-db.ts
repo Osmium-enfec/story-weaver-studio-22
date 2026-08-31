@@ -537,6 +537,7 @@ function sqliteAssignPart(
 function sqliteImportPart(
   episodeId: string,
   part: Record<string, unknown>,
+  targetPartId?: string | null,
 ): { partCount: number; replaced: boolean } {
   const conn = getDb();
   const row = conn
@@ -551,7 +552,15 @@ function sqliteImportPart(
   }
   const parts = getProjectParts({ parts: partsRaw });
   const now = new Date().toISOString();
-  const idx = findImportTargetIndex(parts as unknown as Record<string, unknown>[], part);
+  const rawParts = parts as unknown as Record<string, unknown>[];
+  const idx = targetPartId
+    ? (() => {
+        const i = rawParts.findIndex((p) => p.id === targetPartId);
+        if (i < 0)
+          throw new Error("The chosen part no longer exists — reload and pick again.");
+        return i;
+      })()
+    : findImportTargetIndex(rawParts, part);
   const replaced = idx >= 0;
   const stamped = buildImportedPart(
     replaced ? (parts[idx] as unknown as Record<string, unknown>) : undefined,

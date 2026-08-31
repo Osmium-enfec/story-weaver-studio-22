@@ -170,7 +170,11 @@ export const Route = createFileRoute("/api/projects")({
           }
           try {
             const { localImportPart } = await import("@/lib/local-projects-db");
-            const result = await localImportPart(data.id, data.part);
+            const result = await localImportPart(
+              data.id,
+              data.part,
+              data.target_part_id ?? null,
+            );
             return jsonResponse({ ok: true, ...result });
           } catch (e) {
             return jsonError(e instanceof Error ? e.message : "Import failed", 400);
