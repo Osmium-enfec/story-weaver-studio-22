@@ -120,6 +120,16 @@ export async function putAsset(opts: {
     if (!res.ok) {
       throw new Error(`Asset upload failed [${res.status}]: ${await res.text()}`);
     }
+  } else if (useSpaces() && isEdgeRuntime()) {
+    const url = await spacesPresign("PUT", opts.kind, rel, 900);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": opts.contentType ?? "application/octet-stream" },
+      body: new Uint8Array(opts.body),
+    });
+    if (!res.ok) {
+      throw new Error(`Asset upload failed [${res.status}]: ${await res.text()}`);
+    }
   } else if (useSpaces()) {
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await spacesClient();
