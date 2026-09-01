@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { apiAdminUsersOnly } from "@/lib/admin-api";
@@ -189,8 +189,8 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
               rows.map(({ ep, parts }) => {
                 const span = Math.max(1, parts.length) + 1;
                 return (
-                  <>
-                    <tr key={`${ep.id}-head`} className="border-b bg-muted/20">
+                  <Fragment key={ep.id}>
+                    <tr className="border-b bg-muted/20">
                       <td
                         rowSpan={span}
                         className="border-r px-3 py-2 align-top font-medium"
@@ -215,7 +215,7 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
                       </td>
                     </tr>
                     {parts.length === 0 ? (
-                      <tr key={`${ep.id}-empty`} className="border-b">
+                      <tr className="border-b">
                         <td
                           colSpan={3}
                           className="px-3 py-2 text-xs text-muted-foreground"
@@ -243,7 +243,7 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
                         </tr>
                       ))
                     )}
-                  </>
+                  </Fragment>
                 );
               })
             )}
