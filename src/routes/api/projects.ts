@@ -50,6 +50,11 @@ const Body = z.discriminatedUnion("action", [
     assigned_user_id: z.string().uuid().nullable(),
   }),
   z.object({
+    action: z.literal("deletePart"),
+    id: z.string().uuid(),
+    part_id: z.string(),
+  }),
+  z.object({
     action: z.literal("importPart"),
     id: z.string().uuid(),
     part: z.record(z.string(), z.unknown()),
@@ -151,6 +156,17 @@ export const Route = createFileRoute("/api/projects")({
             );
           } catch (e) {
             return jsonError(e instanceof Error ? e.message : "Assign failed", 400);
+          }
+        }
+
+        if (data.action === "deletePart") {
+          if (!asAdmin) return jsonError("Admin only.", 403);
+          try {
+            const { localDeletePart } = await import("@/lib/local-projects-db");
+            const result = await localDeletePart(data.id, data.part_id);
+            return jsonResponse({ ok: true, ...result });
+          } catch (e) {
+            return jsonError(e instanceof Error ? e.message : "Delete failed", 400);
           }
         }
 

@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { apiAdminUsersOnly } from "@/lib/admin-api";
 import {
   apiAssignEpisode,
   apiAssignPart,
+  apiDeletePart,
   apiListProjects,
   type ProjectListItem,
 } from "@/lib/projects-api";
@@ -28,6 +29,7 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!courseId && courses[0]) setCourseId(courses[0].id);
@@ -116,6 +118,42 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
     }
   }
 
+  async function deletePart(
+    episodeId: string,
+    partId: string,
+    partTitle: string,
+    sceneCount: number,
+  ) {
+    if (
+      !confirm(
+        `Delete part \u201C${partTitle}\u201D? This permanently removes its ${sceneCount} scene(s).`,
+      )
+    ) {
+      return;
+    }
+    const key = `${episodeId}:${partId}`;
+    setDeletingKey(key);
+    setError(null);
+    try {
+      await apiDeletePart(episodeId, partId);
+      setEpisodes((prev) =>
+        (prev ?? []).map((ep) =>
+          ep.id === episodeId
+            ? {
+                ...ep,
+                parts_summary: (ep.parts_summary ?? []).filter((p) => p.id !== partId),
+                part_count: Math.max(0, (ep.part_count ?? 1) - 1),
+              }
+            : ep,
+        ),
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not delete part");
+    } finally {
+      setDeletingKey(null);
+    }
+  }
+
   function AssigneeSelect({
     episodeId,
     partId,
@@ -175,13 +213,14 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
               <th className="w-56 border-r px-3 py-2 font-medium">Episode</th>
               <th className="w-56 border-r px-3 py-2 font-medium">Part</th>
               <th className="w-24 border-r px-3 py-2 font-medium">Scenes</th>
-              <th className="px-3 py-2 font-medium">Assigned to</th>
+              <th className="border-r px-3 py-2 font-medium">Assigned to</th>
+              <th className="w-16 px-3 py-2 font-medium">Delete</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && !loading ? (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-sm text-muted-foreground">
+                <td colSpan={5} className="px-3 py-6 text-sm text-muted-foreground">
                   No episodes in this course.
                 </td>
               </tr>
@@ -206,18 +245,19 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
                       <td className="border-r px-3 py-2 text-xs tabular-nums text-muted-foreground">
                         {ep.scene_count}
                       </td>
-                      <td className="px-3 py-1.5">
+                      <td className="border-r px-3 py-1.5">
                         <AssigneeSelect
                           episodeId={ep.id}
                           partId={null}
                           value={ep.assigned_user_id ?? null}
                         />
                       </td>
+                      <td className="px-3 py-1.5" />
                     </tr>
                     {parts.length === 0 ? (
                       <tr className="border-b">
                         <td
-                          colSpan={3}
+                          colSpan={4}
                           className="px-3 py-2 text-xs text-muted-foreground"
                         >
                           No parts yet.
@@ -233,12 +273,29 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
                           <td className="border-r px-3 py-2 tabular-nums text-muted-foreground">
                             {p.scene_count}
                           </td>
-                          <td className="px-3 py-1.5">
+                          <td className="border-r px-3 py-1.5">
                             <AssigneeSelect
                               episodeId={ep.id}
                               partId={p.id}
                               value={p.assigned_user_id ?? null}
                             />
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <button
+                              type="button"
+                              disabled={deletingKey === `${ep.id}:${p.id}`}
+                              onClick={() =>
+                                void deletePart(ep.id, p.id, p.title, p.scene_count)
+                              }
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                              title="Delete part"
+                            >
+                              {deletingKey === `${ep.id}:${p.id}` ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
+                            </button>
                           </td>
                         </tr>
                       ))
