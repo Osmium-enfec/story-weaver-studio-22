@@ -197,6 +197,26 @@ export async function signedUploadUrl(
   return { uploadUrl, appUrl: `${prefix}/${rel}` };
 }
 
+/** Signed cloud-bucket URL, or null when the object is not there. */
+async function cloudSignedUrl(
+  kind: AssetKind,
+  rel: string,
+  expiresInSeconds: number,
+): Promise<string | null> {
+  const base = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
+  const prefix = kind === "app" ? "app-assets" : "project-assets";
+  const res = await fetch(`${base}/storage/v1/object/sign/${CLOUD_BUCKET}/${prefix}/${rel}`, {
+    method: "POST",
+    headers: { ...cloudHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn: expiresInSeconds }),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { signedURL?: string; signedUrl?: string };
+  const signed = json.signedURL ?? json.signedUrl;
+  if (!signed) return null;
+  return `${base}/storage/v1${signed.startsWith("/") ? signed : `/${signed}`}`;
+}
+
 export async function signedAssetUrl(
   kind: AssetKind,
   relPath: string,
@@ -206,35 +226,27 @@ export async function signedAssetUrl(
   if (!rel || rel.includes("..")) return null;
 
   if (useCloudStorage()) {
-    const base = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
-    const prefix = kind === "app" ? "app-assets" : "project-assets";
-    const res = await fetch(
-      `${base}/storage/v1/object/sign/${CLOUD_BUCKET}/${prefix}/${rel}`,
-      {
-        method: "POST",
-        headers: { ...cloudHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ expiresIn: expiresInSeconds }),
-      },
-    );
-    if (!res.ok) return null;
-    const json = (await res.json()) as { signedURL?: string; signedUrl?: string };
-    const signed = json.signedURL ?? json.signedUrl;
-    if (!signed) return null;
-    return `${base}/storage/v1${signed.startsWith("/") ? signed : `/${signed}`}`;
+    return cloudSignedUrl(kind, rel, expiresInSeconds);
   }
 
   if (useSpaces()) {
-    if (isEdgeRuntime()) {
-      return spacesPresign("GET", kind, rel, expiresInSeconds);
+    // Objects uploaded before the Spaces migration still live in the cloud
+    // bucket, so only sign a Spaces URL when the object is actually there.
+    if (await spacesExists(kind, rel)) {
+      if (isEdgeRuntime()) {
+        return spacesPresign("GET", kind, rel, expiresInSeconds);
+      }
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+      const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+      const client = await spacesClient();
+      return getSignedUrl(
+        client,
+        new GetObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }),
+        { expiresIn: expiresInSeconds },
+      );
     }
-    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-    const client = await spacesClient();
-    return getSignedUrl(
-      client,
-      new GetObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }),
-      { expiresIn: expiresInSeconds },
-    );
+    if (hasCloudStorage()) return cloudSignedUrl(kind, rel, expiresInSeconds);
+    return null;
   }
 
   return null;
