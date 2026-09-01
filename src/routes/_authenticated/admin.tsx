@@ -20,13 +20,13 @@ import {
   apiAdminOverview,
   type AdminOverview,
 } from "@/lib/admin-api";
-import { downloadExportJob, cancelExportJob } from "@/lib/native-export-client";
 import {
   apiDeleteBundle,
   apiListBundles,
   type RenderBundleItem,
 } from "@/lib/render-bundles-api";
 
+import { AssignmentSheet } from "@/components/admin/AssignmentSheet";
 import { isAdminEmail } from "@/lib/admin";
 
 const PAGE_SIZE = 8;
@@ -104,12 +104,11 @@ function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<
-    "users" | "courses" | "assignments" | "exports" | "bundles"
+    "users" | "courses" | "assignment" | "assignments" | "bundles"
   >("users");
   const [usersPage, setUsersPage] = useState(1);
   const [coursesPage, setCoursesPage] = useState(1);
   const [assignmentsPage, setAssignmentsPage] = useState(1);
-  const [exportsPage, setExportsPage] = useState(1);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [bundles, setBundles] = useState<RenderBundleItem[] | null>(null);
   const [bundlesError, setBundlesError] = useState<string | null>(null);
@@ -130,13 +129,6 @@ function AdminPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  // Only poll while Exports tab is open (active jobs) — avoids slow full reload every few seconds.
-  useEffect(() => {
-    if (tab !== "exports") return;
-    const t = setInterval(() => void refresh({ silent: true }), 5000);
-    return () => clearInterval(t);
-  }, [tab, refresh]);
 
   const refreshBundles = useCallback(async () => {
     try {
@@ -179,11 +171,9 @@ function AdminPage() {
   const usersPages = totalPages(data?.users.length ?? 0);
   const coursesPages = totalPages(data?.courses.length ?? 0);
   const assignmentsPages = totalPages(data?.assignments.length ?? 0);
-  const exportsPages = totalPages(data?.exports.length ?? 0);
   const safeUsersPage = Math.min(usersPage, usersPages);
   const safeCoursesPage = Math.min(coursesPage, coursesPages);
   const safeAssignmentsPage = Math.min(assignmentsPage, assignmentsPages);
-  const safeExportsPage = Math.min(exportsPage, exportsPages);
 
   const pagedUsers = useMemo(() => {
     if (!data) return [];
@@ -202,12 +192,6 @@ function AdminPage() {
     const start = (safeAssignmentsPage - 1) * PAGE_SIZE;
     return data.assignments.slice(start, start + PAGE_SIZE);
   }, [data, safeAssignmentsPage]);
-
-  const pagedExports = useMemo(() => {
-    if (!data) return [];
-    const start = (safeExportsPage - 1) * PAGE_SIZE;
-    return data.exports.slice(start, start + PAGE_SIZE);
-  }, [data, safeExportsPage]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -270,8 +254,8 @@ function AdminPage() {
                 [
                   ["users", "Users"],
                   ["courses", "Courses"],
-                  ["assignments", "Assignments"],
-                  ["exports", "Exports"],
+                  ["assignment", "Assignment"],
+                  ["assignments", "Assigned"],
                   ["bundles", "Ready for HD"],
 
                 ] as const
@@ -424,6 +408,16 @@ function AdminPage() {
               </>
             )}
 
+            {tab === "assignment" && (
+              <AssignmentSheet
+                courses={data.courses.map((c) => ({
+                  id: c.id,
+                  title: c.title,
+                  episode_count: c.episode_count,
+                }))}
+              />
+            )}
+
             {tab === "assignments" && (
               <>
                 <ul className="space-y-2">
@@ -479,75 +473,6 @@ function AdminPage() {
                   count={data.assignments.length}
                   label="assignments"
                   onPageChange={setAssignmentsPage}
-                />
-              </>
-            )}
-
-            {tab === "exports" && (
-              <>
-                <ul className="space-y-2">
-                  {data.exports.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No export jobs yet.</p>
-                  ) : (
-                    pagedExports.map((job) => (
-                      <li key={job.jobId} className="rounded-lg border bg-card p-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-medium">{job.filename}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {job.userEmail} · {job.quality} · {job.status} ·{" "}
-                              {fmtWhen(job.createdAt)}
-                            </p>
-                            {(job.status === "running" || job.status === "queued") && (
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {job.stage} · {Math.round(job.progress * 100)}%
-                              </p>
-                            )}
-                            {job.status === "error" && (
-                              <p className="mt-1 text-xs text-destructive">{job.error}</p>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {(job.status === "running" || job.status === "queued") && (
-                              <button
-                                type="button"
-                                className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5"
-                                onClick={() =>
-                                  void cancelExportJob(job.jobId)
-                                    .then(() => refresh({ silent: true }))
-                                    .catch((e) =>
-                                      alert(e instanceof Error ? e.message : String(e)),
-                                    )
-                                }
-                              >
-                                Stop
-                              </button>
-                            )}
-                            {job.status === "done" && (
-                              <button
-                                type="button"
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-                                onClick={() =>
-                                  void downloadExportJob(job.jobId, job.filename).catch((e) =>
-                                    alert(e instanceof Error ? e.message : String(e)),
-                                  )
-                                }
-                              >
-                                Download
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </li>
-                    ))
-                  )}
-                </ul>
-                <PaginationBar
-                  page={safeExportsPage}
-                  total={exportsPages}
-                  count={data.exports.length}
-                  label="exports"
-                  onPageChange={setExportsPage}
                 />
               </>
             )}
