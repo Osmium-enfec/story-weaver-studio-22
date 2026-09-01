@@ -377,7 +377,10 @@ export async function readAsset(opts: {
     const res = await fetch(url, {
       headers: opts.rangeHeader ? { Range: opts.rangeHeader } : {},
     });
-    if (!res.ok || !res.body) return null;
+    if (!res.ok || !res.body) {
+      // Pre-migration object: still served from the cloud bucket.
+      return hasCloudStorage() ? cloudRead() : null;
+    }
     const len = res.headers.get("content-length");
     const contentRange = res.headers.get("content-range");
     return {
