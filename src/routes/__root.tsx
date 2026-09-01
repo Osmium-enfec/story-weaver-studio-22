@@ -77,13 +77,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "AI Explainer Video Generator" },
+      { title: "Div Studio — AI Explainer Videos" },
       {
         name: "description",
         content:
           "Turn any script into a narrated explainer video with AI images, stock footage, and voiceover.",
       },
-      { property: "og:title", content: "AI Explainer Video Generator" },
+      { property: "og:title", content: "Div Studio — AI Explainer Videos" },
       {
         property: "og:description",
         content:

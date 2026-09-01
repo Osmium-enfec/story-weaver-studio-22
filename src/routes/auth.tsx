@@ -8,7 +8,7 @@ import { NavBar } from "@/components/NavBar";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in — Explainer Studio" },
+      { title: "Sign in — Div Studio" },
       { name: "description", content: "Sign in or create an account to save your explainer videos." },
     ],
   }),

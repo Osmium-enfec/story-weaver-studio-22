@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_authenticated/export")({
     jobId: typeof s.jobId === "string" ? s.jobId : undefined,
     runner: s.runner === "agent" || s.runner === "server" ? s.runner : undefined,
   }),
-  head: () => ({ meta: [{ title: "Export — Explainer Studio" }] }),
+  head: () => ({ meta: [{ title: "Export — Div Studio" }] }),
   component: ExportPage,
 });
 

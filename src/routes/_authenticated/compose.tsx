@@ -138,7 +138,7 @@ export const Route = createFileRoute("/_authenticated/compose")({
     project: typeof s.project === "string" ? s.project : undefined,
     part: typeof s.part === "string" ? s.part : undefined,
   }),
-  head: () => ({ meta: [{ title: "Compose Scene — Explainer Studio" }] }),
+  head: () => ({ meta: [{ title: "Compose Scene — Div Studio" }] }),
   component: ComposePage,
 });
 

@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/review")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Review — Explainer Studio" },
+      { title: "Review — Div Studio" },
       {
         name: "description",
         content:

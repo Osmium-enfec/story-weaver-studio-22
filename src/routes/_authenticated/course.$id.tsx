@@ -26,7 +26,7 @@ const PAGE_SIZE = 9;
 
 export const Route = createFileRoute("/_authenticated/course/$id")({
   head: () => ({
-    meta: [{ title: "Course — Explainer Studio" }],
+    meta: [{ title: "Course — Div Studio" }],
   }),
   component: CourseDetailPage,
 });
