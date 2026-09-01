@@ -348,7 +348,7 @@ export async function readAsset(opts: {
     "Cache-Control": "public, max-age=31536000, immutable",
   };
 
-  if (useCloudStorage()) {
+  const cloudRead = async (): Promise<AssetReadResult | null> => {
     const res = await fetch(cloudObjectUrl(opts.kind, rel), {
       headers: {
         ...cloudHeaders(),
@@ -367,7 +367,9 @@ export async function readAsset(opts: {
         ...(contentRange ? { "Content-Range": contentRange } : {}),
       },
     };
-  }
+  };
+
+  if (useCloudStorage()) return cloudRead();
 
   if (useSpaces() && isEdgeRuntime()) {
     // Edge worker: sign with WebCrypto and stream the object straight through.
