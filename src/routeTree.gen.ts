@@ -17,6 +17,7 @@ import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
 import { Route as ApiSpacesCorsRouteImport } from './routes/api/spaces-cors'
+import { Route as ApiReviewsRouteImport } from './routes/api/reviews'
 import { Route as ApiRenderBundlesRouteImport } from './routes/api/render-bundles'
 import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
@@ -84,6 +85,11 @@ const ApiSyncRoute = ApiSyncRouteImport.update({
 const ApiSpacesCorsRoute = ApiSpacesCorsRouteImport.update({
   id: '/api/spaces-cors',
   path: '/api/spaces-cors',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiReviewsRoute = ApiReviewsRouteImport.update({
+  id: '/api/reviews',
+  path: '/api/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRenderBundlesRoute = ApiRenderBundlesRouteImport.update({
@@ -256,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -294,6 +301,7 @@ export interface FileRoutesByTo {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -334,6 +342,7 @@ export interface FileRoutesById {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -374,6 +383,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
@@ -412,6 +422,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
@@ -451,6 +462,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
@@ -485,6 +497,7 @@ export interface RootRouteChildren {
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiRecording2VoiceReplaceRoute: typeof ApiRecording2VoiceReplaceRoute
   ApiRenderBundlesRoute: typeof ApiRenderBundlesRoute
+  ApiReviewsRoute: typeof ApiReviewsRoute
   ApiSpacesCorsRoute: typeof ApiSpacesCorsRoute
   ApiSyncRoute: typeof ApiSyncRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
@@ -555,6 +568,13 @@ declare module '@tanstack/react-router' {
       path: '/api/spaces-cors'
       fullPath: '/api/spaces-cors'
       preLoaderRoute: typeof ApiSpacesCorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/reviews': {
+      id: '/api/reviews'
+      path: '/api/reviews'
+      fullPath: '/api/reviews'
+      preLoaderRoute: typeof ApiReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/render-bundles': {
@@ -817,6 +837,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProjectsRoute: ApiProjectsRoute,
   ApiRecording2VoiceReplaceRoute: ApiRecording2VoiceReplaceRoute,
   ApiRenderBundlesRoute: ApiRenderBundlesRoute,
+  ApiReviewsRoute: ApiReviewsRoute,
   ApiSpacesCorsRoute: ApiSpacesCorsRoute,
   ApiSyncRoute: ApiSyncRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,

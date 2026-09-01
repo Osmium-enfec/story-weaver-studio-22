@@ -7,7 +7,7 @@ import {
   getStoredSessionToken,
   subscribeAuth,
 } from "@/lib/auth-client";
-import { Sparkles, LogOut, FolderOpen, Film, Shield, Upload, Loader2 } from "lucide-react";
+import { Sparkles, LogOut, FolderOpen, Film, Shield, Upload, Loader2, ClipboardCheck } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin";
 
 export function NavBar() {
