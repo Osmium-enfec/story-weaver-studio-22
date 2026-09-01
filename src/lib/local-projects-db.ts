@@ -567,6 +567,24 @@ function sqliteAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
+/** Admin-only: remove a part (and its scenes) from an episode. */
+function sqliteDeletePart(episodeId: string, partId: string): { partCount: number } {
+  const conn = getDb();
+  const row = conn
+    .prepare("SELECT * FROM projects WHERE id = ?")
+    .get(episodeId) as Record<string, unknown> | undefined;
+  if (!row) throw new Error("Episode not found.");
+  const parts = getProjectParts(rowToProject(row));
+  const next = parts.filter((p) => p.id !== partId);
+  if (next.length === parts.length) throw new Error("Part not found.");
+  const now = new Date().toISOString();
+  conn
+    .prepare(`UPDATE projects SET parts = ?, updated_at = ? WHERE id = ?`)
+    .run(JSON.stringify(next), now, episodeId);
+  return { partCount: next.length };
+}
+
+
 /** Admin-only data pack import: the pack fully replaces the matching part. */
 function sqliteImportPart(
   episodeId: string,
