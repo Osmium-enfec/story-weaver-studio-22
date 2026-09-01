@@ -216,16 +216,11 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
                 const span = Math.max(1, parts.length);
                 return (
                   <Fragment key={ep.id}>
-                    <tr className="hidden">
-                      <td
-                        rowSpan={span}
-                        className="border-r px-3 py-2 align-top font-medium"
-                      >
-                        {ep.title}
-                      </td>
-                    </tr>
                     {parts.length === 0 ? (
                       <tr className="border-b">
+                        <td className="border-r px-3 py-2 align-top font-medium">
+                          {ep.title}
+                        </td>
                         <td
                           colSpan={4}
                           className="px-3 py-2 text-xs text-muted-foreground"
@@ -236,6 +231,17 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
                     ) : (
                       parts.map((p, i) => (
                         <tr key={`${ep.id}-${p.id}`} className="border-b">
+                          {i === 0 && (
+                            <td
+                              rowSpan={span}
+                              className="border-r px-3 py-2 align-top font-medium"
+                            >
+                              {ep.title}
+                              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                                {parts.length} part{parts.length === 1 ? "" : "s"}
+                              </span>
+                            </td>
+                          )}
                           <td className="border-r px-3 py-2">
                             <span className="text-muted-foreground">{i + 1}.</span>{" "}
                             {p.title}
