@@ -14,7 +14,17 @@ export type ProjectListItem = {
   assigned_user_id?: string | null;
   assigned_user_email?: string | null;
   part_assignee_emails?: string[];
+  parts_summary?: ProjectPartSummary[];
 };
+
+export type ProjectPartSummary = {
+  id: string;
+  title: string;
+  assigned_user_id: string | null;
+  assigned_user_email: string | null;
+  scene_count: number;
+};
+
 
 /** A full episode row as returned by POST /api/projects { action: "get" }. */
 export type ProjectRecord = {
