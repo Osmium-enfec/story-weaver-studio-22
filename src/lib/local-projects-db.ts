@@ -234,6 +234,8 @@ function toListItem(row: Record<string, unknown>): LocalProjectListItem {
     assigned_user_email:
       row.assigned_user_email != null ? String(row.assigned_user_email) : null,
     part_assignee_emails: partAssigneeEmailsFromRaw(partsRaw),
+    parts_summary: localPartsSummaryFromRaw(partsRaw),
+
   };
 }
 
