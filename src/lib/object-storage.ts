@@ -2,7 +2,12 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from
 import { Readable } from "node:stream";
 import path from "node:path";
 import { hostAppAssetsRoot, hostProjectAssetsRoot } from "@/lib/host-storage";
-import { isEdgeRuntime, useCloudStorage, useSpaces } from "@/lib/runtime-backends";
+import {
+  hasCloudStorage,
+  isEdgeRuntime,
+  useCloudStorage,
+  useSpaces,
+} from "@/lib/runtime-backends";
 import { presignS3Url } from "@/lib/s3-sigv4";
 
 export type AssetKind = "project" | "app";
@@ -192,6 +197,26 @@ export async function signedUploadUrl(
   return { uploadUrl, appUrl: `${prefix}/${rel}` };
 }
 
+/** Signed cloud-bucket URL, or null when the object is not there. */
+async function cloudSignedUrl(
+  kind: AssetKind,
+  rel: string,
+  expiresInSeconds: number,
+): Promise<string | null> {
+  const base = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
+  const prefix = kind === "app" ? "app-assets" : "project-assets";
+  const res = await fetch(`${base}/storage/v1/object/sign/${CLOUD_BUCKET}/${prefix}/${rel}`, {
+    method: "POST",
+    headers: { ...cloudHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresIn: expiresInSeconds }),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { signedURL?: string; signedUrl?: string };
+  const signed = json.signedURL ?? json.signedUrl;
+  if (!signed) return null;
+  return `${base}/storage/v1${signed.startsWith("/") ? signed : `/${signed}`}`;
+}
+
 export async function signedAssetUrl(
   kind: AssetKind,
   relPath: string,
@@ -201,35 +226,27 @@ export async function signedAssetUrl(
   if (!rel || rel.includes("..")) return null;
 
   if (useCloudStorage()) {
-    const base = process.env.SUPABASE_URL!.trim().replace(/\/+$/, "");
-    const prefix = kind === "app" ? "app-assets" : "project-assets";
-    const res = await fetch(
-      `${base}/storage/v1/object/sign/${CLOUD_BUCKET}/${prefix}/${rel}`,
-      {
-        method: "POST",
-        headers: { ...cloudHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ expiresIn: expiresInSeconds }),
-      },
-    );
-    if (!res.ok) return null;
-    const json = (await res.json()) as { signedURL?: string; signedUrl?: string };
-    const signed = json.signedURL ?? json.signedUrl;
-    if (!signed) return null;
-    return `${base}/storage/v1${signed.startsWith("/") ? signed : `/${signed}`}`;
+    return cloudSignedUrl(kind, rel, expiresInSeconds);
   }
 
   if (useSpaces()) {
-    if (isEdgeRuntime()) {
-      return spacesPresign("GET", kind, rel, expiresInSeconds);
+    // Objects uploaded before the Spaces migration still live in the cloud
+    // bucket, so only sign a Spaces URL when the object is actually there.
+    if (await spacesExists(kind, rel)) {
+      if (isEdgeRuntime()) {
+        return spacesPresign("GET", kind, rel, expiresInSeconds);
+      }
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+      const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+      const client = await spacesClient();
+      return getSignedUrl(
+        client,
+        new GetObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }),
+        { expiresIn: expiresInSeconds },
+      );
     }
-    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-    const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-    const client = await spacesClient();
-    return getSignedUrl(
-      client,
-      new GetObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }),
-      { expiresIn: expiresInSeconds },
-    );
+    if (hasCloudStorage()) return cloudSignedUrl(kind, rel, expiresInSeconds);
+    return null;
   }
 
   return null;
@@ -269,43 +286,48 @@ function parseByteRange(
   return { start, end };
 }
 
+async function cloudExists(kind: AssetKind, rel: string): Promise<boolean> {
+  try {
+    const res = await fetch(cloudObjectUrl(kind, rel), {
+      method: "HEAD",
+      headers: cloudHeaders(),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function spacesExists(kind: AssetKind, rel: string): Promise<boolean> {
+  if (isEdgeRuntime()) {
+    try {
+      const res = await fetch(await spacesPresign("HEAD", kind, rel, 300), { method: "HEAD" });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+    const client = await spacesClient();
+    await client.send(new HeadObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Serve a stored asset with optional HTTP Range (local disk or Spaces). */
 /** True when the object already exists in the active storage backend. */
 export async function assetExists(kind: AssetKind, relPath: string): Promise<boolean> {
   const rel = relPath.replace(/^\/+/, "");
   if (!rel || rel.includes("..")) return false;
 
-  if (useCloudStorage()) {
-    try {
-      const res = await fetch(cloudObjectUrl(kind, rel), {
-        method: "HEAD",
-        headers: cloudHeaders(),
-      });
-      return res.ok;
-    } catch {
-      return false;
-    }
-  }
+  if (useCloudStorage()) return cloudExists(kind, rel);
 
   if (useSpaces()) {
-    if (isEdgeRuntime()) {
-      try {
-        const res = await fetch(await spacesPresign("HEAD", kind, rel, 300), {
-          method: "HEAD",
-        });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    }
-    try {
-      const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
-      const client = await spacesClient();
-      await client.send(new HeadObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }));
-      return true;
-    } catch {
-      return false;
-    }
+    if (await spacesExists(kind, rel)) return true;
+    return hasCloudStorage() ? cloudExists(kind, rel) : false;
   }
 
   return existsSync(path.join(localRoot(kind), rel));
@@ -326,7 +348,7 @@ export async function readAsset(opts: {
     "Cache-Control": "public, max-age=31536000, immutable",
   };
 
-  if (useCloudStorage()) {
+  const cloudRead = async (): Promise<AssetReadResult | null> => {
     const res = await fetch(cloudObjectUrl(opts.kind, rel), {
       headers: {
         ...cloudHeaders(),
@@ -345,7 +367,9 @@ export async function readAsset(opts: {
         ...(contentRange ? { "Content-Range": contentRange } : {}),
       },
     };
-  }
+  };
+
+  if (useCloudStorage()) return cloudRead();
 
   if (useSpaces() && isEdgeRuntime()) {
     // Edge worker: sign with WebCrypto and stream the object straight through.
@@ -353,7 +377,10 @@ export async function readAsset(opts: {
     const res = await fetch(url, {
       headers: opts.rangeHeader ? { Range: opts.rangeHeader } : {},
     });
-    if (!res.ok || !res.body) return null;
+    if (!res.ok || !res.body) {
+      // Pre-migration object: still served from the cloud bucket.
+      return hasCloudStorage() ? cloudRead() : null;
+    }
     const len = res.headers.get("content-length");
     const contentRange = res.headers.get("content-range");
     return {
@@ -378,7 +405,7 @@ export async function readAsset(opts: {
       );
       size = Number(head.ContentLength ?? 0);
     } catch {
-      return null;
+      return hasCloudStorage() ? cloudRead() : null;
     }
     if (!Number.isFinite(size) || size < 0) return null;
 
@@ -459,13 +486,13 @@ export async function materializeAssetToFile(
   const rel = relPath.replace(/^\/+/, "");
   mkdirSync(path.dirname(destPath), { recursive: true });
 
-  if (useCloudStorage()) {
+  const fromCloud = async () => {
     const res = await fetch(cloudObjectUrl(kind, rel), { headers: cloudHeaders() });
     if (!res.ok) throw new Error(`Missing cloud object: ${rel} (${res.status})`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    writeFileSync(destPath, Buffer.from(bytes));
-    return;
-  }
+    writeFileSync(destPath, Buffer.from(new Uint8Array(await res.arrayBuffer())));
+  };
+
+  if (useCloudStorage()) return fromCloud();
 
   if (!useSpaces()) {
     const { copyFileSync } = await import("node:fs");
@@ -474,14 +501,20 @@ export async function materializeAssetToFile(
     return;
   }
 
-  const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-  const get = await (await spacesClient()).send(
-    new GetObjectCommand({
-      Bucket: bucket(),
-      Key: spacesKey(kind, rel),
-    }),
-  );
-  const bytes = await get.Body?.transformToByteArray();
-  if (!bytes) throw new Error(`Missing Spaces object: ${rel}`);
-  writeFileSync(destPath, Buffer.from(bytes));
+  try {
+    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const get = await (await spacesClient()).send(
+      new GetObjectCommand({
+        Bucket: bucket(),
+        Key: spacesKey(kind, rel),
+      }),
+    );
+    const bytes = await get.Body?.transformToByteArray();
+    if (!bytes) throw new Error(`Missing Spaces object: ${rel}`);
+    writeFileSync(destPath, Buffer.from(bytes));
+  } catch (err) {
+    // Pre-migration object: still in the cloud bucket.
+    if (hasCloudStorage()) return fromCloud();
+    throw err;
+  }
 }

@@ -78,6 +78,16 @@ export function useCloudStorage(): boolean {
   );
 }
 
+/**
+ * Cloud storage credentials are present. Used as a read fallback for objects
+ * uploaded before the Spaces migration (they still live in the cloud bucket).
+ */
+export function hasCloudStorage(): boolean {
+  return Boolean(
+    process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
+  );
+}
+
 export function useSpaces(): boolean {
   return Boolean(
     process.env.SPACES_BUCKET?.trim() &&
