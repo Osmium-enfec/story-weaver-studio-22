@@ -24,7 +24,9 @@ export async function pgUpsertReview(
   input: PartReviewInput,
 ): Promise<PartReviewRow> {
   const now = new Date().toISOString();
-  const res = await pgQuery<Record<string, unknown>>(
+  // NOTE: the SQL proxy only returns rows for SELECT/WITH statements, so we
+  // cannot use RETURNING here — re-read the row after writing instead.
+  await pgQuery(
     `INSERT INTO part_reviews (
        project_id, part_id, course_id, script_status, recording_status,
        review_status, issues_found, correction_status, assignee_email,
@@ -42,8 +44,7 @@ export async function pgUpsertReview(
        assignee_email = COALESCE($9, part_reviews.assignee_email),
        rendered_uploaded = COALESCE($10, part_reviews.rendered_uploaded),
        updated_by_email = EXCLUDED.updated_by_email,
-       updated_at = EXCLUDED.updated_at
-     RETURNING ${COLS}`,
+       updated_at = EXCLUDED.updated_at`,
     [
       input.project_id,
       input.part_id,
@@ -59,10 +60,11 @@ export async function pgUpsertReview(
       now,
     ],
   );
-  const row = res.rows[0];
-  if (!row) throw new Error("Review save failed");
-  return rowToPartReview(row);
+  const saved = await pgGetReview(input.project_id, input.part_id);
+  if (!saved) throw new Error("Review save failed");
+  return saved;
 }
+
 
 export async function pgPartComposerEmail(
   projectId: string,
