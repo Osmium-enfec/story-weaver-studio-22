@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   apiAssignPart,
+  apiDeletePart,
   apiGetProject,
   apiSaveProject,
 } from "@/lib/projects-api";
@@ -24,6 +25,7 @@ import {
   Pencil,
   Play,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -48,6 +50,7 @@ function EpisodeDetailPage() {
   const [editEpisodeTitle, setEditEpisodeTitle] = useState("");
   const [renamingEpisode, setRenamingEpisode] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [deletingPartId, setDeletingPartId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["project", id],
@@ -201,6 +204,31 @@ function EpisodeDetailPage() {
       setRenameError(e instanceof Error ? e.message : "Could not rename part");
     } finally {
       setRenamingPart(false);
+    }
+  }
+
+  async function handleDeletePart(part: ProjectPart) {
+    if (deletingPartId) return;
+    if (
+      !confirm(
+        `Delete part \u201C${part.title}\u201D? This permanently removes its ${part.scenes.length} scene(s) from this episode.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingPartId(part.id);
+    setRenameError(null);
+    try {
+      await apiDeletePart(id, part.id);
+      await qc.invalidateQueries({ queryKey: ["project", id] });
+      await qc.invalidateQueries({ queryKey: ["projects"] });
+      if (backToCourse) {
+        await qc.invalidateQueries({ queryKey: ["projects", "course", backToCourse] });
+      }
+    } catch (e: unknown) {
+      setRenameError(e instanceof Error ? e.message : "Could not delete part");
+    } finally {
+      setDeletingPartId(null);
     }
   }
 
@@ -425,6 +453,21 @@ function EpisodeDetailPage() {
                           >
                             <Pencil size={14} />
                           </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              disabled={deletingPartId === part.id}
+                              onClick={() => void handleDeletePart(part)}
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                              title="Delete part"
+                            >
+                              {deletingPartId === part.id ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
+                            </button>
+                          )}
                         </div>
                       )}
                       <div className="mt-1 text-xs text-muted-foreground">
