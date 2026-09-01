@@ -155,7 +155,28 @@ function rowToProject(row: Record<string, unknown>): LocalProjectRow {
   };
 }
 
+function localPartsSummaryFromRaw(parts: unknown): LocalProjectPartSummary[] {
+  if (!Array.isArray(parts)) return [];
+  const out: LocalProjectPartSummary[] = [];
+  for (const p of parts) {
+    if (!p || typeof p !== "object") continue;
+    const rec = p as Record<string, unknown>;
+    if (typeof rec.id !== "string") continue;
+    out.push({
+      id: rec.id,
+      title: typeof rec.title === "string" ? rec.title : "Part",
+      assigned_user_id:
+        typeof rec.assignedUserId === "string" ? rec.assignedUserId : null,
+      assigned_user_email:
+        typeof rec.assignedUserEmail === "string" ? rec.assignedUserEmail : null,
+      scene_count: Array.isArray(rec.scenes) ? rec.scenes.length : 0,
+    });
+  }
+  return out;
+}
+
 function partAssigneeEmailsFromRaw(parts: unknown): string[] {
+
   // List queries return trimmed parts ({assignedUserId, assignedUserEmail}
   // only), so don't go through getProjectParts' full-shape predicate here.
   const emails = new Set<string>();
