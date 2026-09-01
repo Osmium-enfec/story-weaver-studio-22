@@ -17,6 +17,7 @@ import { Route as ApiTtsRouteImport } from './routes/api/tts'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
 import { Route as ApiSpacesCorsRouteImport } from './routes/api/spaces-cors'
+import { Route as ApiReviewsRouteImport } from './routes/api/reviews'
 import { Route as ApiRenderBundlesRouteImport } from './routes/api/render-bundles'
 import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
@@ -29,6 +30,7 @@ import { Route as ApiComposeActionsRouteImport } from './routes/api/compose-acti
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
 import { Route as ApiAdminRouteImport } from './routes/api/admin'
 import { Route as AuthenticatedSegmentLabRouteImport } from './routes/_authenticated/segment-lab'
+import { Route as AuthenticatedReviewRouteImport } from './routes/_authenticated/review'
 import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
 import { Route as AuthenticatedExportRouteImport } from './routes/_authenticated/export'
 import { Route as AuthenticatedCoursesRouteImport } from './routes/_authenticated/courses'
@@ -84,6 +86,11 @@ const ApiSyncRoute = ApiSyncRouteImport.update({
 const ApiSpacesCorsRoute = ApiSpacesCorsRouteImport.update({
   id: '/api/spaces-cors',
   path: '/api/spaces-cors',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiReviewsRoute = ApiReviewsRouteImport.update({
+  id: '/api/reviews',
+  path: '/api/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRenderBundlesRoute = ApiRenderBundlesRouteImport.update({
@@ -145,6 +152,11 @@ const ApiAdminRoute = ApiAdminRouteImport.update({
 const AuthenticatedSegmentLabRoute = AuthenticatedSegmentLabRouteImport.update({
   id: '/segment-lab',
   path: '/segment-lab',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedReviewRoute = AuthenticatedReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
@@ -244,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/courses': typeof AuthenticatedCoursesRoute
   '/export': typeof AuthenticatedExportRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/review': typeof AuthenticatedReviewRoute
   '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/admin': typeof ApiAdminRoute
   '/api/auth': typeof ApiAuthRoute
@@ -256,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -282,6 +296,7 @@ export interface FileRoutesByTo {
   '/courses': typeof AuthenticatedCoursesRoute
   '/export': typeof AuthenticatedExportRoute
   '/projects': typeof AuthenticatedProjectsRoute
+  '/review': typeof AuthenticatedReviewRoute
   '/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/admin': typeof ApiAdminRoute
   '/api/auth': typeof ApiAuthRoute
@@ -294,6 +309,7 @@ export interface FileRoutesByTo {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -322,6 +338,7 @@ export interface FileRoutesById {
   '/_authenticated/courses': typeof AuthenticatedCoursesRoute
   '/_authenticated/export': typeof AuthenticatedExportRoute
   '/_authenticated/projects': typeof AuthenticatedProjectsRoute
+  '/_authenticated/review': typeof AuthenticatedReviewRoute
   '/_authenticated/segment-lab': typeof AuthenticatedSegmentLabRoute
   '/api/admin': typeof ApiAdminRoute
   '/api/auth': typeof ApiAuthRoute
@@ -334,6 +351,7 @@ export interface FileRoutesById {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
   '/api/transcribe': typeof ApiTranscribeRoute
@@ -362,6 +380,7 @@ export interface FileRouteTypes {
     | '/courses'
     | '/export'
     | '/projects'
+    | '/review'
     | '/segment-lab'
     | '/api/admin'
     | '/api/auth'
@@ -374,6 +393,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
@@ -400,6 +420,7 @@ export interface FileRouteTypes {
     | '/courses'
     | '/export'
     | '/projects'
+    | '/review'
     | '/segment-lab'
     | '/api/admin'
     | '/api/auth'
@@ -412,6 +433,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
@@ -439,6 +461,7 @@ export interface FileRouteTypes {
     | '/_authenticated/courses'
     | '/_authenticated/export'
     | '/_authenticated/projects'
+    | '/_authenticated/review'
     | '/_authenticated/segment-lab'
     | '/api/admin'
     | '/api/auth'
@@ -451,6 +474,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
     | '/api/transcribe'
@@ -485,6 +509,7 @@ export interface RootRouteChildren {
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiRecording2VoiceReplaceRoute: typeof ApiRecording2VoiceReplaceRoute
   ApiRenderBundlesRoute: typeof ApiRenderBundlesRoute
+  ApiReviewsRoute: typeof ApiReviewsRoute
   ApiSpacesCorsRoute: typeof ApiSpacesCorsRoute
   ApiSyncRoute: typeof ApiSyncRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
@@ -555,6 +580,13 @@ declare module '@tanstack/react-router' {
       path: '/api/spaces-cors'
       fullPath: '/api/spaces-cors'
       preLoaderRoute: typeof ApiSpacesCorsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/reviews': {
+      id: '/api/reviews'
+      path: '/api/reviews'
+      fullPath: '/api/reviews'
+      preLoaderRoute: typeof ApiReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/render-bundles': {
@@ -639,6 +671,13 @@ declare module '@tanstack/react-router' {
       path: '/segment-lab'
       fullPath: '/segment-lab'
       preLoaderRoute: typeof AuthenticatedSegmentLabRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/review': {
+      id: '/_authenticated/review'
+      path: '/review'
+      fullPath: '/review'
+      preLoaderRoute: typeof AuthenticatedReviewRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/projects': {
@@ -769,6 +808,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCoursesRoute: typeof AuthenticatedCoursesRoute
   AuthenticatedExportRoute: typeof AuthenticatedExportRoute
   AuthenticatedProjectsRoute: typeof AuthenticatedProjectsRoute
+  AuthenticatedReviewRoute: typeof AuthenticatedReviewRoute
   AuthenticatedSegmentLabRoute: typeof AuthenticatedSegmentLabRoute
   AuthenticatedCourseIdRoute: typeof AuthenticatedCourseIdRoute
   AuthenticatedEpisodeIdRoute: typeof AuthenticatedEpisodeIdRoute
@@ -781,6 +821,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCoursesRoute: AuthenticatedCoursesRoute,
   AuthenticatedExportRoute: AuthenticatedExportRoute,
   AuthenticatedProjectsRoute: AuthenticatedProjectsRoute,
+  AuthenticatedReviewRoute: AuthenticatedReviewRoute,
   AuthenticatedSegmentLabRoute: AuthenticatedSegmentLabRoute,
   AuthenticatedCourseIdRoute: AuthenticatedCourseIdRoute,
   AuthenticatedEpisodeIdRoute: AuthenticatedEpisodeIdRoute,
@@ -817,6 +858,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProjectsRoute: ApiProjectsRoute,
   ApiRecording2VoiceReplaceRoute: ApiRecording2VoiceReplaceRoute,
   ApiRenderBundlesRoute: ApiRenderBundlesRoute,
+  ApiReviewsRoute: ApiReviewsRoute,
   ApiSpacesCorsRoute: ApiSpacesCorsRoute,
   ApiSyncRoute: ApiSyncRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
