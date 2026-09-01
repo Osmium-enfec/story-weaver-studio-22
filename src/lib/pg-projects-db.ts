@@ -9,6 +9,8 @@ import {
   type LocalAssignmentItem,
   type LocalProjectAdminItem,
   type LocalProjectListItem,
+  type LocalProjectPartSummary,
+
   type LocalProjectRow,
 } from "@/lib/local-projects-db";
 
