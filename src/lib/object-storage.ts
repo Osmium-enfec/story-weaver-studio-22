@@ -2,7 +2,12 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync } from
 import { Readable } from "node:stream";
 import path from "node:path";
 import { hostAppAssetsRoot, hostProjectAssetsRoot } from "@/lib/host-storage";
-import { isEdgeRuntime, useCloudStorage, useSpaces } from "@/lib/runtime-backends";
+import {
+  hasCloudStorage,
+  isEdgeRuntime,
+  useCloudStorage,
+  useSpaces,
+} from "@/lib/runtime-backends";
 import { presignS3Url } from "@/lib/s3-sigv4";
 
 export type AssetKind = "project" | "app";
