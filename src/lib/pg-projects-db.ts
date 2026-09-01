@@ -644,3 +644,25 @@ export async function pgDeleteProject(_userId: string, _id: string): Promise<voi
     "Project deletion is disabled. All projects are kept on the host machine.",
   );
 }
+
+/** Admin-only: remove a part (and its scenes) from an episode. */
+export async function pgDeletePart(
+  episodeId: string,
+  partId: string,
+): Promise<{ partCount: number }> {
+  const res = await pgQuery<{ parts: unknown }>(
+    `SELECT parts FROM projects WHERE id = $1`,
+    [episodeId],
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Episode not found.");
+  const parts = getProjectParts({ parts: parseJsonColumn(row.parts) });
+  const next = parts.filter((p) => p.id !== partId);
+  if (next.length === parts.length) throw new Error("Part not found.");
+  const now = new Date().toISOString();
+  await pgQuery(
+    `UPDATE projects SET parts = $1::jsonb, updated_at = $2::timestamptz WHERE id = $3`,
+    [JSON.stringify(next), now, episodeId],
+  );
+  return { partCount: next.length };
+}
