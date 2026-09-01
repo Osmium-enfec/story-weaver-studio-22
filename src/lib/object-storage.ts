@@ -405,7 +405,7 @@ export async function readAsset(opts: {
       );
       size = Number(head.ContentLength ?? 0);
     } catch {
-      return null;
+      return hasCloudStorage() ? cloudRead() : null;
     }
     if (!Number.isFinite(size) || size < 0) return null;
 
