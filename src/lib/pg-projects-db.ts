@@ -134,15 +134,20 @@ const LIST_SELECT = `
   (
     SELECT COALESCE(
       jsonb_agg(jsonb_build_object(
+        'id', p->>'id',
+        'title', p->>'title',
         'assignedUserId', p->>'assignedUserId',
-        'assignedUserEmail', p->>'assignedUserEmail'
-      )),
+        'assignedUserEmail', p->>'assignedUserEmail',
+        'sceneCount', CASE WHEN jsonb_typeof(p->'scenes') = 'array'
+          THEN jsonb_array_length(p->'scenes') ELSE 0 END
+      ) ORDER BY ord),
       '[]'::jsonb
     )
     FROM jsonb_array_elements(
       CASE WHEN jsonb_typeof(parts) = 'array' THEN parts ELSE '[]'::jsonb END
-    ) AS p
+    ) WITH ORDINALITY AS t(p, ord)
   )::text AS parts,
+
   course_id, assigned_user_id, assigned_user_email, user_id
 `;
 
