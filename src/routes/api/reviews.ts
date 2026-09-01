@@ -1,18 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
-import { listCourseReviews, upsertReview } from "@/lib/review-db";
+import {
+  listCourseReviews,
+  partComposerEmail,
+  upsertReview,
+} from "@/lib/review-db";
+import { isAdminUser } from "@/lib/admin";
+import {
+  REVIEW_FIELDS,
+  canEditReviewField,
+  type ReviewField,
+} from "@/lib/review-permissions";
 
 const STATUS = z.string().max(50);
-const TEXT = z.string().max(5000);
+const TEXT = z.string().max(20000);
 
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("list"), courseId: z.string().min(1) }),
   z.object({
     action: z.literal("save"),
     projectId: z.string().min(1),
+    partId: z.string().min(1),
     courseId: z.string().min(1).nullable().optional(),
-    parts_checked: TEXT.optional(),
+    script_status: STATUS.optional(),
+    recording_status: STATUS.optional(),
     review_status: STATUS.optional(),
     issues_found: TEXT.optional(),
     correction_status: STATUS.optional(),
@@ -52,10 +64,43 @@ export const Route = createFileRoute("/api/reviews")({
           if (data.action === "list") {
             return jsonResponse(await listCourseReviews(data.courseId));
           }
+
+          const touched = REVIEW_FIELDS.filter(
+            (f) => (data as Record<string, unknown>)[f] !== undefined,
+          ) as ReviewField[];
+          if (touched.length === 0) return jsonError("Nothing to update", 400);
+
+          const composerEmail = await partComposerEmail(
+            data.projectId,
+            data.partId,
+          );
+          const existing = data.courseId
+            ? (await listCourseReviews(data.courseId)).find(
+                (r) =>
+                  r.project_id === data.projectId && r.part_id === data.partId,
+              )
+            : undefined;
+          const actor = { email: user.email, isAdmin: isAdminUser(user) };
+          const ctx = {
+            composerEmail,
+            reviewAssigneeEmail: existing?.assignee_email ?? null,
+          };
+          const denied = touched.filter(
+            (f) => !canEditReviewField(f, actor, ctx),
+          );
+          if (denied.length > 0) {
+            return jsonError(
+              `You are not allowed to edit: ${denied.join(", ")}`,
+              403,
+            );
+          }
+
           const row = await upsertReview({
             project_id: data.projectId,
+            part_id: data.partId,
             course_id: data.courseId ?? null,
-            parts_checked: data.parts_checked,
+            script_status: data.script_status,
+            recording_status: data.recording_status,
             review_status: data.review_status,
             issues_found: data.issues_found,
             correction_status: data.correction_status,
@@ -65,7 +110,10 @@ export const Route = createFileRoute("/api/reviews")({
           });
           return jsonResponse(row);
         } catch (e) {
-          return jsonError(e instanceof Error ? e.message : "Review request failed", 500);
+          return jsonError(
+            e instanceof Error ? e.message : "Review request failed",
+            500,
+          );
         }
       },
     },
