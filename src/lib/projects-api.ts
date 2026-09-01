@@ -116,16 +116,6 @@ export function apiDeleteProject(id: string): Promise<{ ok: true }> {
   return projectsFetch({ action: "delete", id });
 }
 
-export function apiAssignEpisode(
-  id: string,
-  assignedUserId: string | null,
-): Promise<ProjectRecord> {
-  return projectsFetch({
-    action: "assignEpisode",
-    id,
-    assigned_user_id: assignedUserId,
-  });
-}
 
 export function apiAssignPart(
   episodeId: string,
