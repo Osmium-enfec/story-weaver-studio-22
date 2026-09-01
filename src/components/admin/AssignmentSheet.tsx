@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { apiAdminUsersOnly } from "@/lib/admin-api";
 import {
-  apiAssignEpisode,
   apiAssignPart,
   apiDeletePart,
   apiListProjects,
@@ -75,18 +74,11 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
     }));
   }, [episodes]);
 
-  function applyLocal(
-    episodeId: string,
-    partId: string | null,
-    userId: string | null,
-  ) {
+  function applyLocal(episodeId: string, partId: string, userId: string | null) {
     const email = users?.find((u) => u.id === userId)?.email ?? null;
     setEpisodes((prev) =>
       (prev ?? []).map((ep) => {
         if (ep.id !== episodeId) return ep;
-        if (!partId) {
-          return { ...ep, assigned_user_id: userId, assigned_user_email: email };
-        }
         return {
           ...ep,
           parts_summary: (ep.parts_summary ?? []).map((p) =>
@@ -99,17 +91,12 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
     );
   }
 
-  async function assign(
-    episodeId: string,
-    partId: string | null,
-    userId: string | null,
-  ) {
-    const key = `${episodeId}:${partId ?? "ep"}`;
+  async function assign(episodeId: string, partId: string, userId: string | null) {
+    const key = `${episodeId}:${partId}`;
     setSavingKey(key);
     setError(null);
     try {
-      if (partId) await apiAssignPart(episodeId, partId, userId);
-      else await apiAssignEpisode(episodeId, userId);
+      await apiAssignPart(episodeId, partId, userId);
       applyLocal(episodeId, partId, userId);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not assign");
@@ -160,10 +147,10 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
     value,
   }: {
     episodeId: string;
-    partId: string | null;
+    partId: string;
     value: string | null;
   }) {
-    const key = `${episodeId}:${partId ?? "ep"}`;
+    const key = `${episodeId}:${partId}`;
     const busy = savingKey === key;
     return (
       <div className="flex items-center gap-1.5">
