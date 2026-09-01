@@ -87,11 +87,25 @@ function contentTypeFor(key: string): string {
   }
 }
 
+type RawEntries = {
+  manifestChunks: Uint8Array[];
+  dbChunks: Uint8Array[];
+  media: Map<string, Uint8Array[]>;
+};
+
+function classify(name: string): "manifest" | "db" | "media" | null {
+  if (name.includes("__MACOSX") || name.endsWith("/")) return null;
+  if (/^([^/]+\/)?MANIFEST\.json$/i.test(name)) return "manifest";
+  if (name.endsWith(".data/projects.db")) return "db";
+  if (name.includes(".data/project-assets/")) return "media";
+  return null;
+}
+
 /** Stream-unzip a data pack entirely in the browser (no server memory cost). */
-async function readPack(
+async function streamEntries(
   file: File,
   onNote: (note: string) => void,
-): Promise<PackData> {
+): Promise<RawEntries> {
   const manifestChunks: Uint8Array[] = [];
   const dbChunks: Uint8Array[] = [];
   const media = new Map<string, Uint8Array[]>();
@@ -101,7 +115,8 @@ async function readPack(
   unzip.register(UnzipInflate);
   unzip.onfile = (entry) => {
     const name = entry.name;
-    if (name.includes("__MACOSX") || name.endsWith("/")) return;
+    const kind = classify(name);
+    if (!kind) return;
     const collect = (target: Uint8Array[]) => {
       entry.ondata = (err, chunk) => {
         if (err) {
@@ -112,11 +127,9 @@ async function readPack(
       };
       entry.start();
     };
-    if (/^([^/]+\/)?MANIFEST\.json$/i.test(name)) {
-      collect(manifestChunks);
-    } else if (name.endsWith(".data/projects.db")) {
-      collect(dbChunks);
-    } else if (name.includes(".data/project-assets/")) {
+    if (kind === "manifest") collect(manifestChunks);
+    else if (kind === "db") collect(dbChunks);
+    else {
       const key = name.split(".data/project-assets/")[1];
       if (!key) return;
       const chunks: Uint8Array[] = [];
@@ -140,9 +153,57 @@ async function readPack(
     );
   }
   if (zipError) throw zipError;
+  return { manifestChunks, dbChunks, media };
+}
+
+/**
+ * Fallback for zips the streaming reader can't parse (zip64, data descriptors,
+ * odd writers): read the whole file and use the central directory instead.
+ */
+async function bufferEntries(
+  file: File,
+  onNote: (note: string) => void,
+): Promise<RawEntries> {
+  onNote("Retrying with full-archive reader…");
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const { unzip } = await import("fflate");
+  const files = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(buf, { filter: (f) => classify(f.name) !== null }, (err, out) =>
+      err ? reject(err instanceof Error ? err : new Error(String(err))) : resolve(out),
+    );
+  });
+
+  const manifestChunks: Uint8Array[] = [];
+  const dbChunks: Uint8Array[] = [];
+  const media = new Map<string, Uint8Array[]>();
+  for (const [name, data] of Object.entries(files)) {
+    const kind = classify(name);
+    if (kind === "manifest") manifestChunks.push(data);
+    else if (kind === "db") dbChunks.push(data);
+    else if (kind === "media") {
+      const key = name.split(".data/project-assets/")[1];
+      if (key) media.set(key, [data]);
+    }
+  }
+  return { manifestChunks, dbChunks, media };
+}
+
+async function readPack(
+  file: File,
+  onNote: (note: string) => void,
+): Promise<PackData> {
+  let entries: RawEntries;
+  try {
+    entries = await streamEntries(file, onNote);
+    if (entries.dbChunks.length === 0) throw new Error("no projects.db in stream");
+  } catch {
+    entries = await bufferEntries(file, onNote);
+  }
+  const { manifestChunks, dbChunks, media } = entries;
   if (dbChunks.length === 0) {
     throw new Error("This zip has no .data/projects.db — is it a Div Studio data pack?");
   }
+
 
   const manifest: PackManifest =
     manifestChunks.length > 0
