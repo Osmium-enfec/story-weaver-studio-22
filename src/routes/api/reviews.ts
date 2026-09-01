@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import {
+  getReview,
   listCourseReviews,
   partComposerEmail,
   upsertReview,
