@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { apiAdminUsersOnly } from "@/lib/admin-api";
 import {
-  apiAssignEpisode,
   apiAssignPart,
   apiDeletePart,
   apiListProjects,
@@ -75,18 +74,11 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
     }));
   }, [episodes]);
 
-  function applyLocal(
-    episodeId: string,
-    partId: string | null,
-    userId: string | null,
-  ) {
+  function applyLocal(episodeId: string, partId: string, userId: string | null) {
     const email = users?.find((u) => u.id === userId)?.email ?? null;
     setEpisodes((prev) =>
       (prev ?? []).map((ep) => {
         if (ep.id !== episodeId) return ep;
-        if (!partId) {
-          return { ...ep, assigned_user_id: userId, assigned_user_email: email };
-        }
         return {
           ...ep,
           parts_summary: (ep.parts_summary ?? []).map((p) =>
@@ -99,17 +91,12 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
     );
   }
 
-  async function assign(
-    episodeId: string,
-    partId: string | null,
-    userId: string | null,
-  ) {
-    const key = `${episodeId}:${partId ?? "ep"}`;
+  async function assign(episodeId: string, partId: string, userId: string | null) {
+    const key = `${episodeId}:${partId}`;
     setSavingKey(key);
     setError(null);
     try {
-      if (partId) await apiAssignPart(episodeId, partId, userId);
-      else await apiAssignEpisode(episodeId, userId);
+      await apiAssignPart(episodeId, partId, userId);
       applyLocal(episodeId, partId, userId);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not assign");
@@ -160,10 +147,10 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
     value,
   }: {
     episodeId: string;
-    partId: string | null;
+    partId: string;
     value: string | null;
   }) {
-    const key = `${episodeId}:${partId ?? "ep"}`;
+    const key = `${episodeId}:${partId}`;
     const busy = savingKey === key;
     return (
       <div className="flex items-center gap-1.5">
@@ -226,36 +213,14 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
               </tr>
             ) : (
               rows.map(({ ep, parts }) => {
-                const span = Math.max(1, parts.length) + 1;
+                const span = Math.max(1, parts.length);
                 return (
                   <Fragment key={ep.id}>
-                    <tr className="border-b bg-muted/20">
-                      <td
-                        rowSpan={span}
-                        className="border-r px-3 py-2 align-top font-medium"
-                      >
-                        {ep.title}
-                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                          {parts.length} part{parts.length === 1 ? "" : "s"}
-                        </span>
-                      </td>
-                      <td className="border-r px-3 py-2 text-xs text-muted-foreground">
-                        Whole episode
-                      </td>
-                      <td className="border-r px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                        {ep.scene_count}
-                      </td>
-                      <td className="border-r px-3 py-1.5">
-                        <AssigneeSelect
-                          episodeId={ep.id}
-                          partId={null}
-                          value={ep.assigned_user_id ?? null}
-                        />
-                      </td>
-                      <td className="px-3 py-1.5" />
-                    </tr>
                     {parts.length === 0 ? (
                       <tr className="border-b">
+                        <td className="border-r px-3 py-2 align-top font-medium">
+                          {ep.title}
+                        </td>
                         <td
                           colSpan={4}
                           className="px-3 py-2 text-xs text-muted-foreground"
@@ -266,6 +231,17 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
                     ) : (
                       parts.map((p, i) => (
                         <tr key={`${ep.id}-${p.id}`} className="border-b">
+                          {i === 0 && (
+                            <td
+                              rowSpan={span}
+                              className="border-r px-3 py-2 align-top font-medium"
+                            >
+                              {ep.title}
+                              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                                {parts.length} part{parts.length === 1 ? "" : "s"}
+                              </span>
+                            </td>
+                          )}
                           <td className="border-r px-3 py-2">
                             <span className="text-muted-foreground">{i + 1}.</span>{" "}
                             {p.title}

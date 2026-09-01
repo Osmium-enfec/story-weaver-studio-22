@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
-  localAssignEpisode,
   localAssignPart,
   localDeleteProject,
   localGetProject,
@@ -37,12 +36,6 @@ const Body = z.discriminatedUnion("action", [
     preserve_part_scenes: z.boolean().optional(),
   }),
   z.object({ action: z.literal("delete"), id: z.string().uuid() }),
-  z.object({
-    action: z.literal("assignEpisode"),
-    id: z.string().uuid(),
-    /** null clears assignment. */
-    assigned_user_id: z.string().uuid().nullable(),
-  }),
   z.object({
     action: z.literal("assignPart"),
     id: z.string().uuid(),
@@ -131,19 +124,6 @@ export const Route = createFileRoute("/api/projects")({
             : await localGetProject(user.id, user.email, data.id);
           if (!local) return jsonError("Episode not found.", 404);
           return jsonResponse(normalizeProjectRecord(local as unknown as Record<string, unknown>));
-        }
-
-        if (data.action === "assignEpisode") {
-          if (!asAdmin) return jsonError("Admin only.", 403);
-          try {
-            const assignee = await resolveAssignee(data.assigned_user_id);
-            const updated = await localAssignEpisode(data.id, assignee);
-            return jsonResponse(
-              normalizeProjectRecord(updated as unknown as Record<string, unknown>),
-            );
-          } catch (e) {
-            return jsonError(e instanceof Error ? e.message : "Assign failed", 400);
-          }
         }
 
         if (data.action === "assignPart") {
