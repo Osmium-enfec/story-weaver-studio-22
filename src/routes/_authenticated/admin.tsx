@@ -42,7 +42,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
       isAdminEmail(email);
     if (!isAdmin) throw redirect({ to: "/compose", search: {} });
   },
-  head: () => ({ meta: [{ title: "Admin — Explainer Studio" }] }),
+  head: () => ({ meta: [{ title: "Admin — Div Studio" }] }),
   component: AdminPage,
 });
 

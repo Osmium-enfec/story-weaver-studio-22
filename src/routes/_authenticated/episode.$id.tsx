@@ -31,7 +31,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/episode/$id")({
   head: () => ({
-    meta: [{ title: "Episode — Explainer Studio" }],
+    meta: [{ title: "Episode — Div Studio" }],
   }),
   component: EpisodeDetailPage,
 });

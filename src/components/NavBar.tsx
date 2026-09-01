@@ -72,7 +72,7 @@ export function NavBar() {
       <div className="flex w-full items-center justify-between px-4 py-3 xl:px-8">
         <Link to="/courses" className="flex items-center gap-2 font-semibold">
           <Sparkles size={18} className="text-primary" />
-          <span>Explainer Studio</span>
+          <span>Div Studio</span>
         </Link>
         <div className="flex items-center gap-3 text-sm">
           {loaded && email ? (
