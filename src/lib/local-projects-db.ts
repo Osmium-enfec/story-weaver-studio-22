@@ -33,6 +33,14 @@ export interface LocalProjectRow {
   updated_at: string;
 }
 
+export interface LocalProjectPartSummary {
+  id: string;
+  title: string;
+  assigned_user_id: string | null;
+  assigned_user_email: string | null;
+  scene_count: number;
+}
+
 export interface LocalProjectListItem {
   id: string;
   title: string;
@@ -47,7 +55,10 @@ export interface LocalProjectListItem {
   assigned_user_email: string | null;
   /** Unique emails from part-level assignments. */
   part_assignee_emails: string[];
+  /** Lightweight per-part rows (admin assignment sheet). */
+  parts_summary: LocalProjectPartSummary[];
 }
+
 
 let db: Database.Database | null = null;
 
@@ -144,7 +155,28 @@ function rowToProject(row: Record<string, unknown>): LocalProjectRow {
   };
 }
 
+function localPartsSummaryFromRaw(parts: unknown): LocalProjectPartSummary[] {
+  if (!Array.isArray(parts)) return [];
+  const out: LocalProjectPartSummary[] = [];
+  for (const p of parts) {
+    if (!p || typeof p !== "object") continue;
+    const rec = p as Record<string, unknown>;
+    if (typeof rec.id !== "string") continue;
+    out.push({
+      id: rec.id,
+      title: typeof rec.title === "string" ? rec.title : "Part",
+      assigned_user_id:
+        typeof rec.assignedUserId === "string" ? rec.assignedUserId : null,
+      assigned_user_email:
+        typeof rec.assignedUserEmail === "string" ? rec.assignedUserEmail : null,
+      scene_count: Array.isArray(rec.scenes) ? rec.scenes.length : 0,
+    });
+  }
+  return out;
+}
+
 function partAssigneeEmailsFromRaw(parts: unknown): string[] {
+
   // List queries return trimmed parts ({assignedUserId, assignedUserEmail}
   // only), so don't go through getProjectParts' full-shape predicate here.
   const emails = new Set<string>();
@@ -223,6 +255,8 @@ function toListItem(row: Record<string, unknown>): LocalProjectListItem {
     assigned_user_email:
       row.assigned_user_email != null ? String(row.assigned_user_email) : null,
     part_assignee_emails: partAssigneeEmailsFromRaw(partsRaw),
+    parts_summary: localPartsSummaryFromRaw(partsRaw),
+
   };
 }
 

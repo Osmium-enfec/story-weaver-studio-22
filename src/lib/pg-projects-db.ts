@@ -9,6 +9,8 @@ import {
   type LocalAssignmentItem,
   type LocalProjectAdminItem,
   type LocalProjectListItem,
+  type LocalProjectPartSummary,
+
   type LocalProjectRow,
 } from "@/lib/local-projects-db";
 
@@ -70,6 +72,27 @@ function partAssigneeEmailsFromRaw(parts: unknown): string[] {
   return [...emails].sort((a, b) => a.localeCompare(b));
 }
 
+/** Lightweight per-part rows for the admin assignment sheet. */
+export function partsSummaryFromRaw(parts: unknown): LocalProjectPartSummary[] {
+  if (!Array.isArray(parts)) return [];
+  const out: LocalProjectPartSummary[] = [];
+  for (const p of parts) {
+    if (!p || typeof p !== "object") continue;
+    const rec = p as Record<string, unknown>;
+    if (typeof rec.id !== "string") continue;
+    out.push({
+      id: rec.id,
+      title: typeof rec.title === "string" ? rec.title : "Part",
+      assigned_user_id:
+        typeof rec.assignedUserId === "string" ? rec.assignedUserId : null,
+      assigned_user_email:
+        typeof rec.assignedUserEmail === "string" ? rec.assignedUserEmail : null,
+      scene_count: Number(rec.sceneCount ?? (Array.isArray(rec.scenes) ? rec.scenes.length : 0)) || 0,
+    });
+  }
+  return out;
+}
+
 function toListItem(row: Record<string, unknown>): LocalProjectListItem {
   const scenes = parseJsonColumn(row.scenes);
   const partsRaw = parseJsonColumn(row.parts);
@@ -88,8 +111,10 @@ function toListItem(row: Record<string, unknown>): LocalProjectListItem {
     assigned_user_email:
       row.assigned_user_email != null ? String(row.assigned_user_email) : null,
     part_assignee_emails: partAssigneeEmailsFromRaw(partsRaw),
+    parts_summary: partsSummaryFromRaw(partsRaw),
   };
 }
+
 
 const PROJECT_SELECT = `
   id, user_id, title, script, audio_mode, scenes, parts, thumbnail_url, course_id,
@@ -111,15 +136,20 @@ const LIST_SELECT = `
   (
     SELECT COALESCE(
       jsonb_agg(jsonb_build_object(
+        'id', p->>'id',
+        'title', p->>'title',
         'assignedUserId', p->>'assignedUserId',
-        'assignedUserEmail', p->>'assignedUserEmail'
-      )),
+        'assignedUserEmail', p->>'assignedUserEmail',
+        'sceneCount', CASE WHEN jsonb_typeof(p->'scenes') = 'array'
+          THEN jsonb_array_length(p->'scenes') ELSE 0 END
+      ) ORDER BY ord),
       '[]'::jsonb
     )
     FROM jsonb_array_elements(
       CASE WHEN jsonb_typeof(parts) = 'array' THEN parts ELSE '[]'::jsonb END
-    ) AS p
+    ) WITH ORDINALITY AS t(p, ord)
   )::text AS parts,
+
   course_id, assigned_user_id, assigned_user_email, user_id
 `;
 
