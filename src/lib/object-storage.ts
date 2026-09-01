@@ -286,43 +286,48 @@ function parseByteRange(
   return { start, end };
 }
 
+async function cloudExists(kind: AssetKind, rel: string): Promise<boolean> {
+  try {
+    const res = await fetch(cloudObjectUrl(kind, rel), {
+      method: "HEAD",
+      headers: cloudHeaders(),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function spacesExists(kind: AssetKind, rel: string): Promise<boolean> {
+  if (isEdgeRuntime()) {
+    try {
+      const res = await fetch(await spacesPresign("HEAD", kind, rel, 300), { method: "HEAD" });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+    const client = await spacesClient();
+    await client.send(new HeadObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Serve a stored asset with optional HTTP Range (local disk or Spaces). */
 /** True when the object already exists in the active storage backend. */
 export async function assetExists(kind: AssetKind, relPath: string): Promise<boolean> {
   const rel = relPath.replace(/^\/+/, "");
   if (!rel || rel.includes("..")) return false;
 
-  if (useCloudStorage()) {
-    try {
-      const res = await fetch(cloudObjectUrl(kind, rel), {
-        method: "HEAD",
-        headers: cloudHeaders(),
-      });
-      return res.ok;
-    } catch {
-      return false;
-    }
-  }
+  if (useCloudStorage()) return cloudExists(kind, rel);
 
   if (useSpaces()) {
-    if (isEdgeRuntime()) {
-      try {
-        const res = await fetch(await spacesPresign("HEAD", kind, rel, 300), {
-          method: "HEAD",
-        });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    }
-    try {
-      const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
-      const client = await spacesClient();
-      await client.send(new HeadObjectCommand({ Bucket: bucket(), Key: spacesKey(kind, rel) }));
-      return true;
-    } catch {
-      return false;
-    }
+    if (await spacesExists(kind, rel)) return true;
+    return hasCloudStorage() ? cloudExists(kind, rel) : false;
   }
 
   return existsSync(path.join(localRoot(kind), rel));
