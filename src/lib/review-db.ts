@@ -205,6 +205,21 @@ export async function upsertReview(
   return sqliteUpsertReview(input);
 }
 
+/** Single review row (cheap lookup used by the permission check on save). */
+export async function getReview(
+  projectId: string,
+  partId: string,
+): Promise<PartReviewRow | null> {
+  if (usePostgres()) {
+    const { pgGetReview } = await import("@/lib/pg-review-db");
+    return pgGetReview(projectId, partId);
+  }
+  const row = getDb()
+    .prepare(`SELECT * FROM part_reviews WHERE project_id = ? AND part_id = ?`)
+    .get(projectId, partId) as Record<string, unknown> | undefined;
+  return row ? rowToPartReview(row) : null;
+}
+
 /** Email of the user this part is assigned to for composing (or null). */
 export async function partComposerEmail(
   projectId: string,

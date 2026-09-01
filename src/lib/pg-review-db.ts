@@ -84,3 +84,15 @@ function safeParse(value: string): unknown {
     return [];
   }
 }
+
+export async function pgGetReview(
+  projectId: string,
+  partId: string,
+): Promise<PartReviewRow | null> {
+  const res = await pgQuery<Record<string, unknown>>(
+    `SELECT ${COLS} FROM part_reviews WHERE project_id = $1 AND part_id = $2`,
+    [projectId, partId],
+  );
+  const row = res.rows[0];
+  return row ? rowToPartReview(row) : null;
+}

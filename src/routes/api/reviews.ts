@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import {
+  getReview,
   listCourseReviews,
   partComposerEmail,
   upsertReview,
@@ -70,17 +71,15 @@ export const Route = createFileRoute("/api/reviews")({
           ) as ReviewField[];
           if (touched.length === 0) return jsonError("Nothing to update", 400);
 
-          const composerEmail = await partComposerEmail(
-            data.projectId,
-            data.partId,
-          );
-          const existing = data.courseId
-            ? (await listCourseReviews(data.courseId)).find(
-                (r) =>
-                  r.project_id === data.projectId && r.part_id === data.partId,
-              )
-            : undefined;
           const actor = { email: user.email, isAdmin: isAdminUser(user) };
+          // Admins can edit everything — skip the expensive lookups
+          // (the parts JSON blob is large and can blow the request budget).
+          const composerEmail = actor.isAdmin
+            ? null
+            : await partComposerEmail(data.projectId, data.partId);
+          const existing = actor.isAdmin
+            ? null
+            : await getReview(data.projectId, data.partId);
           const ctx = {
             composerEmail,
             reviewAssigneeEmail: existing?.assignee_email ?? null,
