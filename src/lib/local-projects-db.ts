@@ -867,6 +867,17 @@ export async function localImportPart(...args: any[]): Promise<any> {
   return sqliteImportPart(...(args as [any, any]));
 }
 
+export async function localDeletePart(
+  episodeId: string,
+  partId: string,
+): Promise<{ partCount: number }> {
+  if (usePostgres()) {
+    const { pgDeletePart } = await import("@/lib/pg-projects-db");
+    return pgDeletePart(episodeId, partId);
+  }
+  return sqliteDeletePart(episodeId, partId);
+}
+
 export async function localAssignedCourseIds(...args: any[]): Promise<any> {
   if (usePostgres()) {
     const { pgAssignedCourseIds } = await import("@/lib/pg-projects-db");
