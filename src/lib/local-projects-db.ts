@@ -33,6 +33,14 @@ export interface LocalProjectRow {
   updated_at: string;
 }
 
+export interface LocalProjectPartSummary {
+  id: string;
+  title: string;
+  assigned_user_id: string | null;
+  assigned_user_email: string | null;
+  scene_count: number;
+}
+
 export interface LocalProjectListItem {
   id: string;
   title: string;
@@ -47,7 +55,10 @@ export interface LocalProjectListItem {
   assigned_user_email: string | null;
   /** Unique emails from part-level assignments. */
   part_assignee_emails: string[];
+  /** Lightweight per-part rows (admin assignment sheet). */
+  parts_summary: LocalProjectPartSummary[];
 }
+
 
 let db: Database.Database | null = null;
 
