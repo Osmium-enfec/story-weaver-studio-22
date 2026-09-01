@@ -213,33 +213,16 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
               </tr>
             ) : (
               rows.map(({ ep, parts }) => {
-                const span = Math.max(1, parts.length) + 1;
+                const span = Math.max(1, parts.length);
                 return (
                   <Fragment key={ep.id}>
-                    <tr className="border-b bg-muted/20">
+                    <tr className="hidden">
                       <td
                         rowSpan={span}
                         className="border-r px-3 py-2 align-top font-medium"
                       >
                         {ep.title}
-                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                          {parts.length} part{parts.length === 1 ? "" : "s"}
-                        </span>
                       </td>
-                      <td className="border-r px-3 py-2 text-xs text-muted-foreground">
-                        Whole episode
-                      </td>
-                      <td className="border-r px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                        {ep.scene_count}
-                      </td>
-                      <td className="border-r px-3 py-1.5">
-                        <AssigneeSelect
-                          episodeId={ep.id}
-                          partId={null}
-                          value={ep.assigned_user_id ?? null}
-                        />
-                      </td>
-                      <td className="px-3 py-1.5" />
                     </tr>
                     {parts.length === 0 ? (
                       <tr className="border-b">
