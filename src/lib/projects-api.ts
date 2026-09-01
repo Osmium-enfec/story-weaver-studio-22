@@ -139,3 +139,10 @@ export function apiAssignPart(
     assigned_user_id: assignedUserId,
   });
 }
+
+export function apiDeletePart(
+  episodeId: string,
+  partId: string,
+): Promise<{ ok: true; partCount: number }> {
+  return projectsFetch({ action: "deletePart", id: episodeId, part_id: partId });
+}
