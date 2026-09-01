@@ -486,13 +486,13 @@ export async function materializeAssetToFile(
   const rel = relPath.replace(/^\/+/, "");
   mkdirSync(path.dirname(destPath), { recursive: true });
 
-  if (useCloudStorage()) {
+  const fromCloud = async () => {
     const res = await fetch(cloudObjectUrl(kind, rel), { headers: cloudHeaders() });
     if (!res.ok) throw new Error(`Missing cloud object: ${rel} (${res.status})`);
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    writeFileSync(destPath, Buffer.from(bytes));
-    return;
-  }
+    writeFileSync(destPath, Buffer.from(new Uint8Array(await res.arrayBuffer())));
+  };
+
+  if (useCloudStorage()) return fromCloud();
 
   if (!useSpaces()) {
     const { copyFileSync } = await import("node:fs");
@@ -501,14 +501,20 @@ export async function materializeAssetToFile(
     return;
   }
 
-  const { GetObjectCommand } = await import("@aws-sdk/client-s3");
-  const get = await (await spacesClient()).send(
-    new GetObjectCommand({
-      Bucket: bucket(),
-      Key: spacesKey(kind, rel),
-    }),
-  );
-  const bytes = await get.Body?.transformToByteArray();
-  if (!bytes) throw new Error(`Missing Spaces object: ${rel}`);
-  writeFileSync(destPath, Buffer.from(bytes));
+  try {
+    const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+    const get = await (await spacesClient()).send(
+      new GetObjectCommand({
+        Bucket: bucket(),
+        Key: spacesKey(kind, rel),
+      }),
+    );
+    const bytes = await get.Body?.transformToByteArray();
+    if (!bytes) throw new Error(`Missing Spaces object: ${rel}`);
+    writeFileSync(destPath, Buffer.from(bytes));
+  } catch (err) {
+    // Pre-migration object: still in the cloud bucket.
+    if (hasCloudStorage()) return fromCloud();
+    throw err;
+  }
 }
