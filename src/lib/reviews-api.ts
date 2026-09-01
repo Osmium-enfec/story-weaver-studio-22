@@ -1,9 +1,11 @@
 import { getStoredSessionToken } from "@/lib/auth-client";
 
-export type EpisodeReview = {
+export type PartReview = {
   project_id: string;
+  part_id: string;
   course_id: string | null;
-  parts_checked: string;
+  script_status: string;
+  recording_status: string;
   review_status: string;
   issues_found: string;
   correction_status: string;
@@ -13,10 +15,12 @@ export type EpisodeReview = {
   updated_at: string;
 };
 
-export type EpisodeReviewPatch = {
+export type PartReviewPatch = {
   projectId: string;
+  partId: string;
   courseId?: string | null;
-  parts_checked?: string;
+  script_status?: string;
+  recording_status?: string;
   review_status?: string;
   issues_found?: string;
   correction_status?: string;
@@ -51,10 +55,10 @@ async function reviewsFetch<T>(body: Record<string, unknown>): Promise<T> {
   return data;
 }
 
-export function apiListReviews(courseId: string): Promise<EpisodeReview[]> {
+export function apiListReviews(courseId: string): Promise<PartReview[]> {
   return reviewsFetch({ action: "list", courseId });
 }
 
-export function apiSaveReview(patch: EpisodeReviewPatch): Promise<EpisodeReview> {
+export function apiSaveReview(patch: PartReviewPatch): Promise<PartReview> {
   return reviewsFetch({ action: "save", ...patch });
 }
