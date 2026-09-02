@@ -23,3 +23,7 @@ services:
       - divstudio_scratch:/var/lib/divstudio/scratch
     restart: unless-stopped
 
+volumes:
+  divstudio_data:
+  divstudio_scratch:
+
