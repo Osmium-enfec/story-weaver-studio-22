@@ -1,6 +1,10 @@
 /** Column-level edit rules for the shared review sheet. */
 
-export const REVIEWER_EMAILS = ["imshweta@gmail.com", "shweta.singh@enfec.com"];
+export const REVIEWER_EMAILS = [
+  "imshweta@gmail.com",
+  "shweta.singh@enfec.com",
+  "balaji.chokkara@enfec.com",
+];
 
 export type ReviewField =
   | "script_status"
