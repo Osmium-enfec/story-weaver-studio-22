@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { describeBackends, isEdgeRuntime, usePostgres } from "@/lib/runtime-backends";
+import { describeBackends, isEdgeRuntime, usePostgres, useSqlProxy } from "@/lib/runtime-backends";
 
 /**
  * Non-sensitive deploy diagnostic: which storage backend the running server uses
@@ -28,6 +28,7 @@ export const Route = createFileRoute("/api/public/runtime-info")({
           hasCloudDbUrl: Boolean(process.env.SUPABASE_DB_URL?.trim()),
           hasServiceRole: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()),
           backends: describeBackends(),
+          sqlBridge: useSqlProxy(),
           dbOk,
           dbError,
         });
