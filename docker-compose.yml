@@ -12,7 +12,7 @@ services:
       PORT: "3000"
       ENFEC_DATA_ROOT: /var/lib/divstudio/data
       ENFEC_SCRATCH_ROOT: /var/lib/divstudio/scratch
-      PLAYWRIGHT_BROWSERS_PATH: /app/.playwright
+      PLAYWRIGHT_BROWSERS_PATH: /opt/playwright
       FFMPEG_PATH: /usr/bin/ffmpeg
       # Override host DNS (127.0.1.1) so Playwright can reach nginx on the gateway.
       # Bumpers are host-served; EXPORT_BASE_URL must stay the public https origin.
