@@ -151,7 +151,6 @@ export const Route = createFileRoute("/api/projects")({
         }
 
         if (data.action === "importPart") {
-          if (!asAdmin) return jsonError("Admin only.", 403);
           const part = data.part as {
             id?: unknown;
             title?: unknown;
@@ -164,12 +163,41 @@ export const Route = createFileRoute("/api/projects")({
           ) {
             return jsonError("Invalid part payload.", 400);
           }
+          // Admins can import anywhere; collaborators only into parts assigned to them.
+          const requestedTargetId =
+            typeof data.target_part_id === "string" && data.target_part_id
+              ? data.target_part_id
+              : part.id;
+          if (!asAdmin) {
+            const local = await localGetProject(user.id, user.email, data.id);
+            if (!local) return jsonError("Episode not found.", 404);
+            const localParts = Array.isArray(local.parts) ? local.parts : [];
+            const target = localParts.find(
+              (p: unknown) =>
+                p && typeof p === "object" &&
+                ((p as Record<string, unknown>).id === requestedTargetId ||
+                 (p as Record<string, unknown>).part_id === requestedTargetId),
+            ) as Record<string, unknown> | undefined;
+            const assignedId = target?.assignedUserId ?? target?.assigned_user_id;
+            const assignedEmail = String(
+              target?.assignedUserEmail ?? target?.assigned_user_email ?? "",
+            ).trim().toLowerCase();
+            const isMine =
+              (assignedId != null && assignedId === user.id) ||
+              (assignedEmail !== "" && assignedEmail === user.email.toLowerCase());
+            if (!isMine) {
+              return jsonError(
+                "You can only import into a part assigned to you.",
+                403,
+              );
+            }
+          }
           try {
             const { localImportPart } = await import("@/lib/local-projects-db");
             const result = await localImportPart(
               data.id,
-              data.part,
-              data.target_part_id ?? null,
+              part,
+              requestedTargetId,
             );
             return jsonResponse({ ok: true, ...result });
           } catch (e) {
