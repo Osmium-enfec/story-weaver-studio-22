@@ -39,23 +39,57 @@ export function isHostedBuild(): boolean {
   );
 }
 
-/** Postgres connection string: explicit DATABASE_URL, else the cloud database. */
+/** Default SQL proxy (the droplet app, which has raw TCP access to DO Postgres). */
+const DEFAULT_SQL_PROXY_URL = "https://studio.enfeca.cloud/api/public/sql";
+
+/**
+ * Direct (TCP) DO Postgres connection string. Only the self-hosted droplet sets
+ * DATABASE_URL; everywhere else the database is reached through the SQL bridge,
+ * which avoids IP allow-listing and works in edge runtimes.
+ */
+export function ownPostgresUrl(): string {
+  return process.env.DATABASE_URL?.trim() || "";
+}
+
+/** Postgres connection string: own DO database first, else the cloud database. */
 export function postgresUrl(): string {
-  const explicit = process.env.DATABASE_URL?.trim();
-  if (explicit) return explicit;
+  // Edge runtimes have no raw TCP sockets — those go through the SQL bridge.
+  if (isEdgeRuntime()) return "";
+  const own = ownPostgresUrl();
+  if (own) return own;
+  if (useSqlProxy()) return "";
   // Hosted runtime → SQLite/disk is unavailable; use the cloud Postgres.
   if (isHostedBuild()) return process.env.SUPABASE_DB_URL?.trim() || "";
   return "";
 }
 
+/** True when the resolved Postgres URL is the managed cloud DB (private `app` schema). */
+export function usingCloudPostgres(): boolean {
+  return !ownPostgresUrl() && Boolean(postgresUrl());
+}
+
+/**
+ * Everything that is not the self-hosted droplet forwards SQL to the droplet
+ * app over HTTPS, so preview, published and self-hosted all share one database.
+ */
+export function sqlProxyUrl(): string {
+  if (ownPostgresUrl()) return "";
+  if (!process.env.SQL_PROXY_SECRET?.trim()) return "";
+  return process.env.SQL_PROXY_URL?.trim() || DEFAULT_SQL_PROXY_URL;
+}
+
+export function useSqlProxy(): boolean {
+  return Boolean(sqlProxyUrl());
+}
 
 
 /**
- * Hosted build with no Postgres connection string: talk to the cloud database
- * over HTTP (service-role RPC) instead of raw TCP, which edge runtimes lack.
+ * Hosted build with no Postgres connection string and no SQL proxy: talk to the
+ * cloud database over HTTP (service-role RPC) instead of raw TCP.
  */
 export function useCloudRest(): boolean {
   if (postgresUrl()) return false;
+  if (useSqlProxy()) return false;
   if (!isHostedBuild()) return false;
   return Boolean(
     process.env.SUPABASE_URL?.trim() && process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(),
@@ -63,8 +97,9 @@ export function useCloudRest(): boolean {
 }
 
 export function usePostgres(): boolean {
-  return Boolean(postgresUrl()) || useCloudRest();
+  return Boolean(postgresUrl()) || useSqlProxy() || useCloudRest();
 }
+
 
 /**
  * Hosted build with no Spaces credentials: store/serve media in the cloud

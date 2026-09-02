@@ -38,6 +38,7 @@ import { Route as AuthenticatedComposeRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiSyncFeedSplatRouteImport } from './routes/api/sync-feed.$'
 import { Route as ApiRenderAgentUpdatesSplatRouteImport } from './routes/api/render-agent-updates.$'
+import { Route as ApiPublicSqlRouteImport } from './routes/api/public/sql'
 import { Route as ApiPublicRuntimeInfoRouteImport } from './routes/api/public/runtime-info'
 import { Route as ApiPublicBundlesRouteImport } from './routes/api/public/bundles'
 import { Route as ApiDivStudioUpdatesSplatRouteImport } from './routes/api/div-studio-updates.$'
@@ -195,6 +196,11 @@ const ApiRenderAgentUpdatesSplatRoute =
     path: '/api/render-agent-updates/$',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicSqlRoute = ApiPublicSqlRouteImport.update({
+  id: '/api/public/sql',
+  path: '/api/public/sql',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicRuntimeInfoRoute = ApiPublicRuntimeInfoRouteImport.update({
   id: '/api/public/runtime-info',
   path: '/api/public/runtime-info',
@@ -282,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
   '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
+  '/api/public/sql': typeof ApiPublicSqlRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
@@ -322,6 +329,7 @@ export interface FileRoutesByTo {
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
   '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
+  '/api/public/sql': typeof ApiPublicSqlRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
@@ -364,6 +372,7 @@ export interface FileRoutesById {
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
   '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
+  '/api/public/sql': typeof ApiPublicSqlRoute
   '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
@@ -406,6 +415,7 @@ export interface FileRouteTypes {
     | '/api/div-studio-updates/$'
     | '/api/public/bundles'
     | '/api/public/runtime-info'
+    | '/api/public/sql'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
@@ -446,6 +456,7 @@ export interface FileRouteTypes {
     | '/api/div-studio-updates/$'
     | '/api/public/bundles'
     | '/api/public/runtime-info'
+    | '/api/public/sql'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
@@ -487,6 +498,7 @@ export interface FileRouteTypes {
     | '/api/div-studio-updates/$'
     | '/api/public/bundles'
     | '/api/public/runtime-info'
+    | '/api/public/sql'
     | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
@@ -519,6 +531,7 @@ export interface RootRouteChildren {
   ApiDivStudioUpdatesSplatRoute: typeof ApiDivStudioUpdatesSplatRoute
   ApiPublicBundlesRoute: typeof ApiPublicBundlesRouteWithChildren
   ApiPublicRuntimeInfoRoute: typeof ApiPublicRuntimeInfoRoute
+  ApiPublicSqlRoute: typeof ApiPublicSqlRoute
   ApiRenderAgentUpdatesSplatRoute: typeof ApiRenderAgentUpdatesSplatRoute
   ApiSyncFeedSplatRoute: typeof ApiSyncFeedSplatRoute
   ApiPublicAssetsSplatRoute: typeof ApiPublicAssetsSplatRoute
@@ -729,6 +742,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiRenderAgentUpdatesSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sql': {
+      id: '/api/public/sql'
+      path: '/api/public/sql'
+      fullPath: '/api/public/sql'
+      preLoaderRoute: typeof ApiPublicSqlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/runtime-info': {
       id: '/api/public/runtime-info'
       path: '/api/public/runtime-info'
@@ -868,6 +888,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDivStudioUpdatesSplatRoute: ApiDivStudioUpdatesSplatRoute,
   ApiPublicBundlesRoute: ApiPublicBundlesRouteWithChildren,
   ApiPublicRuntimeInfoRoute: ApiPublicRuntimeInfoRoute,
+  ApiPublicSqlRoute: ApiPublicSqlRoute,
   ApiRenderAgentUpdatesSplatRoute: ApiRenderAgentUpdatesSplatRoute,
   ApiSyncFeedSplatRoute: ApiSyncFeedSplatRoute,
   ApiPublicAssetsSplatRoute: ApiPublicAssetsSplatRoute,
