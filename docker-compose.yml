@@ -23,4 +23,3 @@ services:
       - divstudio_scratch:/var/lib/divstudio/scratch
     restart: unless-stopped
 
-    restart: always
