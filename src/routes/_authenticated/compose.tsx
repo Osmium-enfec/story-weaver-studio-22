@@ -3536,7 +3536,7 @@ function ComposePage() {
           </p>
         </div>
 
-        {isAdmin && projectId && activePartId && (
+        {projectId && activePartId && (
           <div className="mb-4">
             <ImportPartPack
               projectId={projectId}
