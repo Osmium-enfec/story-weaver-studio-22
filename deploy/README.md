@@ -62,6 +62,23 @@ Local Mac is unchanged.
 
 Auth, projects, courses, asset persist/serve, recording2, extract-audio, and export asset materialization all honor these switches. Leave prod env vars **out** of the Mac `.env` used by `dev:lan`.
 
+## Migrating data off Lovable Cloud onto your own Postgres
+
+Media files stay in Spaces — only DB rows move.
+
+```bash
+SUPABASE_URL=https://<project-ref>.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+DATABASE_URL=postgres://user:pass@<do-host>:25060/<db>?sslmode=require \
+node scripts/migrate-cloud-to-do.mjs --dry-run   # then without --dry-run
+```
+
+- Copies users, sessions (skip with `--skip-sessions`), courses, projects
+  (scenes/parts sliced in 1 MB reads + chunked writes), image_assets,
+  episode_reviews, part_reviews.
+- Fully resumable: upserts everywhere; big projects already migrated are skipped.
+- After it finishes, set `DATABASE_URL` + Spaces vars on the droplet app and smoke-test.
+
 ## What not to do
 
 - Do not put prod secrets in the Mac `.env` used by `dev:lan`
