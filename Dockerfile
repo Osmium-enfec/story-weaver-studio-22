@@ -1,11 +1,14 @@
 # syntax=docker/dockerfile:1
+# Self-host build — no private registry dependency (fresh-droplet friendly).
 
-FROM registry.digitalocean.com/prod-enfec/divstudio-base:latest AS deps
+FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
 
 COPY package.json ./
 COPY package-lock.json* bun.lock* ./
+
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 RUN if [ -f package-lock.json ]; then \
       npm ci; \
@@ -13,7 +16,7 @@ RUN if [ -f package-lock.json ]; then \
       npm install; \
     fi
 
-FROM registry.digitalocean.com/prod-enfec/divstudio-base:latest AS build
+FROM deps AS build
 
 WORKDIR /app
 
@@ -21,21 +24,27 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NODE_ENV=production
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 RUN npm run build
 
-FROM registry.digitalocean.com/prod-enfec/divstudio-base:latest AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
-ENV FFMPEG_PATH=/usr/bin/ffmpeg
 ENV ENFEC_SELF_HOSTED=1
 ENV ENFEC_DATA_ROOT=/var/lib/divstudio/data
 ENV ENFEC_SCRATCH_ROOT=/var/lib/divstudio/scratch
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
+
+# ffmpeg for audio/video materialization; Playwright Chromium for server-side export jobs.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm i -g playwright@1.61.1 --silent \
+    && npx playwright install --with-deps chromium
 
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/package.json ./package.json
@@ -44,8 +53,8 @@ COPY --from=build /app/public ./public
 COPY --from=build /app/migrations ./migrations
 COPY --from=build /app/scripts ./scripts
 
-RUN mkdir -p /var/lib/divstudio/data /var/lib/divstudio/scratch \
-    && chown -R node:node /var/lib/divstudio /app
+RUN mkdir -p /var/lib/divstudio/data /var/lib/divstudio/scratch /opt/playwright \
+    && chown -R node:node /var/lib/divstudio /app /opt/playwright
 
 USER node
 
