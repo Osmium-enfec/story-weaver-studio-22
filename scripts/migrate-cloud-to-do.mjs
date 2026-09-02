@@ -35,27 +35,24 @@ function mustEnv(name) {
 const SUPABASE_URL = mustEnv("SUPABASE_URL").replace(/\/+$/, "");
 const SERVICE_KEY = mustEnv("SUPABASE_SERVICE_ROLE_KEY");
 
-// ---------------------------------------------------------------------------
-// Source: read cloud data through the service-role-only app_exec_sql RPC.
-// ---------------------------------------------------------------------------
+// Source: read-only SQL access to Lovable Cloud via the managed psql role
+// (PG* env vars). SELECT-only — the migrator never writes to the source.
+let sourceClient;
 async function cloudQuery(q, params = []) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/app_exec_sql`, {
-    method: "POST",
-    headers: {
-      apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      q,
-      params: params.map((p) => (p === null || p === undefined ? null : String(p))),
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`cloud query failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+  if (!sourceClient) {
+    if (!process.env.PGHOST) {
+      throw new Error("Missing PG* env vars for cloud source access");
+    }
+    sourceClient = new pg.Client();
+    await sourceClient.connect();
+    try {
+      await sourceClient.query("SET statement_timeout = 0");
+    } catch {
+      /* restricted role may not change session settings — fine */
+    }
   }
-  const payload = await res.json();
-  return { rows: payload.rows ?? [], rowCount: payload.rowCount ?? 0 };
+  const res = await sourceClient.query(q, params);
+  return { rows: res.rows, rowCount: res.rowCount ?? 0 };
 }
 
 /** Fetch a big jsonb column as text, in slices, to keep responses small. */
@@ -187,12 +184,19 @@ async function copySimpleTable(client, table, columns, conflictCols) {
 async function main() {
   console.log(`cloud → do migrate  dryRun=${dryRun}  skipSessions=${skipSessions}`);
 
-  const client = pgClient();
-  await client.connect();
-  await client.query("SET statement_timeout = 0");
+  // Target: your own Postgres. Not needed for a source-count-only dry run.
+  const client = process.env.DATABASE_URL?.trim() ? pgClient() : null;
+  if (client) {
+    await client.connect();
+    await client.query("SET statement_timeout = 0");
+  } else if (!dryRun) {
+    throw new Error("Missing env DATABASE_URL (required for a real migration)");
+  } else {
+    console.log("(DATABASE_URL not set — counting source rows only)");
+  }
 
   // 1) Schema on the target.
-  if (!dryRun) {
+  if (client && !dryRun) {
     const { readFileSync } = await import("node:fs");
     const schema = readFileSync(new URL("../migrations/001_init.sql", import.meta.url), "utf8");
     await client.query(schema);
@@ -260,11 +264,12 @@ async function main() {
     if (!dryRun) await upsertProjectChunked(client, p, scenes, parts);
   }
 
-  await client.end();
+  if (client) await client.end();
   console.log("Done. Point the droplet app at DATABASE_URL and smoke-test before switching traffic.");
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(err);
+  try { if (sourceClient) await sourceClient.end(); } catch {}
   process.exit(1);
 });
