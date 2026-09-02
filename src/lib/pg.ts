@@ -1,10 +1,17 @@
 import pg from "pg";
-import { postgresUrl, useCloudRest } from "@/lib/runtime-backends";
+import {
+  postgresUrl,
+  useCloudRest,
+  usingCloudPostgres,
+  useSqlProxy,
+  sqlProxyUrl,
+} from "@/lib/runtime-backends";
 
-/** Cloud fallback (published app) keeps app tables in the private `app` schema. */
+/** Cloud fallback (managed DB) keeps app tables in the private `app` schema. */
 function usingCloudFallback(): boolean {
-  return !process.env.DATABASE_URL?.trim() && Boolean(postgresUrl());
+  return usingCloudPostgres();
 }
+
 
 let pool: pg.Pool | null = null;
 let schemaPromise: Promise<void> | null = null;
@@ -132,9 +139,9 @@ export function pgConnectionOptions(connectionString: string): pg.PoolConfig {
   // keep rejectUnauthorized=true and break DO Managed Postgres (private CA).
   // The managed cloud database (no explicit DATABASE_URL) also presents a
   // private CA chain, so don't verify it unless explicitly asked to.
-  const cloudFallback = !process.env.DATABASE_URL?.trim();
-  const rejectUnauthorized =
-    (process.env.PG_SSL_REJECT_UNAUTHORIZED ?? "").trim() !== "0" && !cloudFallback;
+  const rejectUnauthorized = (process.env.PG_SSL_REJECT_UNAUTHORIZED ?? "").trim() === "1";
+
+
   return { connectionString: url, ssl: { rejectUnauthorized } };
 }
 
@@ -201,11 +208,45 @@ async function restQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
   } as unknown as pg.QueryResult<T>;
 }
 
+/**
+ * Edge runtime (published Lovable app): forward SQL over HTTPS to the
+ * self-hosted app, which has raw TCP access to the DO Postgres. Keeps both
+ * deployments on one database.
+ */
+async function proxyQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
+  text: string,
+  params?: unknown[],
+): Promise<pg.QueryResult<T>> {
+  const res = await fetch(sqlProxyUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.SQL_PROXY_SECRET?.trim() ?? ""}`,
+    },
+    body: JSON.stringify({ text, params: params ?? [] }),
+  });
+  const payload = (await res.json().catch(() => ({}))) as {
+    rows?: T[];
+    rowCount?: number;
+    error?: string;
+  };
+  if (!res.ok) throw new Error(payload.error ?? `SQL proxy failed (${res.status})`);
+  return {
+    rows: payload.rows ?? [],
+    rowCount: payload.rowCount ?? 0,
+    command: "",
+    oid: 0,
+    fields: [],
+  } as unknown as pg.QueryResult<T>;
+}
+
 export async function pgQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params?: unknown[],
 ): Promise<pg.QueryResult<T>> {
+  if (useSqlProxy()) return proxyQuery<T>(text, params);
   if (useCloudRest()) return restQuery<T>(text, params);
   await ensurePgSchema();
+
   return getPgPool().query<T>(text, params);
 }
