@@ -6,11 +6,11 @@
  * Media files are NOT touched — they already live in Spaces and the app serves
  * them via /api/assets/... regardless of which DB is active.
  *
- * Usage:
- *   SUPABASE_URL=https://<ref>.supabase.co \
- *   SUPABASE_SERVICE_ROLE_KEY=... \
+ * Usage (run where managed cloud PG access exists, e.g. the Lovable sandbox):
  *   DATABASE_URL=postgres://user:pass@host:25060/db?sslmode=require \
  *   node scripts/migrate-cloud-to-do.mjs [--dry-run]
+ * Source reads use the sandbox's read-only PG* env vars — no service key needed.
+ * With no DATABASE_URL, --dry-run just counts source rows.
  *
  * Options:
  *   --dry-run     Read & count everything, write nothing.
@@ -32,8 +32,6 @@ function mustEnv(name) {
   return v;
 }
 
-const SUPABASE_URL = mustEnv("SUPABASE_URL").replace(/\/+$/, "");
-const SERVICE_KEY = mustEnv("SUPABASE_SERVICE_ROLE_KEY");
 
 // Source: read-only SQL access to Lovable Cloud via the managed psql role
 // (PG* env vars). SELECT-only — the migrator never writes to the source.
