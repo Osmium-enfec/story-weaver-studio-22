@@ -159,7 +159,6 @@ export const Route = createFileRoute("/api/projects")({
           if (
             typeof part.id !== "string" ||
             typeof part.title !== "string" ||
-            typeof part.scenes !== "string" ||
             !Array.isArray(part.scenes)
           ) {
             return jsonError("Invalid part payload.", 400);
