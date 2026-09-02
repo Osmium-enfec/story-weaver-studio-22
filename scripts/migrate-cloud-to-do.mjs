@@ -41,7 +41,7 @@ async function cloudQuery(q, params = []) {
     if (!process.env.PGHOST) {
       throw new Error("Missing PG* env vars for cloud source access");
     }
-    sourceClient = new pg.Client();
+    sourceClient = new pg.Client({ ssl: { rejectUnauthorized: false } });
     await sourceClient.connect();
     try {
       await sourceClient.query("SET statement_timeout = 0");
