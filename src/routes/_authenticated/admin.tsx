@@ -27,6 +27,7 @@ import {
 } from "@/lib/render-bundles-api";
 
 import { AssignmentSheet } from "@/components/admin/AssignmentSheet";
+import { ReviewAccessSheet } from "@/components/admin/ReviewAccessSheet";
 import { isAdminEmail } from "@/lib/admin";
 
 const PAGE_SIZE = 8;
@@ -104,7 +105,12 @@ function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<
-    "users" | "courses" | "assignment" | "assignments" | "bundles"
+    | "users"
+    | "courses"
+    | "assignment"
+    | "assignments"
+    | "bundles"
+    | "reviewAccess"
   >("users");
   const [usersPage, setUsersPage] = useState(1);
   const [coursesPage, setCoursesPage] = useState(1);
@@ -257,6 +263,7 @@ function AdminPage() {
                   ["assignment", "Assignment"],
                   ["assignments", "Assigned"],
                   ["bundles", "Ready for HD"],
+                  ["reviewAccess", "Review access"],
 
                 ] as const
               ).map(([id, label]) => (
@@ -476,6 +483,8 @@ function AdminPage() {
                 />
               </>
             )}
+
+            {tab === "reviewAccess" && <ReviewAccessSheet />}
 
             {tab === "bundles" && (
               <>
