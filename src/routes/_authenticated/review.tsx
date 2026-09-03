@@ -116,7 +116,9 @@ function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
-  const [grantedFields, setGrantedFields] = useState<ReviewField[]>([]);
+  const [grantedFields, setGrantedFields] = useState<ReviewField[] | null>(
+    null,
+  );
   const tableRef = useRef<HTMLDivElement | null>(null);
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
@@ -125,8 +127,10 @@ function ReviewPage() {
 
   useEffect(() => {
     apiReviewGrants()
-      .then((g) => setGrantedFields(g.fields as ReviewField[]))
-      .catch(() => setGrantedFields([]));
+      .then((g) =>
+        setGrantedFields(g.fields ? (g.fields as ReviewField[]) : null),
+      )
+      .catch(() => setGrantedFields(null));
   }, []);
 
   useEffect(() => {

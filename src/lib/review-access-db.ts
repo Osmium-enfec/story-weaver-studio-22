@@ -73,9 +73,15 @@ export async function listReviewGrants(): Promise<Record<string, ReviewField[]>>
   return out;
 }
 
-export async function getReviewGrants(email: string): Promise<ReviewField[]> {
+/**
+ * Returns the admin-managed grant for this user, or null when no record
+ * exists. A record (even an empty field list) overrides built-in rules.
+ */
+export async function getReviewGrants(
+  email: string,
+): Promise<ReviewField[] | null> {
   const key = norm(email);
-  if (!key) return [];
+  if (!key) return null;
   if (usePostgres()) {
     await ensurePgTable();
     const { pgQuery } = await import("@/lib/pg");
@@ -83,12 +89,14 @@ export async function getReviewGrants(email: string): Promise<ReviewField[]> {
       `SELECT fields FROM review_permissions WHERE email = $1`,
       [key],
     );
-    return parseFields(res.rows[0]?.fields);
+    if (!res.rows[0]) return null;
+    return parseFields(res.rows[0].fields);
   }
   const row = getDb()
     .prepare(`SELECT fields FROM review_permissions WHERE email = ?`)
     .get(key) as { fields?: string } | undefined;
-  return parseFields(row?.fields);
+  if (!row) return null;
+  return parseFields(row.fields);
 }
 
 export async function setReviewGrants(

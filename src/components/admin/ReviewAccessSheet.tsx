@@ -34,25 +34,35 @@ export function ReviewAccessSheet() {
     void load();
   }, [load]);
 
+  /** Effective access: explicit grant if saved, otherwise built-in rules. */
+  function effective(user: ReviewAccessUser): string[] {
+    return user.hasExplicit ? user.fields : (user.implicit ?? []);
+  }
+
   async function toggle(user: ReviewAccessUser, field: string) {
-    const next = user.fields.includes(field)
-      ? user.fields.filter((f) => f !== field)
-      : [...user.fields, field];
+    const current = effective(user);
+    const next = current.includes(field)
+      ? current.filter((f) => f !== field)
+      : [...current, field];
     setUsers((prev) =>
-      (prev ?? []).map((u) => (u.id === user.id ? { ...u, fields: next } : u)),
+      (prev ?? []).map((u) =>
+        u.id === user.id ? { ...u, fields: next, hasExplicit: true } : u,
+      ),
     );
     setSavingEmail(user.email);
     try {
       const saved = await apiAdminSetReviewAccess(user.email, next);
       setUsers((prev) =>
         (prev ?? []).map((u) =>
-          u.id === user.id ? { ...u, fields: saved } : u,
+          u.id === user.id ? { ...u, fields: saved, hasExplicit: true } : u,
         ),
       );
     } catch (e: unknown) {
       setUsers((prev) =>
         (prev ?? []).map((u) =>
-          u.id === user.id ? { ...u, fields: user.fields } : u,
+          u.id === user.id
+            ? { ...u, fields: user.fields, hasExplicit: user.hasExplicit }
+            : u,
         ),
       );
       setError(e instanceof Error ? e.message : "Could not save access");
@@ -66,7 +76,8 @@ export function ReviewAccessSheet() {
       <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
         <ShieldCheck size={13} />
         Tick a column to let that person edit it for every row on the review
-        page. Admins can always edit everything.
+        page. Saving once turns built-in defaults into an editable explicit
+        grant. Admins can always edit everything.
       </p>
       {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
       <div className="overflow-x-auto rounded-lg border">
@@ -100,22 +111,16 @@ export function ReviewAccessSheet() {
                   )}
                 </td>
                 {FIELDS.map((f) => {
-                  const implicit = (u.implicit ?? []).includes(f.id);
+                  const on = effective(u).includes(f.id);
                   return (
                     <td key={f.id} className="px-3 py-2 text-center">
                       <input
                         type="checkbox"
-                        className={
-                          implicit
-                            ? "h-4 w-4 accent-muted-foreground"
-                            : "h-4 w-4 accent-[hsl(var(--primary))]"
-                        }
-                        checked={u.isAdmin || implicit || u.fields.includes(f.id)}
-                        disabled={u.isAdmin || implicit}
+                        className="h-4 w-4 accent-[hsl(var(--primary))]"
+                        checked={u.isAdmin || on}
+                        disabled={u.isAdmin}
                         title={
-                          implicit
-                            ? "Built-in reviewer access — always on"
-                            : undefined
+                          u.isAdmin ? "Admins can always edit everything" : undefined
                         }
                         onChange={() => void toggle(u, f.id)}
                       />
@@ -124,16 +129,23 @@ export function ReviewAccessSheet() {
                 })}
                 <td className="px-3 py-2 text-xs text-muted-foreground">
                   {(() => {
-                    const all = u.isAdmin
-                      ? FIELDS.map((f) => f.id)
-                      : [...(u.implicit ?? []), ...u.fields];
+                    const all = u.isAdmin ? FIELDS.map((f) => f.id) : effective(u);
                     const labels = FIELDS.filter((f) =>
                       new Set(all).has(f.id),
                     ).map((f) => f.label);
-                    return labels.length > 0 ? (
-                      labels.join(", ")
-                    ) : (
-                      <span className="italic">None</span>
+                    return (
+                      <>
+                        {labels.length > 0 ? (
+                          labels.join(", ")
+                        ) : (
+                          <span className="italic">None</span>
+                        )}
+                        {!u.isAdmin && !u.hasExplicit && (u.implicit ?? []).length > 0 && (
+                          <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            built-in default
+                          </span>
+                        )}
+                      </>
                     );
                   })()}
                 </td>

@@ -47,16 +47,22 @@ export const Route = createFileRoute("/api/admin")({
             listReviewGrants(),
           ]);
           return jsonResponse({
-            users: users.map((u) => ({
-              id: u.id,
-              email: u.email,
-              isAdmin: isAdminEmail(u.email),
-              fields: grants[u.email.trim().toLowerCase()] ?? [],
-              // Access that comes from built-in rules, not from this page.
-              implicit: isReviewerEmail(u.email)
-                ? ["review_status", "issues_found", "assignee_email"]
-                : [],
-            })),
+            users: users.map((u) => {
+              const granted = grants[u.email.trim().toLowerCase()];
+              return {
+                id: u.id,
+                email: u.email,
+                isAdmin: isAdminEmail(u.email),
+                fields: granted ?? [],
+                /** True once an admin has saved an explicit grant. */
+                hasExplicit: granted !== undefined,
+                // Access that comes from built-in rules (used until an
+                // explicit grant is saved, then the grant overrides it).
+                implicit: isReviewerEmail(u.email)
+                  ? ["review_status", "issues_found", "assignee_email"]
+                  : [],
+              };
+            }),
           });
         }
         // Lightweight users list for assign dropdowns (no courses/exports scan).
