@@ -62,3 +62,13 @@ export function apiListReviews(courseId: string): Promise<PartReview[]> {
 export function apiSaveReview(patch: PartReviewPatch): Promise<PartReview> {
   return reviewsFetch({ action: "save", ...patch });
 }
+
+export type ReviewGrants = {
+  email: string;
+  isAdmin: boolean;
+  fields: string[];
+};
+
+export function apiReviewGrants(): Promise<ReviewGrants> {
+  return reviewsFetch({ action: "grants" });
+}
