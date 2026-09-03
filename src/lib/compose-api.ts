@@ -108,6 +108,37 @@ export async function apiPersistAsset(input: {
   return data.url ?? input.url;
 }
 
+/**
+ * Persist an inline data: URL (crops, annotated drawings) by uploading the
+ * decoded bytes directly to object storage. Sending base64 through the app
+ * server is ~33% larger and buffers the whole image in the worker, which is
+ * slow and can fail on big PNGs.
+ */
+export async function apiPersistAssetDataUrl(input: {
+  url: string;
+  projectId: string;
+  ext?: string;
+}): Promise<string> {
+  if (!input.url.startsWith("data:")) return input.url;
+  const match = input.url.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return apiPersistAsset({ ...input, ext: input.ext ?? "png" });
+
+  const contentType = match[1] ?? "image/png";
+  const ext = input.ext ?? (contentType.split("/")[1] || "png");
+  const binary = atob(match[2] ?? "");
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  const file = new File([bytes], `asset.${ext}`, { type: contentType });
+
+  try {
+    return await apiPersistAssetFile({ file, projectId: input.projectId, ext });
+  } catch {
+    // Fall back to the JSON path (small images, local dev without storage).
+    return apiPersistAsset({ url: input.url, projectId: input.projectId, ext });
+  }
+}
+
+
 /** Persist a File (e.g. screen recording) without building a huge data URL. */
 /** Demux audio from a persisted video asset into a playable /api/assets mp3. */
 export async function apiExtractVideoAudio(input: {
