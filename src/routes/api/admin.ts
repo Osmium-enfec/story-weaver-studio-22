@@ -41,6 +41,7 @@ export const Route = createFileRoute("/api/admin")({
         // Review-access matrix for the admin "Review access" tab.
         if (url.searchParams.get("reviewAccess") === "1") {
           const { listReviewGrants } = await import("@/lib/review-access-db");
+          const { isReviewerEmail } = await import("@/lib/review-permissions");
           const [users, grants] = await Promise.all([
             localListUsers(),
             listReviewGrants(),
@@ -51,6 +52,10 @@ export const Route = createFileRoute("/api/admin")({
               email: u.email,
               isAdmin: isAdminEmail(u.email),
               fields: grants[u.email.trim().toLowerCase()] ?? [],
+              // Access that comes from built-in rules, not from this page.
+              implicit: isReviewerEmail(u.email)
+                ? ["review_status", "issues_found", "assignee_email"]
+                : [],
             })),
           });
         }
