@@ -182,9 +182,19 @@ export const Route = createFileRoute("/api/projects")({
             const assignedEmail = String(
               target?.assignedUserEmail ?? target?.assigned_user_email ?? "",
             ).trim().toLowerCase();
+            // Episode-level assignment (legacy rows) and ownership also count.
+            const episodeAssignedId =
+              local.assigned_user_id ?? local.assignedUserId ?? null;
+            const episodeAssignedEmail = String(
+              local.assigned_user_email ?? local.assignedUserEmail ?? "",
+            ).trim().toLowerCase();
+            const me = user.email.trim().toLowerCase();
             const isMine =
+              local.user_id === user.id ||
               (assignedId != null && assignedId === user.id) ||
-              (assignedEmail !== "" && assignedEmail === user.email.toLowerCase());
+              (assignedEmail !== "" && assignedEmail === me) ||
+              (episodeAssignedId != null && episodeAssignedId === user.id) ||
+              (episodeAssignedEmail !== "" && episodeAssignedEmail === me);
             if (!isMine) {
               return jsonError(
                 "You can only import into a part assigned to you.",
@@ -192,6 +202,7 @@ export const Route = createFileRoute("/api/projects")({
               );
             }
           }
+
           try {
             const { localImportPart } = await import("@/lib/local-projects-db");
             const result = await localImportPart(
