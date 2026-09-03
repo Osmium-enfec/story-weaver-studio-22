@@ -79,6 +79,7 @@ export function ReviewAccessSheet() {
                   {f.label}
                 </th>
               ))}
+              <th className="px-3 py-2 font-medium">Current access</th>
             </tr>
           </thead>
           <tbody>
