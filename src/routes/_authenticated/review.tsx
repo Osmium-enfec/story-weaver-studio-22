@@ -8,7 +8,12 @@ import {
   type ProjectListItem,
   type ProjectPartSummary,
 } from "@/lib/projects-api";
-import { apiListReviews, apiSaveReview, type PartReview } from "@/lib/reviews-api";
+import {
+  apiListReviews,
+  apiSaveReview,
+  apiReviewGrants,
+  type PartReview,
+} from "@/lib/reviews-api";
 import { getStoredSession } from "@/lib/auth-client";
 import { isAdminEmail } from "@/lib/admin";
 import {
@@ -111,11 +116,18 @@ function ReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [grantedFields, setGrantedFields] = useState<ReviewField[]>([]);
   const tableRef = useRef<HTMLDivElement | null>(null);
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
   const myEmail = session?.user.email ?? "";
   const isAdmin = session?.user.isAdmin === true || isAdminEmail(myEmail);
+
+  useEffect(() => {
+    apiReviewGrants()
+      .then((g) => setGrantedFields(g.fields as ReviewField[]))
+      .catch(() => setGrantedFields([]));
+  }, []);
 
   useEffect(() => {
     apiListCourses()
@@ -196,7 +208,7 @@ function ReviewPage() {
   function can(row: Row, field: ReviewField): boolean {
     return canEditReviewField(
       field,
-      { email: myEmail, isAdmin },
+      { email: myEmail, isAdmin, grantedFields },
       {
         composerEmail: row.part.assigned_user_email,
         reviewAssigneeEmail: reviewFor(row).assignee_email || null,
