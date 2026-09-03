@@ -45,20 +45,24 @@ export function ReviewAccessSheet() {
       ? current.filter((f) => f !== field)
       : [...current, field];
     setUsers((prev) =>
-      (prev ?? []).map((u) => (u.id === user.id ? { ...u, fields: next } : u)),
+      (prev ?? []).map((u) =>
+        u.id === user.id ? { ...u, fields: next, hasExplicit: true } : u,
+      ),
     );
     setSavingEmail(user.email);
     try {
       const saved = await apiAdminSetReviewAccess(user.email, next);
       setUsers((prev) =>
         (prev ?? []).map((u) =>
-          u.id === user.id ? { ...u, fields: saved } : u,
+          u.id === user.id ? { ...u, fields: saved, hasExplicit: true } : u,
         ),
       );
     } catch (e: unknown) {
       setUsers((prev) =>
         (prev ?? []).map((u) =>
-          u.id === user.id ? { ...u, fields: user.fields } : u,
+          u.id === user.id
+            ? { ...u, fields: user.fields, hasExplicit: user.hasExplicit }
+            : u,
         ),
       );
       setError(e instanceof Error ? e.message : "Could not save access");
