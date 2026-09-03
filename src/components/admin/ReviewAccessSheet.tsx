@@ -79,6 +79,7 @@ export function ReviewAccessSheet() {
                   {f.label}
                 </th>
               ))}
+              <th className="px-3 py-2 font-medium">Current access</th>
             </tr>
           </thead>
           <tbody>
@@ -98,23 +99,50 @@ export function ReviewAccessSheet() {
                     />
                   )}
                 </td>
-                {FIELDS.map((f) => (
-                  <td key={f.id} className="px-3 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-[hsl(var(--primary))]"
-                      checked={u.isAdmin || u.fields.includes(f.id)}
-                      disabled={u.isAdmin}
-                      onChange={() => void toggle(u, f.id)}
-                    />
-                  </td>
-                ))}
+                {FIELDS.map((f) => {
+                  const implicit = (u.implicit ?? []).includes(f.id);
+                  return (
+                    <td key={f.id} className="px-3 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        className={
+                          implicit
+                            ? "h-4 w-4 accent-muted-foreground"
+                            : "h-4 w-4 accent-[hsl(var(--primary))]"
+                        }
+                        checked={u.isAdmin || implicit || u.fields.includes(f.id)}
+                        disabled={u.isAdmin || implicit}
+                        title={
+                          implicit
+                            ? "Built-in reviewer access — always on"
+                            : undefined
+                        }
+                        onChange={() => void toggle(u, f.id)}
+                      />
+                    </td>
+                  );
+                })}
+                <td className="px-3 py-2 text-xs text-muted-foreground">
+                  {(() => {
+                    const all = u.isAdmin
+                      ? FIELDS.map((f) => f.id)
+                      : [...(u.implicit ?? []), ...u.fields];
+                    const labels = FIELDS.filter((f) =>
+                      new Set(all).has(f.id),
+                    ).map((f) => f.label);
+                    return labels.length > 0 ? (
+                      labels.join(", ")
+                    ) : (
+                      <span className="italic">None</span>
+                    );
+                  })()}
+                </td>
               </tr>
             ))}
             {users && users.length === 0 && (
               <tr>
                 <td
-                  colSpan={FIELDS.length + 1}
+                  colSpan={FIELDS.length + 2}
                   className="px-3 py-6 text-sm text-muted-foreground"
                 >
                   No users yet.
