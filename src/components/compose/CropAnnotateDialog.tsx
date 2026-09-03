@@ -44,7 +44,7 @@ interface CropAnnotateDialogProps {
   crop: ComposeCrop | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (cropId: string, imageUrl: string) => void;
+  onSave: (cropId: string, imageUrl: string) => void | Promise<void>;
 }
 
 function normRect(a: { x: number; y: number }, b: { x: number; y: number }) {
@@ -74,6 +74,8 @@ export function CropAnnotateDialog({
   const [textSize, setTextSize] = useState<number>(TEXT_SIZES[2]!);
   const [snapshots, setSnapshots] = useState<ImageData[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selPreview, setSelPreview] = useState<{
     x: number;
     y: number;
@@ -293,14 +295,33 @@ export function CropAnnotateDialog({
     setDirty(false);
   }
 
-  function save() {
-    if (!crop) return;
+  async function save() {
+    if (!crop || saving) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    onSave(crop.id, dataUrl);
-    onOpenChange(false);
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/png"),
+      );
+      const dataUrl = blob
+        ? await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error("Read failed"));
+            reader.readAsDataURL(blob);
+          })
+        : canvas.toDataURL("image/png");
+      await onSave(crop.id, dataUrl);
+      onOpenChange(false);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
   }
+
 
   const canvas = canvasRef.current;
   const scaleX =
@@ -476,21 +497,26 @@ export function CropAnnotateDialog({
           </div>
         </div>
 
+        {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+
         <DialogFooter className="gap-2 sm:gap-0">
           <button
             type="button"
+            disabled={saving}
             onClick={() => onOpenChange(false)}
-            className="rounded-md border px-3 py-2 text-sm hover:bg-accent"
+            className="rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={save}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+            disabled={saving}
+            onClick={() => void save()}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
           >
-            <Save size={14} /> Save drawing
+            <Save size={14} /> {saving ? "Saving…" : "Save drawing"}
           </button>
+
         </DialogFooter>
       </DialogContent>
     </Dialog>

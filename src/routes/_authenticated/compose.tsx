@@ -35,6 +35,7 @@ import {
   apiExtractVideoAudio,
   apiRecording2VoiceReplace,
   apiPersistAsset,
+  apiPersistAssetDataUrl,
 } from "@/lib/compose-api";
 import { apiGetProject, apiSaveProject } from "@/lib/projects-api";
 import { getStoredSession } from "@/lib/auth-client";
@@ -1909,22 +1910,22 @@ function ComposePage() {
    */
   async function persistCropImageUrl(url: string): Promise<string> {
     if (!projectId || !url.startsWith("data:")) return url;
-    try {
-      return await apiPersistAsset({ url, projectId, ext: "png" });
-    } catch {
-      return url;
-    }
+    return await apiPersistAssetDataUrl({ url, projectId, ext: "png" });
   }
 
   function addCrop(crop: ComposeCrop) {
     setDraft((d) => ({ ...d, crops: [...d.crops, crop] }));
-    void persistCropImageUrl(crop.imageUrl).then((imageUrl) => {
-      if (imageUrl === crop.imageUrl) return;
-      setDraft((d) => ({
-        ...d,
-        crops: d.crops.map((c) => (c.id === crop.id ? { ...c, imageUrl } : c)),
-      }));
-    });
+    void persistCropImageUrl(crop.imageUrl)
+      .then((imageUrl) => {
+        if (imageUrl === crop.imageUrl) return;
+        setDraft((d) => ({
+          ...d,
+          crops: d.crops.map((c) => (c.id === crop.id ? { ...c, imageUrl } : c)),
+        }));
+      })
+      .catch(() => {
+        toast.error("Could not save this layer image — try again");
+      });
   }
 
   function removeCrop(id: string) {
@@ -1937,19 +1938,16 @@ function ComposePage() {
     if (annotateCropId === id) setAnnotateCropId(null);
   }
 
-  function updateCropImage(cropId: string, imageUrl: string) {
+  async function updateCropImage(cropId: string, imageUrl: string) {
+    // Upload first: a data: URL is dropped from the autosaved draft, so
+    // applying it before it is persisted is what made edits vanish.
+    const next = await persistCropImageUrl(imageUrl);
     setDraft((d) => ({
       ...d,
-      crops: d.crops.map((c) => (c.id === cropId ? { ...c, imageUrl } : c)),
+      crops: d.crops.map((c) => (c.id === cropId ? { ...c, imageUrl: next } : c)),
     }));
-    void persistCropImageUrl(imageUrl).then((next) => {
-      if (next === imageUrl) return;
-      setDraft((d) => ({
-        ...d,
-        crops: d.crops.map((c) => (c.id === cropId ? { ...c, imageUrl: next } : c)),
-      }));
-    });
   }
+
 
 
   function addPlacement(cropId: string, startMs: number, sfxUrl?: string | null) {
