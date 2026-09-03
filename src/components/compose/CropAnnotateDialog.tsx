@@ -44,7 +44,7 @@ interface CropAnnotateDialogProps {
   crop: ComposeCrop | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (cropId: string, imageUrl: string) => void;
+  onSave: (cropId: string, imageUrl: string) => void | Promise<void>;
 }
 
 function normRect(a: { x: number; y: number }, b: { x: number; y: number }) {
