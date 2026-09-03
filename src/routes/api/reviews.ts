@@ -19,6 +19,7 @@ const TEXT = z.string().max(20000);
 
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("list"), courseId: z.string().min(1) }),
+  z.object({ action: z.literal("grants") }),
   z.object({
     action: z.literal("save"),
     projectId: z.string().min(1),
@@ -66,12 +67,25 @@ export const Route = createFileRoute("/api/reviews")({
             return jsonResponse(await listCourseReviews(data.courseId));
           }
 
+          const { getReviewGrants } = await import("@/lib/review-access-db");
+          if (data.action === "grants") {
+            return jsonResponse({
+              email: user.email,
+              isAdmin: isAdminUser(user),
+              fields: await getReviewGrants(user.email),
+            });
+          }
+
           const touched = REVIEW_FIELDS.filter(
             (f) => (data as Record<string, unknown>)[f] !== undefined,
           ) as ReviewField[];
           if (touched.length === 0) return jsonError("Nothing to update", 400);
 
-          const actor = { email: user.email, isAdmin: isAdminUser(user) };
+          const actor = {
+            email: user.email,
+            isAdmin: isAdminUser(user),
+            grantedFields: await getReviewGrants(user.email),
+          };
           // Admins can edit everything — skip the expensive lookups
           // (the parts JSON blob is large and can blow the request budget).
           const composerEmail = actor.isAdmin

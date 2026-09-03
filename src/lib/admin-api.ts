@@ -103,3 +103,31 @@ export async function apiAdminDeleteUser(userId: string): Promise<void> {
   const data = (await res.json()) as { error?: string };
   if (!res.ok) throw new Error(data.error ?? "Could not delete user");
 }
+
+export type ReviewAccessUser = {
+  id: string;
+  email: string;
+  isAdmin: boolean;
+  fields: string[];
+};
+
+export async function apiAdminReviewAccess(): Promise<ReviewAccessUser[]> {
+  const res = await adminFetch("/api/admin?reviewAccess=1");
+  const data = (await res.json()) as { users?: ReviewAccessUser[]; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Admin request failed");
+  return data.users ?? [];
+}
+
+export async function apiAdminSetReviewAccess(
+  email: string,
+  fields: string[],
+): Promise<string[]> {
+  const res = await adminFetch("/api/admin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "setReviewAccess", email, fields }),
+  });
+  const data = (await res.json()) as { fields?: string[]; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Could not save review access");
+  return data.fields ?? [];
+}

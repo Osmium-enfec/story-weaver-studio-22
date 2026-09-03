@@ -36,6 +36,8 @@ export function isReviewerEmail(email: string | null | undefined): boolean {
 export type ReviewActor = {
   email: string;
   isAdmin: boolean;
+  /** Extra columns granted to this user by an admin (review access page). */
+  grantedFields?: ReviewField[];
 };
 
 export type ReviewRowContext = {
@@ -51,6 +53,7 @@ export function canEditReviewField(
   row: ReviewRowContext,
 ): boolean {
   if (actor.isAdmin) return true;
+  if (actor.grantedFields?.includes(field)) return true;
   const me = norm(actor.email);
   const composer = norm(row.composerEmail);
   const reviewAssignee = norm(row.reviewAssigneeEmail);
@@ -69,3 +72,4 @@ export function canEditReviewField(
       return false;
   }
 }
+
