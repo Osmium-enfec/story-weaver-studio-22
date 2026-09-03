@@ -293,14 +293,33 @@ export function CropAnnotateDialog({
     setDirty(false);
   }
 
-  function save() {
-    if (!crop) return;
+  async function save() {
+    if (!crop || saving) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    onSave(crop.id, dataUrl);
-    onOpenChange(false);
+    setSaveError(null);
+    setSaving(true);
+    try {
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/png"),
+      );
+      const dataUrl = blob
+        ? await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error("Read failed"));
+            reader.readAsDataURL(blob);
+          })
+        : canvas.toDataURL("image/png");
+      await onSave(crop.id, dataUrl);
+      onOpenChange(false);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
   }
+
 
   const canvas = canvasRef.current;
   const scaleX =
