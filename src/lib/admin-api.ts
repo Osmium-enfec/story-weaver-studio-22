@@ -109,6 +109,8 @@ export type ReviewAccessUser = {
   email: string;
   isAdmin: boolean;
   fields: string[];
+  /** Access granted by built-in rules (reviewer role), not editable here. */
+  implicit?: string[];
 };
 
 export async function apiAdminReviewAccess(): Promise<ReviewAccessUser[]> {
