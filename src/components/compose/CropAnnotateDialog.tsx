@@ -74,6 +74,8 @@ export function CropAnnotateDialog({
   const [textSize, setTextSize] = useState<number>(TEXT_SIZES[2]!);
   const [snapshots, setSnapshots] = useState<ImageData[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [selPreview, setSelPreview] = useState<{
     x: number;
     y: number;
