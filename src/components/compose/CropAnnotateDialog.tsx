@@ -497,21 +497,26 @@ export function CropAnnotateDialog({
           </div>
         </div>
 
+        {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+
         <DialogFooter className="gap-2 sm:gap-0">
           <button
             type="button"
+            disabled={saving}
             onClick={() => onOpenChange(false)}
-            className="rounded-md border px-3 py-2 text-sm hover:bg-accent"
+            className="rounded-md border px-3 py-2 text-sm hover:bg-accent disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={save}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
+            disabled={saving}
+            onClick={() => void save()}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
           >
-            <Save size={14} /> Save drawing
+            <Save size={14} /> {saving ? "Saving…" : "Save drawing"}
           </button>
+
         </DialogFooter>
       </DialogContent>
     </Dialog>
