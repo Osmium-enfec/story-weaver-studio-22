@@ -66,7 +66,8 @@ export function apiSaveReview(patch: PartReviewPatch): Promise<PartReview> {
 export type ReviewGrants = {
   email: string;
   isAdmin: boolean;
-  fields: string[];
+  /** null = no explicit admin grant; built-in rules apply. */
+  fields: string[] | null;
 };
 
 export function apiReviewGrants(): Promise<ReviewGrants> {

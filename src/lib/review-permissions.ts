@@ -36,8 +36,13 @@ export function isReviewerEmail(email: string | null | undefined): boolean {
 export type ReviewActor = {
   email: string;
   isAdmin: boolean;
-  /** Extra columns granted to this user by an admin (review access page). */
-  grantedFields?: ReviewField[];
+  /**
+   * Columns granted by an admin (review access page). When a grant record
+   * exists for this user it fully overrides the built-in reviewer rules —
+   * pass the array (possibly empty). Pass null/undefined when no record
+   * exists to fall back to built-in behaviour.
+   */
+  grantedFields?: ReviewField[] | null;
 };
 
 export type ReviewRowContext = {
@@ -53,7 +58,8 @@ export function canEditReviewField(
   row: ReviewRowContext,
 ): boolean {
   if (actor.isAdmin) return true;
-  if (actor.grantedFields?.includes(field)) return true;
+  // An explicit admin-managed grant replaces the built-in rules entirely.
+  if (actor.grantedFields) return actor.grantedFields.includes(field);
   const me = norm(actor.email);
   const composer = norm(row.composerEmail);
   const reviewAssignee = norm(row.reviewAssigneeEmail);

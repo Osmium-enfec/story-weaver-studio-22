@@ -109,7 +109,9 @@ export type ReviewAccessUser = {
   email: string;
   isAdmin: boolean;
   fields: string[];
-  /** Access granted by built-in rules (reviewer role), not editable here. */
+  /** True once an admin has saved an explicit grant (overrides implicit). */
+  hasExplicit?: boolean;
+  /** Access granted by built-in rules (reviewer role). */
   implicit?: string[];
 };
 
