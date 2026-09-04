@@ -522,18 +522,18 @@ export function ComposeStepsAccordion({
       previewUrl: null,
     }));
     if (kind === "codeTyping") {
-      const cps = DEFAULT_CODE_TYPING_CPS;
+      const cps = TEMPLATE_CODE_TYPING_CPS;
       const beats: CodeTypingBeat[] = [
         emptyCodeTypingBeat({
           code: DEFAULT_CODE_TYPING_SNIPPET,
           output: DEFAULT_CODE_TYPING_OUTPUT,
-          runDelayMs: DEFAULT_CODE_RUN_DELAY_MS,
+          runDelayMs: TEMPLATE_CODE_RUN_DELAY_MS,
           outputHoldMs: DEFAULT_CODE_OUTPUT_HOLD_MS,
         }),
         emptyCodeTypingBeat({
           code: DEFAULT_CODE_TYPING_SNIPPET_STEP2,
           output: DEFAULT_CODE_TYPING_OUTPUT_STEP2,
-          runDelayMs: DEFAULT_CODE_RUN_DELAY_MS,
+          runDelayMs: TEMPLATE_CODE_RUN_DELAY_MS,
           outputHoldMs: 2000,
         }),
       ];
@@ -542,7 +542,7 @@ export function ComposeStepsAccordion({
         code: beatsToFullCode(beats),
         codeLanguage: "py",
         codeVariant: "typing",
-        title: "hello.py",
+        title: TEMPLATE_CODE_TITLE,
         audioUrl: null,
         durationMs: suggestedBeatsDurationMs(beats, cps),
         ready: false,
@@ -1011,7 +1011,7 @@ export function ComposeStepsAccordion({
                           emptyCodeTypingBeat({
                             code: "\n",
                             output: "",
-                            runDelayMs: DEFAULT_CODE_RUN_DELAY_MS,
+                            runDelayMs: TEMPLATE_CODE_RUN_DELAY_MS,
                             outputHoldMs: DEFAULT_CODE_OUTPUT_HOLD_MS,
                           }),
                         ];
