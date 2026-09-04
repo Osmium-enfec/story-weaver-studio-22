@@ -60,8 +60,11 @@ export function canEditReviewField(
   row: ReviewRowContext,
 ): boolean {
   if (actor.isAdmin) return true;
-  // An explicit admin-managed grant replaces the built-in rules entirely.
-  if (actor.grantedFields) return actor.grantedFields.includes(field);
+  const granted = actor.grantedFields ?? null;
+  // An explicit admin-managed grant is additive: it always allows the granted
+  // columns, and replaces only the reviewer-email defaults. Row-scoped rights
+  // (composer / review assignee) are never taken away.
+  if (granted && granted.includes(field)) return true;
   const me = norm(actor.email);
   const composer = norm(row.composerEmail);
   const reviewAssignee = norm(row.reviewAssigneeEmail);
@@ -74,11 +77,12 @@ export function canEditReviewField(
     case "issues_found":
     case "assignee_email":
     case "review_doc":
-      return isReviewerEmail(me);
+      return granted ? false : isReviewerEmail(me);
     case "correction_status":
       return me.length > 0 && (me === composer || me === reviewAssignee);
     case "rendered_uploaded":
       return false;
   }
+
 }
 
