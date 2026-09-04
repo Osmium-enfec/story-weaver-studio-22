@@ -6,9 +6,11 @@ import { ComposeVideoUpload } from "@/components/compose/ComposeVideoUpload";
 import { RecordingTimeline } from "@/components/compose/RecordingTimeline";
 
 /** Templates → Code typing defaults (user-editable in the UI). */
-const TEMPLATE_CODE_TITLE = "hello.py";
-const TEMPLATE_CODE_TYPING_CPS = 15;
-const TEMPLATE_CODE_RUN_DELAY_MS = 1000;
+import {
+  TEMPLATE_CODE_RUN_DELAY_MS,
+  TEMPLATE_CODE_TITLE,
+  TEMPLATE_CODE_TYPING_CPS,
+} from "@/lib/compose-scene";
 
 /**
  * Numeric input that keeps what you type while typing and only clamps
