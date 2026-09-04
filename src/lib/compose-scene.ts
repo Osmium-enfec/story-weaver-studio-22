@@ -1213,14 +1213,22 @@ export function sceneSourceMode(scene: Scene): ComposeSourceMode {
 export function isTemplateCodeTypingScene(scene: Scene): boolean {
   if (scene.kind !== "code") return false;
   if (scene.templateKind === "codeTyping") return true;
-  /** Backward compat: silent multi-beat / output code typing from templates. */
-  return (
-    scene.silentNarration === true &&
-    (scene.codeVariant ?? "typing") === "typing" &&
-    (!!(scene.codeTypingBeats && scene.codeTypingBeats.length > 0) ||
-      !!(scene.codeOutput && scene.codeOutput.trim()))
-  );
+  if ((scene.codeVariant ?? "typing") !== "typing") return false;
+  const hasBeats = !!(scene.codeTypingBeats && scene.codeTypingBeats.length > 0);
+  const hasOutput = !!(scene.codeOutput && scene.codeOutput.trim());
+  if (!hasBeats && !hasOutput) return false;
+  /** Backward compat: silent code typing from templates. */
+  if (scene.silentNarration === true) return true;
+  /**
+   * Older template scenes were saved without the silentNarration flag.
+   * Code-tab scenes always carry narration text / script; template code
+   * typing never does, so treat narration-less beat scenes as templates.
+   */
+  const narration = (scene.narrationText ?? "").trim();
+  const script = ((scene as { script?: string }).script ?? "").trim();
+  return narration.length === 0 && script.length === 0;
 }
+
 
 export function sceneToComposeDraft(scene: Scene): ComposeDraft | null {
   if (scene.kind !== "image") return null;
