@@ -100,6 +100,8 @@ CREATE TABLE IF NOT EXISTS part_reviews (
   issues_found TEXT NOT NULL DEFAULT '',
   correction_status TEXT NOT NULL DEFAULT '',
   assignee_email TEXT NOT NULL DEFAULT '',
+  review_doc_url TEXT NOT NULL DEFAULT '',
+  review_doc_name TEXT NOT NULL DEFAULT '',
   rendered_uploaded TEXT NOT NULL DEFAULT '',
   updated_by_email TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -109,3 +111,6 @@ CREATE TABLE IF NOT EXISTS part_reviews (
 CREATE INDEX IF NOT EXISTS part_reviews_course_idx
   ON part_reviews (course_id);
 
+
+ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS review_doc_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS review_doc_name TEXT NOT NULL DEFAULT '';

@@ -13,6 +13,7 @@ export type ReviewField =
   | "issues_found"
   | "assignee_email"
   | "correction_status"
+  | "review_doc"
   | "rendered_uploaded";
 
 export const REVIEW_FIELDS: ReviewField[] = [
@@ -22,6 +23,7 @@ export const REVIEW_FIELDS: ReviewField[] = [
   "issues_found",
   "assignee_email",
   "correction_status",
+  "review_doc",
   "rendered_uploaded",
 ];
 
@@ -71,6 +73,7 @@ export function canEditReviewField(
     case "review_status":
     case "issues_found":
     case "assignee_email":
+    case "review_doc":
       return isReviewerEmail(me);
     case "correction_status":
       return me.length > 0 && (me === composer || me === reviewAssignee);
