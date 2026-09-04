@@ -315,7 +315,10 @@ export function drawCodeEditor(
   const variant = scene.codeVariant ?? "typing";
   const language = scene.codeLanguage ?? "ts";
   const title = scene.subtitle ?? `example.${language}`;
-  const cps = scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS;
+  const cps =
+    scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28
+      ? DEFAULT_CODE_TYPING_CPS
+      : (scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS);
   const beats = resolveCodeTypingBeats({
     beats: scene.codeTypingBeats,
     code,
@@ -401,7 +404,7 @@ export function drawCodeEditor(
     ctx.restore();
   } else {
     const vis = visibleCodeForVariant(code, variant, progress, scene.codeTo, {
-      cps: scene.codeTypingCps,
+      cps,
       durationMs: scene.durationMs,
     });
     if (variant === "scroll") {
@@ -415,7 +418,7 @@ export function drawCodeEditor(
       ctx.restore();
     } else if (variant === "typing") {
       const shown = typingVisibleChars(code, progress, {
-        cps: scene.codeTypingCps,
+        cps,
         durationMs: scene.durationMs,
       });
       const visible = code.slice(0, shown);

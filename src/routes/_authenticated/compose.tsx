@@ -658,6 +658,12 @@ function ComposePage() {
       (previewScene.narrationText ?? "").slice(0, 120),
       String(previewScene.elements?.length ?? 0),
       String(previewScene.durationMs ?? 0),
+      String(previewScene.codeTypingCps ?? ""),
+      String(previewScene.codeFontSize ?? ""),
+      String(previewScene.codeRunDelayMs ?? ""),
+      String(previewScene.codeOutputHoldMs ?? ""),
+      previewScene.subtitle ?? "",
+      JSON.stringify(previewScene.codeTypingBeats ?? []),
     ].join("|");
   }, [composeSceneSaveReady, previewScene, editingSceneId, sourceMode]);
 

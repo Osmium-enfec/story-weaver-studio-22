@@ -8,6 +8,7 @@ import {
   DEFAULT_CODE_OUTPUT_HOLD_MS,
   DEFAULT_CODE_RUN_DELAY_MS,
   DEFAULT_CODE_TYPING_CPS,
+  LEGACY_CODE_TYPING_CPS,
   resolveCodeTypingBeats,
 } from "@/lib/code-scene-sfx";
 
@@ -269,6 +270,8 @@ export interface ComposeCodeDraft {
   silentNarration?: boolean;
   /** Typing speed in characters per second (silent / timed typing). */
   typingSpeedCps?: number;
+  /** Distinguishes current user-entered values from legacy 28 cps defaults. */
+  defaultsVersion?: 2;
   /** Code editor font size in px (typing preview + export). */
   codeFontSize?: number;
   /** Console output revealed after Run (user-authored). Legacy single-step mirror. */
@@ -444,7 +447,8 @@ export function emptyComposeCodeDraft(): ComposeCodeDraft {
     durationMs: 0,
     ready: false,
     silentNarration: false,
-    typingSpeedCps: 28,
+    typingSpeedCps: DEFAULT_CODE_TYPING_CPS,
+    defaultsVersion: 2,
     codeFontSize: 14,
     codeOutput: "",
     codeRunDelayMs: DEFAULT_CODE_RUN_DELAY_MS,
@@ -668,6 +672,7 @@ export function composeCodeDraftToScene(
     codeLanguage: draft.codeLanguage,
     codeVariant: draft.codeVariant,
     codeTypingCps: draft.typingSpeedCps,
+    codeTypingDefaultsVersion: 2,
     codeFontSize: draft.codeFontSize,
     codeOutput: first?.output?.trim() ? first.output : draft.codeOutput?.trim() || undefined,
     codeRunDelayMs: first?.runDelayMs ?? draft.codeRunDelayMs,
@@ -1303,11 +1308,13 @@ export function sceneToCodeDraft(scene: Scene): ComposeCodeDraft | null {
       : scene.subtitle
     : scene.subtitle;
   const cps = scene.codeTypingCps;
+  const usesLegacyTypingDefault =
+    scene.codeTypingDefaultsVersion !== 2 && cps === LEGACY_CODE_TYPING_CPS;
   const typingSpeedCps = isTemplateCodeTyping
-    ? cps == null || cps === DEFAULT_CODE_TYPING_CPS
+    ? cps == null || usesLegacyTypingDefault
       ? TEMPLATE_CODE_TYPING_CPS
       : cps
-    : (cps ?? DEFAULT_CODE_TYPING_CPS);
+    : (cps == null || usesLegacyTypingDefault ? DEFAULT_CODE_TYPING_CPS : cps);
   const legacyRunDelay = scene.codeRunDelayMs;
   const runDelayFallback =
     isTemplateCodeTyping &&
@@ -1325,6 +1332,7 @@ export function sceneToCodeDraft(scene: Scene): ComposeCodeDraft | null {
     ready: !!scene.audioUrl && scene.durationMs > 0,
     silentNarration: silent,
     typingSpeedCps,
+    defaultsVersion: 2,
     codeFontSize: scene.codeFontSize ?? 14,
     codeOutput: normFirst?.output ?? scene.codeOutput ?? "",
     codeRunDelayMs: normFirst?.runDelayMs ?? runDelayFallback,

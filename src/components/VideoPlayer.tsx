@@ -187,6 +187,8 @@ export interface Scene {
   codeVariant?: CodeVariant;
   /** Characters per second for timed code typing (optional). */
   codeTypingCps?: number;
+  /** Version 2 scenes use the 15 cps default and preserve explicit values such as 28. */
+  codeTypingDefaultsVersion?: number;
   /** Monospace code font size in px (optional; default ~14). */
   codeFontSize?: number;
   /** Console output shown after Run (user-authored; not executed). Legacy single-step. */
@@ -684,7 +686,10 @@ function CodeSceneStage({
   const videoBg = background.kind === "video" ? background.url : null;
   const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
   const variant = scene.codeVariant ?? "typing";
-  const cps = scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS;
+  const cps =
+    scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28
+      ? DEFAULT_CODE_TYPING_CPS
+      : (scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS);
   const timeline = useMemo(() => {
     if ((scene.codeVariant ?? "typing") !== "typing") return null;
     const beats = resolveCodeTypingBeats({
@@ -710,7 +715,7 @@ function CodeSceneStage({
     timeline != null ? resolveCodeBeatFrame(elapsedMs, timeline, cps) : null;
   const code = scene.code ?? "";
   const typingOpts = {
-    cps: scene.codeTypingCps,
+    cps,
     durationMs: scene.durationMs,
   };
 
@@ -772,7 +777,7 @@ function CodeSceneStage({
           progress={progress}
           title={scene.subtitle}
           embedded
-          typingSpeedCps={scene.codeTypingCps}
+          typingSpeedCps={cps}
           durationMs={scene.durationMs}
           codeOutput={scene.codeOutput}
           codeRunDelayMs={scene.codeRunDelayMs}
