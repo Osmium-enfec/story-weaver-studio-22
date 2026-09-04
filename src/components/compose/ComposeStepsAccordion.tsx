@@ -941,17 +941,13 @@ export function ComposeStepsAccordion({
                       <div className="flex flex-wrap gap-4">
                         <label className="text-xs font-medium text-muted-foreground">
                           Output shows for (sec)
-                          <input
-                            type="number"
+                          <NumberField
                             min={0.5}
                             max={60}
                             step={0.5}
+                            fallback={2.5}
                             value={beat.outputHoldMs / 1000}
-                            onChange={(e) => {
-                              const v = Number(e.target.value);
-                              const sec = Number.isFinite(v)
-                                ? Math.max(0.5, Math.min(60, v))
-                                : 2.5;
+                            onCommit={(sec) =>
                               onCodeDraft((d) => {
                                 const next = (d.codeTypingBeats ?? []).map((b) =>
                                   b.id === beat.id
@@ -962,26 +958,26 @@ export function ComposeStepsAccordion({
                                   ...d,
                                   codeTypingBeats: next,
                                   codeOutputHoldMs: next[0]?.outputHoldMs,
+                                  durationMs: suggestedBeatsDurationMs(
+                                    next,
+                                    d.typingSpeedCps ?? TEMPLATE_CODE_TYPING_CPS,
+                                  ),
                                   ready: false,
                                 };
-                              });
-                            }}
+                              })
+                            }
                             className="mt-1 block w-24 rounded-md border bg-background px-2 py-1 text-sm tabular-nums"
                           />
                         </label>
                         <label className="text-xs font-medium text-muted-foreground">
                           Run delay (sec)
-                          <input
-                            type="number"
+                          <NumberField
                             min={0}
                             max={10}
                             step={0.1}
+                            fallback={TEMPLATE_CODE_RUN_DELAY_MS / 1000}
                             value={beat.runDelayMs / 1000}
-                            onChange={(e) => {
-                              const v = Number(e.target.value);
-                              const sec = Number.isFinite(v)
-                                ? Math.max(0, Math.min(10, v))
-                                : 0.7;
+                            onCommit={(sec) =>
                               onCodeDraft((d) => {
                                 const next = (d.codeTypingBeats ?? []).map((b) =>
                                   b.id === beat.id
@@ -992,10 +988,14 @@ export function ComposeStepsAccordion({
                                   ...d,
                                   codeTypingBeats: next,
                                   codeRunDelayMs: next[0]?.runDelayMs,
+                                  durationMs: suggestedBeatsDurationMs(
+                                    next,
+                                    d.typingSpeedCps ?? TEMPLATE_CODE_TYPING_CPS,
+                                  ),
                                   ready: false,
                                 };
-                              });
-                            }}
+                              })
+                            }
                             className="mt-1 block w-24 rounded-md border bg-background px-2 py-1 text-sm tabular-nums"
                           />
                         </label>
