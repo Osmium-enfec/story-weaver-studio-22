@@ -658,6 +658,12 @@ function ComposePage() {
       (previewScene.narrationText ?? "").slice(0, 120),
       String(previewScene.elements?.length ?? 0),
       String(previewScene.durationMs ?? 0),
+      String(previewScene.codeTypingCps ?? ""),
+      String(previewScene.codeFontSize ?? ""),
+      String(previewScene.codeRunDelayMs ?? ""),
+      String(previewScene.codeOutputHoldMs ?? ""),
+      previewScene.subtitle ?? "",
+      JSON.stringify(previewScene.codeTypingBeats ?? []),
     ].join("|");
   }, [composeSceneSaveReady, previewScene, editingSceneId, sourceMode]);
 
@@ -2498,7 +2504,11 @@ function ComposePage() {
 
     if (mode === "template") {
       if (scene.templateSubtype === "codeTyping") {
-        const cps = DEFAULT_CODE_TYPING_CPS;
+        const cps =
+          scene.codeTypingCps == null ||
+          (scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28)
+            ? DEFAULT_CODE_TYPING_CPS
+            : scene.codeTypingCps;
         const rawBeats =
           scene.codeTypingBeats?.length &&
           scene.codeTypingBeats.some((b) => b.code.trim() || b.output.trim())
@@ -2606,7 +2616,11 @@ function ComposePage() {
     }
 
     if (mode === "code") {
-      const cps = DEFAULT_CODE_TYPING_CPS;
+      const cps =
+        scene.codeTypingCps == null ||
+        (scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28)
+          ? DEFAULT_CODE_TYPING_CPS
+          : scene.codeTypingCps;
       const rawBeats =
         scene.codeTypingBeats?.length &&
         scene.codeTypingBeats.some((b) => b.code.trim() || b.output.trim())

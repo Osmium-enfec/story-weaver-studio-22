@@ -76,10 +76,11 @@ function scrubEphemeralBlobs(d: ComposeWorkingDraft): ComposeWorkingDraft {
   // use the current default.
   if (
     codeDraft.typingSpeedCps == null ||
-    codeDraft.typingSpeedCps === LEGACY_CODE_TYPING_CPS
+    (codeDraft.defaultsVersion !== 2 && codeDraft.typingSpeedCps === LEGACY_CODE_TYPING_CPS)
   ) {
     codeDraft.typingSpeedCps = DEFAULT_CODE_TYPING_CPS;
   }
+  codeDraft.defaultsVersion = 2;
 
   const questionDraft = { ...d.questionDraft };
   questionDraft.audioUrl = scrub(questionDraft.audioUrl);
