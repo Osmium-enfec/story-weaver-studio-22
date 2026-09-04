@@ -336,12 +336,13 @@ function ReviewPage() {
     kind,
   }: {
     row: Row;
-    field: ReviewField;
+    field: Exclude<ReviewField, "review_doc">;
     options: string[];
     kind: "progress" | "review" | "correction" | "rendered";
   }) {
     const r = reviewFor(row);
     const value = (r[field] as string) ?? "";
+
     const editable = can(row, field);
     return (
       <select
