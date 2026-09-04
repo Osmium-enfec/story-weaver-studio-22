@@ -31,6 +31,8 @@ const Body = z.discriminatedUnion("action", [
     issues_found: TEXT.optional(),
     correction_status: STATUS.optional(),
     assignee_email: z.string().max(200).optional(),
+    review_doc_url: z.string().max(2000).optional(),
+    review_doc_name: z.string().max(300).optional(),
     rendered_uploaded: STATUS.optional(),
   }),
 ]);
@@ -76,8 +78,12 @@ export const Route = createFileRoute("/api/reviews")({
             });
           }
 
-          const touched = REVIEW_FIELDS.filter(
-            (f) => (data as Record<string, unknown>)[f] !== undefined,
+          const rec = data as Record<string, unknown>;
+          const touched = REVIEW_FIELDS.filter((f) =>
+            f === "review_doc"
+              ? rec.review_doc_url !== undefined ||
+                rec.review_doc_name !== undefined
+              : rec[f] !== undefined,
           ) as ReviewField[];
           if (touched.length === 0) return jsonError("Nothing to update", 400);
 
@@ -118,6 +124,8 @@ export const Route = createFileRoute("/api/reviews")({
             issues_found: data.issues_found,
             correction_status: data.correction_status,
             assignee_email: data.assignee_email,
+            review_doc_url: data.review_doc_url,
+            review_doc_name: data.review_doc_name,
             rendered_uploaded: data.rendered_uploaded,
             updated_by_email: user.email,
           });
