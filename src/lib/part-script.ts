@@ -117,6 +117,10 @@ export interface PartScriptScene {
   templateText?: string;
   /** Template code typing / optional code. */
   code?: string;
+  /** Typing speed in characters per second. */
+  codeTypingCps?: number;
+  /** Version 2 distinguishes current user values from the former 28 cps default. */
+  codeTypingDefaultsVersion?: number;
   /** Stepwise code-typing beats (template code typing, no narration). */
   codeTypingBeats?: {
     id: string;
@@ -511,6 +515,12 @@ export function normalizePartScriptScene(raw: unknown): PartScriptScene | null {
   if (typeof s.codingPaste === "string") scene.codingPaste = s.codingPaste;
   if (typeof s.templateText === "string") scene.templateText = s.templateText;
   if (typeof s.code === "string") scene.code = s.code;
+  if (typeof s.codeTypingCps === "number" && Number.isFinite(s.codeTypingCps)) {
+    scene.codeTypingCps = s.codeTypingCps;
+  }
+  if (typeof s.codeTypingDefaultsVersion === "number") {
+    scene.codeTypingDefaultsVersion = s.codeTypingDefaultsVersion;
+  }
   if (Array.isArray(s.codeTypingBeats)) {
     scene.codeTypingBeats = s.codeTypingBeats
       .filter((b): b is Record<string, unknown> => !!b && typeof b === "object")
@@ -596,6 +606,8 @@ export function partScriptSceneFromComposeScene(
     elements?: Array<{ mediaUrl?: string | null }> | null;
     recordingVoiceReplace?: boolean | null;
     recordingUseEmbeddedAudio?: boolean | null;
+    codeTypingCps?: number | null;
+    codeTypingDefaultsVersion?: number | null;
   },
   index: number,
 ): PartScriptScene {
@@ -628,6 +640,12 @@ export function partScriptSceneFromComposeScene(
     script: narr,
     audioUrl: scene.audioUrl ?? null,
     durationMs: scene.durationMs && scene.durationMs > 0 ? scene.durationMs : 0,
+    ...(typeof scene.codeTypingCps === "number"
+      ? { codeTypingCps: scene.codeTypingCps }
+      : {}),
+    ...(typeof scene.codeTypingDefaultsVersion === "number"
+      ? { codeTypingDefaultsVersion: scene.codeTypingDefaultsVersion }
+      : {}),
     ...(type === "image" && imageFromCompose ? { imageUrl: imageFromCompose } : {}),
     ...((type === "recording2" || type === "clip") && scene.mediaUrl
       ? { mediaUrl: scene.mediaUrl }
@@ -680,6 +698,8 @@ export function syncScriptPlanWithComposeScenes(
       elements?: Array<{ mediaUrl?: string | null }> | null;
       recordingVoiceReplace?: boolean | null;
       recordingUseEmbeddedAudio?: boolean | null;
+      codeTypingCps?: number | null;
+      codeTypingDefaultsVersion?: number | null;
     };
     const base = partScriptSceneFromComposeScene(cs, i);
     const narrKey = normalizeScriptText(cs.narrationText ?? "");
@@ -712,6 +732,12 @@ export function syncScriptPlanWithComposeScenes(
       questionPaste: enrich.questionPaste,
       question: enrich.question,
       code: enrich.code,
+      codeTypingCps:
+        typeof cs.codeTypingCps === "number" ? cs.codeTypingCps : enrich.codeTypingCps,
+      codeTypingDefaultsVersion:
+        typeof cs.codeTypingDefaultsVersion === "number"
+          ? cs.codeTypingDefaultsVersion
+          : enrich.codeTypingDefaultsVersion,
       codeTypingBeats: enrich.codeTypingBeats,
       imageUrl: base.imageUrl ?? enrich.imageUrl ?? null,
       mediaUrl: base.mediaUrl ?? enrich.mediaUrl,
