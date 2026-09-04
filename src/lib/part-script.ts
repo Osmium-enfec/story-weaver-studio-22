@@ -151,7 +151,10 @@ export type PartScriptComposeMode =
 export function composeModeForPartScriptType(
   scene: Pick<PartScriptScene, "type" | "templateSubtype">,
 ): PartScriptComposeMode {
+  /** Template → Code typing is sometimes stored with type "coding". */
+  if (scene.templateSubtype === "codeTyping") return "template";
   switch (scene.type) {
+
     case "intro":
     case "outro":
       return "clip";
