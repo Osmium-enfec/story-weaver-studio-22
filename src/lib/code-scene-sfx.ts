@@ -2,7 +2,10 @@
 export const CODE_TYPING_SFX = "/sfx/typing-keyboard.mp3";
 
 /** Default characters typed per second for silent / timed code typing. */
-export const DEFAULT_CODE_TYPING_CPS = 28;
+export const DEFAULT_CODE_TYPING_CPS = 15;
+
+/** Previous persisted default; used only to upgrade existing saved scenes/drafts. */
+export const LEGACY_CODE_TYPING_CPS = 28;
 
 /** Pause after typing finishes before the Run button is pressed (ms). */
 export const DEFAULT_CODE_RUN_DELAY_MS = 700;

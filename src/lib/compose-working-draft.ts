@@ -7,6 +7,7 @@ import type {
   ComposeTemplateDraft,
 } from "@/lib/compose-scene";
 import type { ComposeBackgroundPreset } from "@/lib/compose-background";
+import { DEFAULT_CODE_TYPING_CPS, LEGACY_CODE_TYPING_CPS } from "@/lib/code-scene-sfx";
 
 /** In-progress compose work for the current browser tab (survives refresh). */
 export interface ComposeWorkingDraft {
@@ -70,6 +71,15 @@ function scrubEphemeralBlobs(d: ComposeWorkingDraft): ComposeWorkingDraft {
 
   const codeDraft = { ...d.codeDraft };
   codeDraft.audioUrl = scrub(codeDraft.audioUrl);
+  // Upgrade browser drafts saved with the former 28 cps default. Without this,
+  // refresh restores the stale value even though new and database-loaded scenes
+  // use the current default.
+  if (
+    codeDraft.typingSpeedCps == null ||
+    codeDraft.typingSpeedCps === LEGACY_CODE_TYPING_CPS
+  ) {
+    codeDraft.typingSpeedCps = DEFAULT_CODE_TYPING_CPS;
+  }
 
   const questionDraft = { ...d.questionDraft };
   questionDraft.audioUrl = scrub(questionDraft.audioUrl);

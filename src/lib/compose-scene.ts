@@ -8,6 +8,7 @@ import {
   DEFAULT_CODE_OUTPUT_HOLD_MS,
   DEFAULT_CODE_RUN_DELAY_MS,
   DEFAULT_CODE_TYPING_CPS,
+  LEGACY_CODE_TYPING_CPS,
   resolveCodeTypingBeats,
 } from "@/lib/code-scene-sfx";
 
@@ -444,7 +445,7 @@ export function emptyComposeCodeDraft(): ComposeCodeDraft {
     durationMs: 0,
     ready: false,
     silentNarration: false,
-    typingSpeedCps: 28,
+    typingSpeedCps: DEFAULT_CODE_TYPING_CPS,
     codeFontSize: 14,
     codeOutput: "",
     codeRunDelayMs: DEFAULT_CODE_RUN_DELAY_MS,
@@ -1304,7 +1305,7 @@ export function sceneToCodeDraft(scene: Scene): ComposeCodeDraft | null {
     : scene.subtitle;
   const cps = scene.codeTypingCps;
   const typingSpeedCps = isTemplateCodeTyping
-    ? cps == null || cps === DEFAULT_CODE_TYPING_CPS
+    ? cps == null || cps === LEGACY_CODE_TYPING_CPS
       ? TEMPLATE_CODE_TYPING_CPS
       : cps
     : (cps ?? DEFAULT_CODE_TYPING_CPS);
