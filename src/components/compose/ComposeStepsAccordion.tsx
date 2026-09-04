@@ -1237,7 +1237,7 @@ export function ComposeStepsAccordion({
                   {(
                     suggestedBeatsDurationMs(
                       codeDraft.codeTypingBeats ?? [],
-                      codeDraft.typingSpeedCps ?? DEFAULT_CODE_TYPING_CPS,
+                      codeDraft.typingSpeedCps ?? TEMPLATE_CODE_TYPING_CPS,
                     ) / 1000
                   ).toFixed(1)}
                   s (typing + run delays + output holds).
