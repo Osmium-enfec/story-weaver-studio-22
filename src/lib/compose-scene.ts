@@ -1281,23 +1281,56 @@ export function sceneToCodeDraft(scene: Scene): ComposeCodeDraft | null {
     outputHoldMs: scene.codeOutputHoldMs,
   });
   const first = beats[0];
+  const isTemplateCodeTyping = isTemplateCodeTypingScene(scene);
+  // Legacy template scenes stored the old global defaults (28 cps, 0.7s delay,
+  // "example.<lang>" title). Map those to the new Template → Code typing defaults;
+  // values the user actually changed are preserved.
+  const rawBeats = scene.codeTypingBeats;
+  const normBeats = isTemplateCodeTyping
+    ? beats.map((b, i) =>
+        b.runDelayMs === DEFAULT_CODE_RUN_DELAY_MS &&
+        (rawBeats?.[i]?.runDelayMs == null ||
+          rawBeats[i]!.runDelayMs === DEFAULT_CODE_RUN_DELAY_MS)
+          ? { ...b, runDelayMs: TEMPLATE_CODE_RUN_DELAY_MS }
+          : b,
+      )
+    : beats;
+  const normFirst = normBeats[0];
+  const rawTitle = (scene.subtitle ?? "").trim();
+  const title = isTemplateCodeTyping
+    ? !rawTitle || /^example\.[a-z]+$/i.test(rawTitle)
+      ? TEMPLATE_CODE_TITLE
+      : scene.subtitle
+    : scene.subtitle;
+  const cps = scene.codeTypingCps;
+  const typingSpeedCps = isTemplateCodeTyping
+    ? cps == null || cps === DEFAULT_CODE_TYPING_CPS
+      ? TEMPLATE_CODE_TYPING_CPS
+      : cps
+    : (cps ?? DEFAULT_CODE_TYPING_CPS);
+  const legacyRunDelay = scene.codeRunDelayMs;
+  const runDelayFallback =
+    isTemplateCodeTyping &&
+    (legacyRunDelay == null || legacyRunDelay === DEFAULT_CODE_RUN_DELAY_MS)
+      ? TEMPLATE_CODE_RUN_DELAY_MS
+      : (legacyRunDelay ?? DEFAULT_CODE_RUN_DELAY_MS);
   return {
     script: scene.narrationText ?? "",
-    code: beats.length ? beatsToFullCode(beats) : (scene.code ?? ""),
+    code: normBeats.length ? beatsToFullCode(normBeats) : (scene.code ?? ""),
     codeLanguage: scene.codeLanguage ?? "py",
     codeVariant: scene.codeVariant ?? "typing",
-    title: scene.subtitle,
+    title,
     audioUrl: scene.audioUrl,
     durationMs: scene.durationMs,
     ready: !!scene.audioUrl && scene.durationMs > 0,
     silentNarration: silent,
-    typingSpeedCps: scene.codeTypingCps ?? 28,
+    typingSpeedCps,
     codeFontSize: scene.codeFontSize ?? 14,
-    codeOutput: first?.output ?? scene.codeOutput ?? "",
-    codeRunDelayMs: first?.runDelayMs ?? scene.codeRunDelayMs ?? DEFAULT_CODE_RUN_DELAY_MS,
+    codeOutput: normFirst?.output ?? scene.codeOutput ?? "",
+    codeRunDelayMs: normFirst?.runDelayMs ?? runDelayFallback,
     codeOutputHoldMs:
-      first?.outputHoldMs ?? scene.codeOutputHoldMs ?? DEFAULT_CODE_OUTPUT_HOLD_MS,
-    codeTypingBeats: beats,
+      normFirst?.outputHoldMs ?? scene.codeOutputHoldMs ?? DEFAULT_CODE_OUTPUT_HOLD_MS,
+    codeTypingBeats: normBeats,
   };
 }
 
