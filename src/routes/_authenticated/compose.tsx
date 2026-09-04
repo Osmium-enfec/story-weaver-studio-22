@@ -2504,7 +2504,11 @@ function ComposePage() {
 
     if (mode === "template") {
       if (scene.templateSubtype === "codeTyping") {
-        const cps = DEFAULT_CODE_TYPING_CPS;
+        const cps =
+          scene.codeTypingCps == null ||
+          (scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28)
+            ? DEFAULT_CODE_TYPING_CPS
+            : scene.codeTypingCps;
         const rawBeats =
           scene.codeTypingBeats?.length &&
           scene.codeTypingBeats.some((b) => b.code.trim() || b.output.trim())
@@ -2612,7 +2616,11 @@ function ComposePage() {
     }
 
     if (mode === "code") {
-      const cps = DEFAULT_CODE_TYPING_CPS;
+      const cps =
+        scene.codeTypingCps == null ||
+        (scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28)
+          ? DEFAULT_CODE_TYPING_CPS
+          : scene.codeTypingCps;
       const rawBeats =
         scene.codeTypingBeats?.length &&
         scene.codeTypingBeats.some((b) => b.code.trim() || b.output.trim())
