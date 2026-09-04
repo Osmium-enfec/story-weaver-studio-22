@@ -5,6 +5,69 @@ import { BasicAudioEditor } from "@/components/compose/BasicAudioEditor";
 import { ComposeVideoUpload } from "@/components/compose/ComposeVideoUpload";
 import { RecordingTimeline } from "@/components/compose/RecordingTimeline";
 
+/** Templates → Code typing defaults (user-editable in the UI). */
+const TEMPLATE_CODE_TITLE = "hello.py";
+const TEMPLATE_CODE_TYPING_CPS = 15;
+const TEMPLATE_CODE_RUN_DELAY_MS = 1000;
+
+/**
+ * Numeric input that keeps what you type while typing and only clamps
+ * on blur / Enter, so partial values ("1" on the way to "15") don't jump.
+ */
+function NumberField({
+  value,
+  min,
+  max,
+  step,
+  fallback,
+  round,
+  onCommit,
+  className,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  fallback: number;
+  round?: boolean;
+  onCommit: (next: number) => void;
+  className?: string;
+}) {
+  const [text, setText] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setText(String(value));
+  }, [value, focused]);
+
+  function commit(raw: string) {
+    const v = Number(raw);
+    const clamped = Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
+    const next = round ? Math.round(clamped) : clamped;
+    setText(String(next));
+    if (next !== value) onCommit(next);
+  }
+
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={(e) => {
+        setFocused(false);
+        commit(e.target.value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className={className}
+    />
+  );
+}
+
 /** Separates "generate with TTS" from "upload your own" on each narration step. */
 function NarrationUploadDivider() {
   return (
