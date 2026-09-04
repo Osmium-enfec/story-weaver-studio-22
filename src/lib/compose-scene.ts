@@ -7,8 +7,14 @@ import {
   beatsToFullCode,
   DEFAULT_CODE_OUTPUT_HOLD_MS,
   DEFAULT_CODE_RUN_DELAY_MS,
+  DEFAULT_CODE_TYPING_CPS,
   resolveCodeTypingBeats,
 } from "@/lib/code-scene-sfx";
+
+/** Defaults for Template → Code typing scenes (user-overridable). */
+export const TEMPLATE_CODE_TYPING_CPS = 15;
+export const TEMPLATE_CODE_RUN_DELAY_MS = 1000;
+export const TEMPLATE_CODE_TITLE = "hello.py";
 import {
   DEFAULT_CAMERA_ZOOM_DURATION_MS,
   DEFAULT_CAMERA_ZOOM_SFX,
