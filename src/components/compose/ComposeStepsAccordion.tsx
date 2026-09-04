@@ -1172,70 +1172,62 @@ export function ComposeStepsAccordion({
                 </p>
                 <label className="block text-sm font-medium">
                   Typing speed (chars / sec)
-                  <input
-                    type="number"
+                  <NumberField
                     min={8}
                     max={80}
                     step={1}
-                    value={codeDraft.typingSpeedCps ?? DEFAULT_CODE_TYPING_CPS}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
+                    round
+                    fallback={TEMPLATE_CODE_TYPING_CPS}
+                    value={codeDraft.typingSpeedCps ?? TEMPLATE_CODE_TYPING_CPS}
+                    onCommit={(cps) =>
                       onCodeDraft((d) => ({
                         ...d,
-                        typingSpeedCps: Number.isFinite(v)
-                          ? Math.max(8, Math.min(80, Math.round(v)))
-                          : DEFAULT_CODE_TYPING_CPS,
+                        typingSpeedCps: cps,
+                        /** Keep the scene long enough for the new speed. */
+                        durationMs: suggestedBeatsDurationMs(d.codeTypingBeats ?? [], cps),
                         ready: false,
-                      }));
-                    }}
+                      }))
+                    }
                     className="mt-1 w-28 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
                   />
                 </label>
                 <label className="block text-sm font-medium">
                   Code font size (px)
-                  <input
-                    type="number"
+                  <NumberField
                     min={10}
                     max={48}
                     step={1}
+                    round
+                    fallback={14}
                     value={codeDraft.codeFontSize ?? 14}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      onCodeDraft((d) => ({
-                        ...d,
-                        codeFontSize: Number.isFinite(v)
-                          ? Math.max(10, Math.min(48, Math.round(v)))
-                          : 14,
-                        ready: false,
-                      }));
-                    }}
+                    onCommit={(px) =>
+                      onCodeDraft((d) => ({ ...d, codeFontSize: px, ready: false }))
+                    }
                     className="mt-1 w-28 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
                   />
                 </label>
                 <label className="block text-sm font-medium">
                   Scene duration (sec)
-                  <input
-                    type="number"
+                  <NumberField
                     min={2}
                     max={300}
                     step={0.5}
+                    fallback={8}
                     value={
                       codeDraft.durationMs > 0
                         ? codeDraft.durationMs / 1000
                         : suggestedBeatsDurationMs(
                             codeDraft.codeTypingBeats ?? [],
-                            codeDraft.typingSpeedCps ?? DEFAULT_CODE_TYPING_CPS,
+                            codeDraft.typingSpeedCps ?? TEMPLATE_CODE_TYPING_CPS,
                           ) / 1000
                     }
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      const sec = Number.isFinite(v) ? Math.max(2, Math.min(300, v)) : 8;
+                    onCommit={(sec) =>
                       onCodeDraft((d) => ({
                         ...d,
                         durationMs: Math.round(sec * 1000),
                         ready: false,
-                      }));
-                    }}
+                      }))
+                    }
                     className="mt-1 w-28 rounded-md border bg-background px-2 py-1.5 text-sm tabular-nums"
                   />
                 </label>
