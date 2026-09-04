@@ -8,11 +8,34 @@ import {
 
 const COLS = `project_id, part_id, course_id, script_status, recording_status,
   review_status, issues_found, correction_status, assignee_email,
+  COALESCE(review_doc_url,'') AS review_doc_url,
+  COALESCE(review_doc_name,'') AS review_doc_name,
   rendered_uploaded, updated_by_email, updated_at::text AS updated_at`;
+
+let colsReady: Promise<void> | null = null;
+
+/** Older deploys predate the review document columns. */
+async function ensureDocColumns(): Promise<void> {
+  if (!colsReady) {
+    colsReady = (async () => {
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS review_doc_url TEXT NOT NULL DEFAULT ''`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS review_doc_name TEXT NOT NULL DEFAULT ''`,
+      );
+    })().catch((e) => {
+      colsReady = null;
+      throw e;
+    });
+  }
+  await colsReady;
+}
 
 export async function pgListCourseReviews(
   courseId: string,
 ): Promise<PartReviewRow[]> {
+  await ensureDocColumns();
   const res = await pgQuery<Record<string, unknown>>(
     `SELECT ${COLS} FROM part_reviews WHERE course_id = $1`,
     [courseId],
@@ -23,6 +46,7 @@ export async function pgListCourseReviews(
 export async function pgUpsertReview(
   input: PartReviewInput,
 ): Promise<PartReviewRow> {
+  await ensureDocColumns();
   const now = new Date().toISOString();
   // NOTE: the SQL proxy only returns rows for SELECT/WITH statements, so we
   // cannot use RETURNING here — re-read the row after writing instead.
@@ -30,10 +54,12 @@ export async function pgUpsertReview(
     `INSERT INTO part_reviews (
        project_id, part_id, course_id, script_status, recording_status,
        review_status, issues_found, correction_status, assignee_email,
+       review_doc_url, review_doc_name,
        rendered_uploaded, updated_by_email, updated_at
      ) VALUES ($1,$2,$3,
        COALESCE($4,''),COALESCE($5,''),COALESCE($6,''),COALESCE($7,''),
-       COALESCE($8,''),COALESCE($9,''),COALESCE($10,''),$11,$12::timestamptz)
+       COALESCE($8,''),COALESCE($9,''),COALESCE($13,''),COALESCE($14,''),
+       COALESCE($10,''),$11,$12::timestamptz)
      ON CONFLICT (project_id, part_id) DO UPDATE SET
        course_id = EXCLUDED.course_id,
        script_status = COALESCE($4, part_reviews.script_status),
@@ -42,6 +68,8 @@ export async function pgUpsertReview(
        issues_found = COALESCE($7, part_reviews.issues_found),
        correction_status = COALESCE($8, part_reviews.correction_status),
        assignee_email = COALESCE($9, part_reviews.assignee_email),
+       review_doc_url = COALESCE($13, part_reviews.review_doc_url),
+       review_doc_name = COALESCE($14, part_reviews.review_doc_name),
        rendered_uploaded = COALESCE($10, part_reviews.rendered_uploaded),
        updated_by_email = EXCLUDED.updated_by_email,
        updated_at = EXCLUDED.updated_at`,
@@ -58,6 +86,8 @@ export async function pgUpsertReview(
       input.rendered_uploaded ?? null,
       input.updated_by_email ?? null,
       now,
+      input.review_doc_url ?? null,
+      input.review_doc_name ?? null,
     ],
   );
   const saved = await pgGetReview(input.project_id, input.part_id);
@@ -91,6 +121,7 @@ export async function pgGetReview(
   projectId: string,
   partId: string,
 ): Promise<PartReviewRow | null> {
+  await ensureDocColumns();
   const res = await pgQuery<Record<string, unknown>>(
     `SELECT ${COLS} FROM part_reviews WHERE project_id = $1 AND part_id = $2`,
     [projectId, partId],

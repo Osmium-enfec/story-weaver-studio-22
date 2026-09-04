@@ -19,6 +19,8 @@ export interface PartReviewRow {
   issues_found: string;
   correction_status: string;
   assignee_email: string;
+  review_doc_url: string;
+  review_doc_name: string;
   rendered_uploaded: string;
   updated_by_email: string | null;
   updated_at: string;
@@ -34,6 +36,8 @@ export interface PartReviewInput {
   issues_found?: string;
   correction_status?: string;
   assignee_email?: string;
+  review_doc_url?: string;
+  review_doc_name?: string;
   rendered_uploaded?: string;
   updated_by_email?: string | null;
 }
@@ -57,6 +61,8 @@ function getDb(): Database.Database {
       issues_found TEXT NOT NULL DEFAULT '',
       correction_status TEXT NOT NULL DEFAULT '',
       assignee_email TEXT NOT NULL DEFAULT '',
+      review_doc_url TEXT NOT NULL DEFAULT '',
+      review_doc_name TEXT NOT NULL DEFAULT '',
       rendered_uploaded TEXT NOT NULL DEFAULT '',
       updated_by_email TEXT,
       updated_at TEXT NOT NULL,
@@ -65,6 +71,15 @@ function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS part_reviews_course_idx
       ON part_reviews (course_id);
   `);
+  for (const col of ["review_doc_url", "review_doc_name"]) {
+    try {
+      db.exec(
+        `ALTER TABLE part_reviews ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`,
+      );
+    } catch {
+      /* column already exists */
+    }
+  }
   return db;
 }
 
@@ -79,6 +94,8 @@ export function rowToPartReview(row: Record<string, unknown>): PartReviewRow {
     issues_found: String(row.issues_found ?? ""),
     correction_status: String(row.correction_status ?? ""),
     assignee_email: String(row.assignee_email ?? ""),
+    review_doc_url: String(row.review_doc_url ?? ""),
+    review_doc_name: String(row.review_doc_name ?? ""),
     rendered_uploaded: String(row.rendered_uploaded ?? ""),
     updated_by_email:
       row.updated_by_email != null ? String(row.updated_by_email) : null,
@@ -108,6 +125,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
         issues_found: "",
         correction_status: "",
         assignee_email: "",
+        review_doc_url: "",
+        review_doc_name: "",
         rendered_uploaded: "",
       };
   const merged = {
@@ -117,6 +136,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
     issues_found: input.issues_found ?? base.issues_found,
     correction_status: input.correction_status ?? base.correction_status,
     assignee_email: input.assignee_email ?? base.assignee_email,
+    review_doc_url: input.review_doc_url ?? base.review_doc_url,
+    review_doc_name: input.review_doc_name ?? base.review_doc_name,
     rendered_uploaded: input.rendered_uploaded ?? base.rendered_uploaded,
   };
   conn
@@ -124,8 +145,9 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       `INSERT INTO part_reviews (
          project_id, part_id, course_id, script_status, recording_status,
          review_status, issues_found, correction_status, assignee_email,
+         review_doc_url, review_doc_name,
          rendered_uploaded, updated_by_email, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT (project_id, part_id) DO UPDATE SET
          course_id = excluded.course_id,
          script_status = excluded.script_status,
@@ -134,6 +156,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          issues_found = excluded.issues_found,
          correction_status = excluded.correction_status,
          assignee_email = excluded.assignee_email,
+         review_doc_url = excluded.review_doc_url,
+         review_doc_name = excluded.review_doc_name,
          rendered_uploaded = excluded.rendered_uploaded,
          updated_by_email = excluded.updated_by_email,
          updated_at = excluded.updated_at`,
@@ -148,6 +172,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       merged.issues_found,
       merged.correction_status,
       merged.assignee_email,
+      merged.review_doc_url,
+      merged.review_doc_name,
       merged.rendered_uploaded,
       input.updated_by_email ?? null,
       now,

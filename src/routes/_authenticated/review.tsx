@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, RefreshCw, ClipboardCheck, Lock } from "lucide-react";
+import {
+  Loader2,
+  RefreshCw,
+  ClipboardCheck,
+  Lock,
+  Upload,
+  FileText,
+} from "lucide-react";
+import { apiPersistAssetFile } from "@/lib/compose-api";
 import { NavBar } from "@/components/NavBar";
 import { apiListCourses, type CourseListItem } from "@/lib/courses-api";
 import {
@@ -76,6 +84,8 @@ function emptyReview(
     issues_found: "",
     correction_status: "",
     assignee_email: "",
+    review_doc_url: "",
+    review_doc_name: "",
     rendered_uploaded: "",
     updated_by_email: null,
     updated_at: "",
@@ -115,6 +125,7 @@ function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [grantedFields, setGrantedFields] = useState<ReviewField[] | null>(
     null,
@@ -243,10 +254,80 @@ function ReviewPage() {
     }
   }
 
+  async function uploadDoc(row: Row, file: File) {
+    const key = `${row.episode.id}:${row.part.id}`;
+    setUploadingKey(key);
+    setError(null);
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+      const url = await apiPersistAssetFile({
+        file,
+        projectId: row.episode.id,
+        ext,
+      });
+      await save(row, { review_doc_url: url, review_doc_name: file.name });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Could not upload document");
+    } finally {
+      setUploadingKey(null);
+    }
+  }
+
   const selectCls =
     "h-8 w-full min-w-0 rounded-md border px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60";
   const inputCls =
     "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60";
+
+  function DocCell({ row }: { row: Row }) {
+    const r = reviewFor(row);
+    const editable = can(row, "review_doc");
+    const key = `${row.episode.id}:${row.part.id}`;
+    const uploading = uploadingKey === key;
+    return (
+      <div className="flex flex-col gap-1">
+        {r.review_doc_url ? (
+          <a
+            href={r.review_doc_url}
+            download={r.review_doc_name || undefined}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 truncate text-xs text-primary underline"
+            title={r.review_doc_name || "Download document"}
+          >
+            <FileText size={12} className="shrink-0" />
+            <span className="truncate">{r.review_doc_name || "Document"}</span>
+          </a>
+        ) : (
+          <span className="text-xs text-muted-foreground">No document</span>
+        )}
+        {editable && (
+          <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+            {uploading ? (
+              <Loader2 size={11} className="animate-spin" />
+            ) : (
+              <Upload size={11} />
+            )}
+            {uploading
+              ? "Uploading…"
+              : r.review_doc_url
+                ? "Replace"
+                : "Upload"}
+            <input
+              type="file"
+              className="hidden"
+              disabled={uploading}
+              accept=".pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.ppt,.pptx,.csv"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void uploadDoc(row, file);
+              }}
+            />
+          </label>
+        )}
+      </div>
+    );
+  }
 
   function StatusCell({
     row,
@@ -255,12 +336,13 @@ function ReviewPage() {
     kind,
   }: {
     row: Row;
-    field: ReviewField;
+    field: Exclude<ReviewField, "review_doc">;
     options: string[];
     kind: "progress" | "review" | "correction" | "rendered";
   }) {
     const r = reviewFor(row);
     const value = (r[field] as string) ?? "";
+
     const editable = can(row, field);
     return (
       <select
@@ -351,6 +433,9 @@ function ReviewPage() {
                   Issues Found
                 </th>
                 <th className="w-44 border-r px-3 py-2 font-medium">
+                  Document
+                </th>
+                <th className="w-44 border-r px-3 py-2 font-medium">
                   Review Assignment
                 </th>
                 <th className="w-36 border-r px-3 py-2 font-medium">
@@ -365,7 +450,7 @@ function ReviewPage() {
               {rows.length === 0 && !loading ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-3 py-6 text-sm text-muted-foreground"
                   >
                     No episode parts in this course.
@@ -451,6 +536,9 @@ function ReviewPage() {
                           }}
                           className="w-full min-w-0 resize-y rounded-md border bg-background px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
                         />
+                      </td>
+                      <td className="border-r px-3 py-1.5">
+                        <DocCell row={row} />
                       </td>
                       <td className="border-r px-3 py-1.5">
                         <input

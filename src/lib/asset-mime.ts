@@ -21,6 +21,26 @@ export function contentTypeForExt(ext: string): string {
     case "webm":
       // Screen recordings are video; audio-only webm is rare in this app.
       return "video/webm";
+    case "pdf":
+      return "application/pdf";
+    case "doc":
+      return "application/msword";
+    case "docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case "xls":
+      return "application/vnd.ms-excel";
+    case "xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case "ppt":
+      return "application/vnd.ms-powerpoint";
+    case "pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    case "txt":
+      return "text/plain; charset=utf-8";
+    case "csv":
+      return "text/csv; charset=utf-8";
+    case "rtf":
+      return "application/rtf";
     default:
       return "application/octet-stream";
   }

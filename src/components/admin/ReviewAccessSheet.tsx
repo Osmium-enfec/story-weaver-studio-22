@@ -13,6 +13,7 @@ const FIELDS: Array<{ id: string; label: string }> = [
   { id: "issues_found", label: "Issues Found" },
   { id: "assignee_email", label: "Review Assignment" },
   { id: "correction_status", label: "Correction Status" },
+  { id: "review_doc", label: "Document" },
   { id: "rendered_uploaded", label: "Rendered & Uploaded" },
 ];
 
