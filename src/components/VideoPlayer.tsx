@@ -9,6 +9,7 @@ import {
   buildCodeBeatTimeline,
   resolveCodeBeatFrame,
   resolveCodeTypingBeats,
+  resolveSceneCodeTypingCps,
   isTypingInProgress,
 } from "@/lib/code-scene-sfx";
 import { QuestionScene, MarkYourAnswersScreen, QuestionIntroScreen } from "./QuestionScene";
@@ -686,10 +687,7 @@ function CodeSceneStage({
   const videoBg = background.kind === "video" ? background.url : null;
   const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
   const variant = scene.codeVariant ?? "typing";
-  const cps =
-    scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28
-      ? DEFAULT_CODE_TYPING_CPS
-      : (scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS);
+  const cps = resolveSceneCodeTypingCps(scene);
   const timeline = useMemo(() => {
     if ((scene.codeVariant ?? "typing") !== "typing") return null;
     const beats = resolveCodeTypingBeats({

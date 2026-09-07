@@ -8,6 +8,7 @@ import {
   resolveCodeBeatFrame,
   resolveCodeTypingBeats,
   typingVisibleChars,
+  resolveSceneCodeTypingCps,
 } from "./code-scene-sfx";
 
 type TokKind = "kw" | "str" | "num" | "com" | "fn" | "pun" | "txt";
@@ -315,10 +316,7 @@ export function drawCodeEditor(
   const variant = scene.codeVariant ?? "typing";
   const language = scene.codeLanguage ?? "ts";
   const title = scene.subtitle ?? `example.${language}`;
-  const cps =
-    scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28
-      ? DEFAULT_CODE_TYPING_CPS
-      : (scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS);
+  const cps = resolveSceneCodeTypingCps(scene);
   const beats = resolveCodeTypingBeats({
     beats: scene.codeTypingBeats,
     code,

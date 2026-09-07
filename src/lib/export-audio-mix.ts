@@ -5,6 +5,7 @@ import {
   DEFAULT_CODE_TYPING_CPS,
   resolveCodeTypingBeats,
   typingSpeechEndProgress,
+  resolveSceneCodeTypingCps,
 } from "./code-scene-sfx";
 import { probeAudioDurationMs } from "./audio-duration";
 import { encodeWav } from "./audio-slice";
@@ -65,7 +66,7 @@ async function decodeUrl(ctx: BaseAudioContext, url: string): Promise<AudioBuffe
 
 function typingRangesForScene(scene: Scene): { startMs: number; endMs: number }[] {
   if (scene.kind !== "code" || (scene.codeVariant ?? "typing") !== "typing") return [];
-  const cps = scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS;
+  const cps = resolveSceneCodeTypingCps(scene);
   const beats = resolveCodeTypingBeats({
     beats: scene.codeTypingBeats,
     code: scene.code,
@@ -76,7 +77,7 @@ function typingRangesForScene(scene: Scene): { startMs: number; endMs: number }[
   if (beats.length > 0) return codeTypingSfxRangesMs(beats, cps);
   const code = scene.code ?? "";
   const endProgress = typingSpeechEndProgress(code, {
-    cps: scene.codeTypingCps,
+    cps,
     durationMs: scene.durationMs,
   });
   if (endProgress <= 0) return [];
