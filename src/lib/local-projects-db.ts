@@ -34,6 +34,7 @@ export interface LocalProjectRow {
 }
 
 export interface LocalProjectPartSummary {
+  reviewer_user_email?: string | null;
   id: string;
   title: string;
   assigned_user_id: string | null;
@@ -169,6 +170,8 @@ function localPartsSummaryFromRaw(parts: unknown): LocalProjectPartSummary[] {
         typeof rec.assignedUserId === "string" ? rec.assignedUserId : null,
       assigned_user_email:
         typeof rec.assignedUserEmail === "string" ? rec.assignedUserEmail : null,
+      reviewer_user_email:
+        typeof rec.reviewerUserEmail === "string" ? rec.reviewerUserEmail : null,
       scene_count: Array.isArray(rec.scenes) ? rec.scenes.length : 0,
     });
   }

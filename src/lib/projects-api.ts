@@ -22,6 +22,7 @@ export type ProjectPartSummary = {
   title: string;
   assigned_user_id: string | null;
   assigned_user_email: string | null;
+  reviewer_user_email?: string | null;
   scene_count: number;
 };
 
