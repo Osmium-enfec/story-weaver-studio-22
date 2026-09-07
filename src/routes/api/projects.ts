@@ -43,6 +43,11 @@ const Body = z.discriminatedUnion("action", [
     assigned_user_id: z.string().uuid().nullable(),
   }),
   z.object({
+    action: z.literal("assignEpisodeReviewer"),
+    id: z.string().uuid(),
+    reviewer_user_id: z.string().uuid().nullable(),
+  }),
+  z.object({
     action: z.literal("deletePart"),
     id: z.string().uuid(),
     part_id: z.string(),
@@ -131,6 +136,22 @@ export const Route = createFileRoute("/api/projects")({
           try {
             const assignee = await resolveAssignee(data.assigned_user_id);
             const updated = await localAssignPart(data.id, data.part_id, assignee);
+            return jsonResponse(
+              normalizeProjectRecord(updated as unknown as Record<string, unknown>),
+            );
+          } catch (e) {
+            return jsonError(e instanceof Error ? e.message : "Assign failed", 400);
+          }
+        }
+
+        if (data.action === "assignEpisodeReviewer") {
+          if (!asAdmin) return jsonError("Admin only.", 403);
+          try {
+            const reviewer = await resolveAssignee(data.reviewer_user_id);
+            const { localAssignEpisodeReviewer } = await import(
+              "@/lib/local-projects-db"
+            );
+            const updated = await localAssignEpisodeReviewer(data.id, reviewer);
             return jsonResponse(
               normalizeProjectRecord(updated as unknown as Record<string, unknown>),
             );

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   apiAssignPart,
+  apiAssignEpisodeReviewer,
   apiDeletePart,
   apiGetProject,
   apiSaveProject,
@@ -17,6 +18,8 @@ import {
 } from "@/lib/project-parts";
 import { NavBar } from "@/components/NavBar";
 import { AssignUserSelect, WorkingOnLabel } from "@/components/AssignUserSelect";
+import { ReviewStageBadge } from "@/components/ReviewStageBadge";
+import { apiListReviews } from "@/lib/reviews-api";
 import {
   ArrowLeft,
   Check,
@@ -83,9 +86,25 @@ function EpisodeDetailPage() {
     if (isAdmin) return true;
     if (myUserId && part.assignedUserId === myUserId) return true;
     if (myEmail && part.assignedUserEmail?.trim().toLowerCase() === myEmail) return true;
+    if (myUserId && part.reviewerUserId === myUserId) return true;
+    if (myEmail && part.reviewerUserEmail?.trim().toLowerCase() === myEmail) return true;
     return false;
   });
   const backToCourse = data?.course_id;
+  const { data: reviewRows } = useQuery({
+    queryKey: ["reviews", backToCourse],
+    queryFn: () => apiListReviews(backToCourse!),
+    enabled: !!backToCourse,
+    staleTime: 15_000,
+  });
+  const reviewByPart = new Map(
+    (reviewRows ?? [])
+      .filter((r) => r.project_id === id)
+      .map((r) => [r.part_id, r] as const),
+  );
+  const episodeReviewer = parts.find((p) => p.reviewerUserId)?.reviewerUserId ?? null;
+  const episodeReviewerEmail =
+    parts.find((p) => p.reviewerUserEmail)?.reviewerUserEmail ?? null;
 
   const createPart = useMutation({
     mutationFn: async (title: string) => {
@@ -332,6 +351,24 @@ function EpisodeDetailPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Create parts here, then open a part to edit in Compose.
                 </p>
+                {isAdmin && (
+                  <div className="mt-2 max-w-xs">
+                    <AssignUserSelect
+                      valueUserId={episodeReviewer}
+                      valueEmail={episodeReviewerEmail}
+                      label="Reviewer for this episode"
+                      onAssign={async (userId) => {
+                        await apiAssignEpisodeReviewer(id, userId);
+                        await qc.invalidateQueries({ queryKey: ["project", id] });
+                      }}
+                    />
+                  </div>
+                )}
+                {episodeReviewerEmail && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Reviewer: {episodeReviewerEmail}
+                  </p>
+                )}
                 <WorkingOnLabel
                   partEmails={parts
                     .map((p) => p.assignedUserEmail?.trim())
@@ -381,7 +418,14 @@ function EpisodeDetailPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {parts.map((part) => (
                   <div key={part.id} className="rounded-lg border bg-card overflow-hidden">
-                    <div className="aspect-video bg-muted flex items-center justify-center overflow-hidden">
+                    <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
+                      <span className="absolute left-2 top-2 z-10">
+                        <ReviewStageBadge
+                          status={reviewByPart.get(part.id)?.workflow_status}
+                          by={reviewByPart.get(part.id)?.workflow_by_email}
+                          at={reviewByPart.get(part.id)?.workflow_at}
+                        />
+                      </span>
                       {partThumb(part) ? (
                         <img
                           src={partThumb(part)!}

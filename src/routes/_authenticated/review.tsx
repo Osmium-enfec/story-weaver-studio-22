@@ -22,6 +22,7 @@ import {
   apiReviewGrants,
   type PartReview,
 } from "@/lib/reviews-api";
+import { ReviewStageBadge } from "@/components/ReviewStageBadge";
 import { getStoredSession } from "@/lib/auth-client";
 import { isAdminEmail } from "@/lib/admin";
 import {
@@ -87,6 +88,9 @@ function emptyReview(
     review_doc_url: "",
     review_doc_name: "",
     rendered_uploaded: "",
+    workflow_status: "",
+    workflow_by_email: "",
+    workflow_at: "",
     updated_by_email: null,
     updated_at: "",
   };
@@ -131,6 +135,7 @@ function ReviewPage() {
     null,
   );
   const tableRef = useRef<HTMLDivElement | null>(null);
+  const [onlyMyReviews, setOnlyMyReviews] = useState(false);
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
   const myEmail = session?.user.email ?? "";
@@ -191,14 +196,23 @@ function ReviewPage() {
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
+    const me = myEmail.trim().toLowerCase();
     for (const ep of episodes) {
-      const parts = [...(ep.parts_summary ?? [])].sort(partOrder);
+      let parts = [...(ep.parts_summary ?? [])].sort(partOrder);
+      if (onlyMyReviews) {
+        parts = parts.filter((p) => {
+          const isMine =
+            (p.reviewer_user_email ?? "").trim().toLowerCase() === me && !!me;
+          const status = reviews[`${ep.id}:${p.id}`]?.workflow_status ?? "";
+          return isMine && status === "ready_for_review";
+        });
+      }
       parts.forEach((part, i) =>
         out.push({ episode: ep, part, index: i, count: parts.length }),
       );
     }
     return out;
-  }, [episodes]);
+  }, [episodes, onlyMyReviews, reviews, myEmail]);
 
   const knownAssignees = useMemo(() => {
     const set = new Set<string>();
@@ -227,6 +241,7 @@ function ReviewPage() {
       {
         composerEmail: row.part.assigned_user_email,
         reviewAssigneeEmail: reviewFor(row).assignee_email || null,
+        reviewerEmail: row.part.reviewer_user_email ?? null,
       },
     );
   }
@@ -399,6 +414,15 @@ function ReviewPage() {
               </option>
             ))}
           </select>
+          <label className="ml-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={onlyMyReviews}
+              onChange={(e) => setOnlyMyReviews(e.target.checked)}
+              className="rounded border"
+            />
+            Only parts waiting for my review
+          </label>
           {loading && (
             <Loader2 size={16} className="animate-spin text-muted-foreground" />
           )}
@@ -419,6 +443,7 @@ function ReviewPage() {
               <tr>
                 <th className="w-32 border-r px-3 py-2 font-medium">Episode</th>
                 <th className="w-28 border-r px-3 py-2 font-medium">Part</th>
+                <th className="w-40 border-r px-3 py-2 font-medium">Stage</th>
                 <th className="w-32 border-r px-3 py-2 font-medium">Script</th>
                 <th className="w-36 border-r px-3 py-2 font-medium">
                   Screen Recording
@@ -450,7 +475,7 @@ function ReviewPage() {
               {rows.length === 0 && !loading ? (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={12}
                     className="px-3 py-6 text-sm text-muted-foreground"
                   >
                     No episode parts in this course.
@@ -483,6 +508,18 @@ function ReviewPage() {
                             size={12}
                             className="ml-1 inline animate-spin text-muted-foreground"
                           />
+                        )}
+                      </td>
+                      <td className="border-r px-3 py-2">
+                        <ReviewStageBadge
+                          status={r.workflow_status}
+                          by={r.workflow_by_email}
+                          at={r.workflow_at}
+                        />
+                        {!r.workflow_status && (
+                          <span className="text-[10px] text-muted-foreground">
+                            —
+                          </span>
                         )}
                       </td>
                       <td className="border-r px-3 py-1.5">

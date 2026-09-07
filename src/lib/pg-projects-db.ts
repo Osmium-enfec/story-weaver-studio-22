@@ -87,6 +87,8 @@ export function partsSummaryFromRaw(parts: unknown): LocalProjectPartSummary[] {
         typeof rec.assignedUserId === "string" ? rec.assignedUserId : null,
       assigned_user_email:
         typeof rec.assignedUserEmail === "string" ? rec.assignedUserEmail : null,
+      reviewer_user_email:
+        typeof rec.reviewerUserEmail === "string" ? rec.reviewerUserEmail : null,
       scene_count: Number(rec.sceneCount ?? (Array.isArray(rec.scenes) ? rec.scenes.length : 0)) || 0,
     });
   }
@@ -431,6 +433,31 @@ export async function pgAssignPart(
     assignedUserEmail: assignee?.email ?? null,
     updated_at: now,
   };
+  await pgQuery(
+    `UPDATE projects SET parts = $1::jsonb, updated_at = $2::timestamptz WHERE id = $3`,
+    [JSON.stringify(parts), now, episodeId],
+  );
+  return { ...project, parts, updated_at: now };
+}
+
+export async function pgAssignEpisodeReviewer(
+  episodeId: string,
+  reviewer: { userId: string; email: string } | null,
+): Promise<LocalProjectRow> {
+  const res = await pgQuery<Record<string, unknown>>(
+    `SELECT ${PROJECT_SELECT} FROM projects WHERE id = $1`,
+    [episodeId],
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Episode not found.");
+  const project = rowToProject(row);
+  const now = new Date().toISOString();
+  const parts = getProjectParts(project).map((p) => ({
+    ...p,
+    reviewerUserId: reviewer?.userId ?? null,
+    reviewerUserEmail: reviewer?.email ?? null,
+    updated_at: now,
+  }));
   await pgQuery(
     `UPDATE projects SET parts = $1::jsonb, updated_at = $2::timestamptz WHERE id = $3`,
     [JSON.stringify(parts), now, episodeId],

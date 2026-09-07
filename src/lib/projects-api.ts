@@ -22,6 +22,7 @@ export type ProjectPartSummary = {
   title: string;
   assigned_user_id: string | null;
   assigned_user_email: string | null;
+  reviewer_user_email?: string | null;
   scene_count: number;
 };
 
@@ -127,6 +128,17 @@ export function apiAssignPart(
     id: episodeId,
     part_id: partId,
     assigned_user_id: assignedUserId,
+  });
+}
+
+export function apiAssignEpisodeReviewer(
+  episodeId: string,
+  reviewerUserId: string | null,
+): Promise<ProjectRecord> {
+  return projectsFetch({
+    action: "assignEpisodeReviewer",
+    id: episodeId,
+    reviewer_user_id: reviewerUserId,
   });
 }
 
