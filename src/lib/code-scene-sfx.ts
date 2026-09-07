@@ -426,3 +426,43 @@ export function codeOutputVisible(progress: number, opts: CodeRunTimingOpts): bo
   const phase = codeRunPhase(progress, opts);
   return phase === "pressing" || phase === "done";
 }
+
+/** Scene fields needed to resolve the effective typing speed. */
+export interface SceneTypingCpsInput {
+  codeTypingCps?: number;
+  codeTypingDefaultsVersion?: number;
+  codeTypingBeats?: CodeTypingBeat[];
+  code?: string;
+  codeOutput?: string;
+  codeRunDelayMs?: number;
+  codeOutputHoldMs?: number;
+  durationMs?: number;
+}
+
+/**
+ * Effective typing speed for a stored scene.
+ *
+ * Scenes saved with the former 28 cps default are migrated to the current
+ * default, but only when their saved duration can still fit the slower
+ * timeline — otherwise typing would be cut off mid-way and the run/output
+ * beats would never render.
+ */
+export function resolveSceneCodeTypingCps(scene: SceneTypingCpsInput): number {
+  const stored = scene.codeTypingCps;
+  if (stored == null) return DEFAULT_CODE_TYPING_CPS;
+  if (scene.codeTypingDefaultsVersion === 2) return stored;
+  if (stored !== LEGACY_CODE_TYPING_CPS) return stored;
+
+  const duration = scene.durationMs ?? 0;
+  if (duration <= 0) return DEFAULT_CODE_TYPING_CPS;
+  const beats = resolveCodeTypingBeats({
+    beats: scene.codeTypingBeats,
+    code: scene.code,
+    output: scene.codeOutput,
+    runDelayMs: scene.codeRunDelayMs,
+    outputHoldMs: scene.codeOutputHoldMs,
+  });
+  if (beats.length === 0) return DEFAULT_CODE_TYPING_CPS;
+  const needed = suggestedBeatsDurationMs(beats, DEFAULT_CODE_TYPING_CPS);
+  return needed <= duration + 50 ? DEFAULT_CODE_TYPING_CPS : stored;
+}
