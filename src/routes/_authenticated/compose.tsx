@@ -2390,7 +2390,15 @@ function ComposePage() {
      */
     const savedScene = activeComposeScenes.find((s) => s.id === linkedComposeId);
     if (savedScene && composeSceneHasSavedWork(savedScene)) {
+      const savedMode = sceneSourceMode(savedScene);
       handleEditScene(savedScene, activeComposeScenes.indexOf(savedScene));
+      if (!isRecordingLikeMode(savedMode)) {
+        setOpenSteps(
+          savedMode === "upload"
+            ? ["image", "crop", "audio", "preview", "save"]
+            : ["setup", "audio", "preview", "save"],
+        );
+      }
       setShowPreview(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
