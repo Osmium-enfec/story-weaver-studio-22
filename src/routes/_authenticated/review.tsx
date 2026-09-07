@@ -135,6 +135,7 @@ function ReviewPage() {
     null,
   );
   const tableRef = useRef<HTMLDivElement | null>(null);
+  const [onlyMyReviews, setOnlyMyReviews] = useState(false);
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
   const myEmail = session?.user.email ?? "";
@@ -195,14 +196,23 @@ function ReviewPage() {
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
+    const me = myEmail.trim().toLowerCase();
     for (const ep of episodes) {
-      const parts = [...(ep.parts_summary ?? [])].sort(partOrder);
+      let parts = [...(ep.parts_summary ?? [])].sort(partOrder);
+      if (onlyMyReviews) {
+        parts = parts.filter((p) => {
+          const isMine =
+            (p.reviewer_user_email ?? "").trim().toLowerCase() === me && !!me;
+          const status = reviews[`${ep.id}:${p.id}`]?.workflow_status ?? "";
+          return isMine && status === "ready_for_review";
+        });
+      }
       parts.forEach((part, i) =>
         out.push({ episode: ep, part, index: i, count: parts.length }),
       );
     }
     return out;
-  }, [episodes]);
+  }, [episodes, onlyMyReviews, reviews, myEmail]);
 
   const knownAssignees = useMemo(() => {
     const set = new Set<string>();
@@ -231,6 +241,7 @@ function ReviewPage() {
       {
         composerEmail: row.part.assigned_user_email,
         reviewAssigneeEmail: reviewFor(row).assignee_email || null,
+        reviewerEmail: row.part.reviewer_user_email ?? null,
       },
     );
   }
