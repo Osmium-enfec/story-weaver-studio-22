@@ -1898,6 +1898,8 @@ export function VideoPlayer({
       const playThroughMs = Math.max(speechDurMs, audioNaturalMs);
       const clamped = Math.min(Math.max(0, elapsed), playThroughMs);
       setElapsedSpeechMs(clamped);
+      // Remember where we are so pause/resume doesn't jump back to a scrub point.
+      sceneSeekRef.current = { index, ms: clamped };
       const durSec = playThroughMs / 1000;
       if (durSec > 0) {
         setProgress(Math.min(1, clamped / (durSec * 1000)));
