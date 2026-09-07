@@ -1722,20 +1722,29 @@ export function VideoPlayer({
   // ============ PER-SCENE MODE (no master): reload audio per scene ============
   const clipStartMs = scenes[index]?.audioClipStartMs ?? 0;
   const recordingClockRef = useRef({ wall: 0, ms: 0 });
+  /** Scrub target inside the current scene (per-scene preview mode). */
+  const sceneSeekRef = useRef<{ index: number; ms: number }>({ index: -1, ms: 0 });
+
+  /** Offset (ms) playback should start from inside scene `i`. */
+  function pendingSceneSeekMs(i: number): number {
+    return sceneSeekRef.current.index === i ? Math.max(0, sceneSeekRef.current.ms) : 0;
+  }
 
   useEffect(() => {
     if (masterMode) return;
-    setProgress(0);
-    setElapsedSpeechMs(0);
-    recordingClockRef.current = { wall: performance.now(), ms: 0 };
+    const startMs = pendingSceneSeekMs(index);
+    const s = scenes[index];
+    const sceneMs = Math.max(1, revealSpeechDurationMs(s ?? {}) || s?.durationMs || 1);
+    setProgress(Math.min(1, startMs / sceneMs));
+    setElapsedSpeechMs(startMs);
+    recordingClockRef.current = { wall: performance.now(), ms: startMs };
     const a = audioRef.current;
     if (!a) return;
-    const s = scenes[index];
     if (s?.kind === "recording") {
       a.pause();
       return;
     }
-    a.currentTime = clipStartMs / 1000;
+    a.currentTime = (clipStartMs + startMs) / 1000;
     const waitForIntro = questionNeedsIntroGate(s) && !questionMainReady;
     if (playing && !waitForIntro) a.play().catch(() => {});
     else a.pause();
