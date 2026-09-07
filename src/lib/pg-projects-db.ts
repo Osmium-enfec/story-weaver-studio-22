@@ -87,6 +87,8 @@ export function partsSummaryFromRaw(parts: unknown): LocalProjectPartSummary[] {
         typeof rec.assignedUserId === "string" ? rec.assignedUserId : null,
       assigned_user_email:
         typeof rec.assignedUserEmail === "string" ? rec.assignedUserEmail : null,
+      reviewer_user_id:
+        typeof rec.reviewerUserId === "string" ? rec.reviewerUserId : null,
       reviewer_user_email:
         typeof rec.reviewerUserEmail === "string" ? rec.reviewerUserEmail : null,
       scene_count: Number(rec.sceneCount ?? (Array.isArray(rec.scenes) ? rec.scenes.length : 0)) || 0,
@@ -142,6 +144,8 @@ const LIST_SELECT = `
         'title', p->>'title',
         'assignedUserId', p->>'assignedUserId',
         'assignedUserEmail', p->>'assignedUserEmail',
+        'reviewerUserId', p->>'reviewerUserId',
+        'reviewerUserEmail', p->>'reviewerUserEmail',
         'sceneCount', CASE WHEN jsonb_typeof(p->'scenes') = 'array'
           THEN jsonb_array_length(p->'scenes') ELSE 0 END
       ) ORDER BY ord),
