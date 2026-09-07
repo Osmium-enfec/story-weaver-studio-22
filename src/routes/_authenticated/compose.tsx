@@ -2258,12 +2258,19 @@ function ComposePage() {
       if (!partFromSearch && (isAdmin || accessibleParts.length !== 1)) {
         setSelectedPartId(null);
       }
-      resetSceneDraft();
-    } else {
-      setEditingSceneId(null);
     }
+    // Cancel any queued autosave and clear the loaded scene form. Leaving the
+    // draft mounted after the part is saved detached it from its scene id, and
+    // the next autosave appended it again as a duplicate scene.
+    if (composeAutosaveTimerRef.current) {
+      clearTimeout(composeAutosaveTimerRef.current);
+      composeAutosaveTimerRef.current = null;
+    }
+    lastComposeAutosaveKeyRef.current = "";
+    resetSceneDraft();
     setStitchActive(false);
   }
+
 
   async function handleGoToScriptScene(scene: PartScriptScene) {
     if (scene.type === "unset") {
