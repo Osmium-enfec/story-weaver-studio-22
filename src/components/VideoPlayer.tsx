@@ -2,14 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
-import type { CodeTypingBeat   resolveSceneCodeTypingCps,
-} from "@/lib/code-scene-sfx";
+import type { CodeTypingBeat } from "@/lib/code-scene-sfx";
 import {
   CODE_TYPING_SFX,
   DEFAULT_CODE_TYPING_CPS,
   buildCodeBeatTimeline,
   resolveCodeBeatFrame,
   resolveCodeTypingBeats,
+  resolveSceneCodeTypingCps,
   isTypingInProgress,
 } from "@/lib/code-scene-sfx";
 import { QuestionScene, MarkYourAnswersScreen, QuestionIntroScreen } from "./QuestionScene";
