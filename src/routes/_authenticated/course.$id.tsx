@@ -82,10 +82,15 @@ function CourseDetailPage() {
     queryFn: () => apiGetCourse(id),
   });
 
-  const { data: episodes, isLoading: episodesLoading } = useQuery({
+  const { data: episodesRaw, isLoading: episodesLoading } = useQuery({
     queryKey: ["projects", "course", id],
     queryFn: () => apiListProjects({ courseId: id }),
   });
+
+  const episodes = useMemo(
+    () => (episodesRaw ? [...episodesRaw].sort(episodeOrder) : undefined),
+    [episodesRaw],
+  );
 
   const createEpisode = useMutation({
     mutationFn: async (title: string) =>
