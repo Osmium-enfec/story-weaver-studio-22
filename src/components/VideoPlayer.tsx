@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Play, Pause, RotateCcw, Download, Loader2 } from "lucide-react";
 import { CodeScene, type CodeVariant } from "./CodeScene";
-import type { CodeTypingBeat } from "@/lib/code-scene-sfx";
+import type { CodeTypingBeat   resolveSceneCodeTypingCps,
+} from "@/lib/code-scene-sfx";
 import {
   CODE_TYPING_SFX,
   DEFAULT_CODE_TYPING_CPS,
@@ -686,10 +687,7 @@ function CodeSceneStage({
   const videoBg = background.kind === "video" ? background.url : null;
   const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
   const variant = scene.codeVariant ?? "typing";
-  const cps =
-    scene.codeTypingDefaultsVersion !== 2 && scene.codeTypingCps === 28
-      ? DEFAULT_CODE_TYPING_CPS
-      : (scene.codeTypingCps ?? DEFAULT_CODE_TYPING_CPS);
+  const cps = resolveSceneCodeTypingCps(scene);
   const timeline = useMemo(() => {
     if ((scene.codeVariant ?? "typing") !== "typing") return null;
     const beats = resolveCodeTypingBeats({
