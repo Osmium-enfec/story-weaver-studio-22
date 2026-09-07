@@ -35,13 +35,43 @@ function totalPages(count: number): number {
   return Math.max(1, Math.ceil(count / PAGE_SIZE));
 }
 
+/** Natural episode order: Episode 1, 2, 3 … 10 (numbers win, then title). */
+function episodeOrder(a: ProjectListItem, b: ProjectListItem): number {
+  const num = (t: string) => {
+    const m = t.match(/(\d+)/);
+    return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+  };
+  const d = num(a.title) - num(b.title);
+  if (d !== 0 && Number.isFinite(d)) return d;
+  return a.title.localeCompare(b.title);
+}
+
+const pageKey = (courseId: string) => `course-page:${courseId}`;
+
+function readSavedPage(courseId: string): number {
+  try {
+    const v = Number(sessionStorage.getItem(pageKey(courseId)));
+    return Number.isFinite(v) && v >= 1 ? Math.floor(v) : 1;
+  } catch {
+    return 1;
+  }
+}
+
 function CourseDetailPage() {
   const { id } = Route.useParams();
   const router = useRouter();
   const qc = useQueryClient();
   const [episodeTitle, setEpisodeTitle] = useState("");
   const [creating, setCreating] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPageState] = useState(() => readSavedPage(id));
+  const setPage = (p: number) => {
+    setPageState(p);
+    try {
+      sessionStorage.setItem(pageKey(id), String(p));
+    } catch {
+      /* ignore */
+    }
+  };
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -52,10 +82,15 @@ function CourseDetailPage() {
     queryFn: () => apiGetCourse(id),
   });
 
-  const { data: episodes, isLoading: episodesLoading } = useQuery({
+  const { data: episodesRaw, isLoading: episodesLoading } = useQuery({
     queryKey: ["projects", "course", id],
     queryFn: () => apiListProjects({ courseId: id }),
   });
+
+  const episodes = useMemo(
+    () => (episodesRaw ? [...episodesRaw].sort(episodeOrder) : undefined),
+    [episodesRaw],
+  );
 
   const createEpisode = useMutation({
     mutationFn: async (title: string) =>
