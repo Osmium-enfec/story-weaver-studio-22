@@ -171,9 +171,13 @@ export function ComposeProjectPanel({
     return savedParts.filter((p) => {
       if (myUserId && p.assignedUserId && p.assignedUserId === myUserId) return true;
       if (normEmail && p.assignedUserEmail?.trim().toLowerCase() === normEmail) return true;
+      // Episode reviewers get read-only access to every part they review.
+      if (myUserId && p.reviewerUserId && p.reviewerUserId === myUserId) return true;
+      if (normEmail && p.reviewerUserEmail?.trim().toLowerCase() === normEmail) return true;
       return false;
     });
   }, [isAdmin, savedParts, myUserId, myEmail]);
+
 
   const selectedPart = visibleParts.find((p) => p.id === selectedPartId) ?? null;
 
