@@ -2039,6 +2039,39 @@ export function VideoPlayer({
     }
   }, [playing, currentMs, totalMs, bgmConfig, bgmMuteRanges]);
 
+  /** Per-scene mode: jump to `offsetMs` inside scene `i` (questions included). */
+  function seekWithinScene(i: number, offsetMs: number) {
+    const s = scenes[i] ?? {};
+    const sceneMs = Math.max(1, revealSpeechDurationMs(s) || s.durationMs || 1);
+    const clamped = Math.max(0, Math.min(sceneMs - 20, offsetMs));
+    clearPerSceneTransitionTimers();
+    clearMarkHold();
+    setPerSceneTransition(null);
+    sceneSeekRef.current = { index: i, ms: clamped };
+    // Scrubbing past the "here comes a question" bumper resumes the main narration.
+    setQuestionSeqMs(0);
+    introAudioRef.current?.pause();
+    setQuestionMainReady(true);
+    setIndex(i);
+    setProgress(Math.min(1, clamped / sceneMs));
+    setElapsedSpeechMs(clamped);
+    recordingClockRef.current = { wall: performance.now(), ms: clamped };
+    const a = audioRef.current;
+    if (a) {
+      try {
+        if (s.kind === "recording") {
+          const src = recordingAudioSourceTimeSec(s, clamped);
+          if (src != null) a.currentTime = src;
+        } else {
+          a.currentTime = ((s.audioClipStartMs ?? 0) + clamped) / 1000;
+        }
+      } catch {
+        /* ignore seek errors while metadata loads */
+      }
+    }
+    setPlaying(true);
+  }
+
   function seekToMs(ms: number) {
     if (masterMode && audioRef.current) {
       const clamped = Math.max(0, Math.min(totalMs - 10, ms));
@@ -2048,12 +2081,19 @@ export function VideoPlayer({
       setPlaying(true);
       return;
     }
-    // Per-scene fallback: find scene at ms.
+    // Per-scene mode: walk the same layout the progress bar uses
+    // (question intro + narration + trailing gap) and scrub inside the scene.
     let acc = 0;
     for (let i = 0; i < scenes.length; i++) {
-      const d = scenes[i].durationMs || 0;
-      if (ms < acc + d) return seekToScene(i);
-      acc += d;
+      const s = scenes[i] ?? {};
+      const pre = s.kind === "question" ? questionPreQuestionMs(s) : 0;
+      const dur = s.durationMs || 0;
+      const tail = i < scenes.length - 1 ? sceneGapMs(s) : questionPostSpeechVisualMs(s);
+      const blockEnd = acc + pre + dur + tail;
+      if (ms < blockEnd || i === scenes.length - 1) {
+        return seekWithinScene(i, ms - acc - pre);
+      }
+      acc = blockEnd;
     }
     seekToScene(scenes.length - 1);
   }
