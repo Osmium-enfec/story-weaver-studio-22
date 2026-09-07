@@ -3485,8 +3485,9 @@ function ComposePage() {
             );
       if (idxByContent >= 0) {
         nextScenes = existingScenes.map((s, i) =>
-          i === idxByContent ? { ...durableScene, id: s.id } : s,
+          i === idxByContent ? durableScene : s,
         );
+
       } else {
         nextScenes = [...existingScenes, durableScene];
       }
