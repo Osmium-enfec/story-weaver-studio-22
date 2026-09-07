@@ -1498,7 +1498,8 @@ export function VideoPlayer({
     if (s?.kind !== "question" || !s.questionIntroAudioUrl) return;
     const a = audioRef.current;
     if (!a) return;
-    a.currentTime = (scenes[index]?.audioClipStartMs ?? 0) / 1000;
+    a.currentTime =
+      ((scenes[index]?.audioClipStartMs ?? 0) + pendingSceneSeekMs(index)) / 1000;
     void a.play().catch(() => {});
   }, [questionMainReady, playing, masterMode, index, scenes]);
 
