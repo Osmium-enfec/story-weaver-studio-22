@@ -414,6 +414,15 @@ function ReviewPage() {
               </option>
             ))}
           </select>
+          <label className="ml-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={onlyMyReviews}
+              onChange={(e) => setOnlyMyReviews(e.target.checked)}
+              className="rounded border"
+            />
+            Only parts waiting for my review
+          </label>
           {loading && (
             <Loader2 size={16} className="animate-spin text-muted-foreground" />
           )}
