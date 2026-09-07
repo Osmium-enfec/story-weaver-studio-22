@@ -145,6 +145,19 @@ export const Route = createFileRoute("/_authenticated/compose")({
   component: ComposePage,
 });
 
+/**
+ * True when a compose scene holds real work (not a Script-generated stub).
+ * Stubs are minted with an empty audio url and zero duration.
+ */
+function composeSceneHasSavedWork(scene: Scene): boolean {
+  if (scene.audioUrl && (scene.durationMs ?? 0) > 0) return true;
+  if (scene.mediaUrl) return true;
+  if ((scene.elements?.length ?? 0) > 0) return true;
+  if (scene.code?.trim()) return true;
+  return false;
+}
+
+
 function ComposePage() {
   const { project: projectId, part: partFromSearch } = Route.useSearch();
   const qc = useQueryClient();
