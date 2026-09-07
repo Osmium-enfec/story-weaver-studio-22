@@ -62,6 +62,8 @@ import {
   alignScriptAndComposeScenes,
   composeStubFromScriptScene,
   composeIdFromScriptSceneId,
+  newComposeSceneId,
+  scriptSceneIdForCompose,
   sceneCompletionProgress,
   partSceneCompletionList,
   composeModeForPartScriptType,
