@@ -193,9 +193,13 @@ function ComposePage() {
     return parts.filter((part) => {
       if (myUserId && part.assignedUserId === myUserId) return true;
       if (myEmail && part.assignedUserEmail?.trim().toLowerCase() === myEmail) return true;
+      // Episode reviewers can open (read-only) the parts they review.
+      if (myUserId && part.reviewerUserId === myUserId) return true;
+      if (myEmail && part.reviewerUserEmail?.trim().toLowerCase() === myEmail) return true;
       return false;
     });
   }, [project, isAdmin, myUserId, myEmail]);
+
 
   const [draft, setDraft] = useState<ComposeDraft>(emptyComposeDraft);
   const [codeDraft, setCodeDraft] = useState<ComposeCodeDraft>(emptyComposeCodeDraft);
