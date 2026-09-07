@@ -1498,7 +1498,8 @@ export function VideoPlayer({
     if (s?.kind !== "question" || !s.questionIntroAudioUrl) return;
     const a = audioRef.current;
     if (!a) return;
-    a.currentTime = (scenes[index]?.audioClipStartMs ?? 0) / 1000;
+    a.currentTime =
+      ((scenes[index]?.audioClipStartMs ?? 0) + pendingSceneSeekMs(index)) / 1000;
     void a.play().catch(() => {});
   }, [questionMainReady, playing, masterMode, index, scenes]);
 
@@ -1722,20 +1723,29 @@ export function VideoPlayer({
   // ============ PER-SCENE MODE (no master): reload audio per scene ============
   const clipStartMs = scenes[index]?.audioClipStartMs ?? 0;
   const recordingClockRef = useRef({ wall: 0, ms: 0 });
+  /** Scrub target inside the current scene (per-scene preview mode). */
+  const sceneSeekRef = useRef<{ index: number; ms: number }>({ index: -1, ms: 0 });
+
+  /** Offset (ms) playback should start from inside scene `i`. */
+  function pendingSceneSeekMs(i: number): number {
+    return sceneSeekRef.current.index === i ? Math.max(0, sceneSeekRef.current.ms) : 0;
+  }
 
   useEffect(() => {
     if (masterMode) return;
-    setProgress(0);
-    setElapsedSpeechMs(0);
-    recordingClockRef.current = { wall: performance.now(), ms: 0 };
+    const startMs = pendingSceneSeekMs(index);
+    const s = scenes[index];
+    const sceneMs = Math.max(1, revealSpeechDurationMs(s ?? {}) || s?.durationMs || 1);
+    setProgress(Math.min(1, startMs / sceneMs));
+    setElapsedSpeechMs(startMs);
+    recordingClockRef.current = { wall: performance.now(), ms: startMs };
     const a = audioRef.current;
     if (!a) return;
-    const s = scenes[index];
     if (s?.kind === "recording") {
       a.pause();
       return;
     }
-    a.currentTime = clipStartMs / 1000;
+    a.currentTime = (clipStartMs + startMs) / 1000;
     const waitForIntro = questionNeedsIntroGate(s) && !questionMainReady;
     if (playing && !waitForIntro) a.play().catch(() => {});
     else a.pause();
@@ -1888,6 +1898,8 @@ export function VideoPlayer({
       const playThroughMs = Math.max(speechDurMs, audioNaturalMs);
       const clamped = Math.min(Math.max(0, elapsed), playThroughMs);
       setElapsedSpeechMs(clamped);
+      // Remember where we are so pause/resume doesn't jump back to a scrub point.
+      sceneSeekRef.current = { index, ms: clamped };
       const durSec = playThroughMs / 1000;
       if (durSec > 0) {
         setProgress(Math.min(1, clamped / (durSec * 1000)));
@@ -2027,6 +2039,39 @@ export function VideoPlayer({
     }
   }, [playing, currentMs, totalMs, bgmConfig, bgmMuteRanges]);
 
+  /** Per-scene mode: jump to `offsetMs` inside scene `i` (questions included). */
+  function seekWithinScene(i: number, offsetMs: number) {
+    const s = scenes[i] ?? {};
+    const sceneMs = Math.max(1, revealSpeechDurationMs(s) || s.durationMs || 1);
+    const clamped = Math.max(0, Math.min(sceneMs - 20, offsetMs));
+    clearPerSceneTransitionTimers();
+    clearMarkHold();
+    setPerSceneTransition(null);
+    sceneSeekRef.current = { index: i, ms: clamped };
+    // Scrubbing past the "here comes a question" bumper resumes the main narration.
+    setQuestionSeqMs(0);
+    introAudioRef.current?.pause();
+    setQuestionMainReady(true);
+    setIndex(i);
+    setProgress(Math.min(1, clamped / sceneMs));
+    setElapsedSpeechMs(clamped);
+    recordingClockRef.current = { wall: performance.now(), ms: clamped };
+    const a = audioRef.current;
+    if (a) {
+      try {
+        if (s.kind === "recording") {
+          const src = recordingAudioSourceTimeSec(s, clamped);
+          if (src != null) a.currentTime = src;
+        } else {
+          a.currentTime = ((s.audioClipStartMs ?? 0) + clamped) / 1000;
+        }
+      } catch {
+        /* ignore seek errors while metadata loads */
+      }
+    }
+    setPlaying(true);
+  }
+
   function seekToMs(ms: number) {
     if (masterMode && audioRef.current) {
       const clamped = Math.max(0, Math.min(totalMs - 10, ms));
@@ -2036,12 +2081,19 @@ export function VideoPlayer({
       setPlaying(true);
       return;
     }
-    // Per-scene fallback: find scene at ms.
+    // Per-scene mode: walk the same layout the progress bar uses
+    // (question intro + narration + trailing gap) and scrub inside the scene.
     let acc = 0;
     for (let i = 0; i < scenes.length; i++) {
-      const d = scenes[i].durationMs || 0;
-      if (ms < acc + d) return seekToScene(i);
-      acc += d;
+      const s = scenes[i] ?? {};
+      const pre = s.kind === "question" ? questionPreQuestionMs(s) : 0;
+      const dur = s.durationMs || 0;
+      const tail = i < scenes.length - 1 ? sceneGapMs(s) : questionPostSpeechVisualMs(s);
+      const blockEnd = acc + pre + dur + tail;
+      if (ms < blockEnd || i === scenes.length - 1) {
+        return seekWithinScene(i, ms - acc - pre);
+      }
+      acc = blockEnd;
     }
     seekToScene(scenes.length - 1);
   }

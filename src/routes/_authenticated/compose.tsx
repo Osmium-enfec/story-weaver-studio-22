@@ -62,6 +62,8 @@ import {
   alignScriptAndComposeScenes,
   composeStubFromScriptScene,
   composeIdFromScriptSceneId,
+  newComposeSceneId,
+  scriptSceneIdForCompose,
   sceneCompletionProgress,
   partSceneCompletionList,
   composeModeForPartScriptType,
@@ -142,6 +144,19 @@ export const Route = createFileRoute("/_authenticated/compose")({
   head: () => ({ meta: [{ title: "Compose Scene — Div Studio" }] }),
   component: ComposePage,
 });
+
+/**
+ * True when a compose scene holds real work (not a Script-generated stub).
+ * Stubs are minted with an empty audio url and zero duration.
+ */
+function composeSceneHasSavedWork(scene: Scene): boolean {
+  if (scene.audioUrl && (scene.durationMs ?? 0) > 0) return true;
+  if (scene.mediaUrl) return true;
+  if ((scene.elements?.length ?? 0) > 0) return true;
+  if (scene.code?.trim()) return true;
+  return false;
+}
+
 
 function ComposePage() {
   const { project: projectId, part: partFromSearch } = Route.useSearch();
@@ -2357,9 +2372,17 @@ function ComposePage() {
       return;
     }
 
-    const linkedComposeId =
-      composeIdFromScriptSceneId(scene.id) ??
-      `scene-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const existingComposeId = composeIdFromScriptSceneId(scene.id);
+    const linkedComposeId = existingComposeId ?? newComposeSceneId();
+    /**
+     * Always hand off through a linked row id. An unlinked row would keep
+     * spawning a fresh stub on the next Script↔Stitch align while the scene
+     * saved from here lands under a different id — the duplicate scenes.
+     */
+    const linkedRow: PartScriptScene = {
+      ...scene,
+      id: existingComposeId ? scene.id : scriptSceneIdForCompose(linkedComposeId),
+    };
 
     // Ensure Script plan has this row's latest type before handoff saves/merges
     // (type-change → open can race React state).
@@ -2367,11 +2390,32 @@ function ComposePage() {
       ...partScriptPlan,
       scenes: partScriptPlan.scenes.some((s) => s.id === scene.id)
         ? partScriptPlan.scenes.map((s) =>
-            s.id === scene.id ? { ...s, ...scene } : s,
+            s.id === scene.id ? { ...s, ...linkedRow } : s,
           )
-        : [...partScriptPlan.scenes, scene],
+        : [...partScriptPlan.scenes, linkedRow],
     };
     setPartScriptPlan(planForHandoff);
+
+    /**
+     * A scene already built in compose wins over the Script row: rebuilding it
+     * from the plan would throw away everything edited on the compose tabs
+     * (typing speed, beats, crops, timings) the next time it's opened.
+     */
+    const savedScene = activeComposeScenes.find((s) => s.id === linkedComposeId);
+    if (savedScene && composeSceneHasSavedWork(savedScene)) {
+      const savedMode = sceneSourceMode(savedScene);
+      handleEditScene(savedScene, activeComposeScenes.indexOf(savedScene));
+      if (!isRecordingLikeMode(savedMode)) {
+        setOpenSteps(
+          savedMode === "upload"
+            ? ["image", "crop", "audio", "preview", "save"]
+            : ["setup", "audio", "preview", "save"],
+        );
+      }
+      setShowPreview(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     switchSourceMode(mode);
     setEditingSceneId(linkedComposeId);
