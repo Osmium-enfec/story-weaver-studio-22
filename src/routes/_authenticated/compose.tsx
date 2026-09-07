@@ -3467,16 +3467,30 @@ function ComposePage() {
               durableScene.elements?.[0]?.mediaUrl;
 
       let nextScenes: Scene[];
-      if (editingSceneId != null) {
-        const idx = existingScenes.findIndex((s) => s.id === editingSceneId);
-        if (idx >= 0) {
-          nextScenes = existingScenes.map((s, i) => (i === idx ? durableScene : s));
-        } else {
-          nextScenes = [...existingScenes, durableScene];
-        }
+      const idxById =
+        editingSceneId != null
+          ? existingScenes.findIndex((s) => s.id === editingSceneId)
+          : -1;
+      // Fallback identity: same id, or an existing scene with the same kind and
+      // audio track. Prevents an unbound draft from being appended as a copy.
+      const idxByContent =
+        idxById >= 0
+          ? idxById
+          : existingScenes.findIndex(
+              (s) =>
+                s.id === durableScene.id ||
+                (!!durableScene.audioUrl &&
+                  s.audioUrl === durableScene.audioUrl &&
+                  (s.kind ?? "") === (durableScene.kind ?? "")),
+            );
+      if (idxByContent >= 0) {
+        nextScenes = existingScenes.map((s, i) =>
+          i === idxByContent ? { ...durableScene, id: s.id } : s,
+        );
       } else {
         nextScenes = [...existingScenes, durableScene];
       }
+
 
       const now = new Date().toISOString();
       // Merge script metadata on the server payload only — don't rewrite Script UI state mid-edit.
