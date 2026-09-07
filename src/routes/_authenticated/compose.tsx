@@ -2258,12 +2258,19 @@ function ComposePage() {
       if (!partFromSearch && (isAdmin || accessibleParts.length !== 1)) {
         setSelectedPartId(null);
       }
-      resetSceneDraft();
-    } else {
-      setEditingSceneId(null);
     }
+    // Cancel any queued autosave and clear the loaded scene form. Leaving the
+    // draft mounted after the part is saved detached it from its scene id, and
+    // the next autosave appended it again as a duplicate scene.
+    if (composeAutosaveTimerRef.current) {
+      clearTimeout(composeAutosaveTimerRef.current);
+      composeAutosaveTimerRef.current = null;
+    }
+    lastComposeAutosaveKeyRef.current = "";
+    resetSceneDraft();
     setStitchActive(false);
   }
+
 
   async function handleGoToScriptScene(scene: PartScriptScene) {
     if (scene.type === "unset") {
@@ -3460,16 +3467,31 @@ function ComposePage() {
               durableScene.elements?.[0]?.mediaUrl;
 
       let nextScenes: Scene[];
-      if (editingSceneId != null) {
-        const idx = existingScenes.findIndex((s) => s.id === editingSceneId);
-        if (idx >= 0) {
-          nextScenes = existingScenes.map((s, i) => (i === idx ? durableScene : s));
-        } else {
-          nextScenes = [...existingScenes, durableScene];
-        }
+      const idxById =
+        editingSceneId != null
+          ? existingScenes.findIndex((s) => s.id === editingSceneId)
+          : -1;
+      // Fallback identity: same id, or an existing scene with the same kind and
+      // audio track. Prevents an unbound draft from being appended as a copy.
+      const idxByContent =
+        idxById >= 0
+          ? idxById
+          : existingScenes.findIndex(
+              (s) =>
+                s.id === durableScene.id ||
+                (!!durableScene.audioUrl &&
+                  s.audioUrl === durableScene.audioUrl &&
+                  (s.kind ?? "") === (durableScene.kind ?? "")),
+            );
+      if (idxByContent >= 0) {
+        nextScenes = existingScenes.map((s, i) =>
+          i === idxByContent ? durableScene : s,
+        );
+
       } else {
         nextScenes = [...existingScenes, durableScene];
       }
+
 
       const now = new Date().toISOString();
       // Merge script metadata on the server payload only — don't rewrite Script UI state mid-edit.
