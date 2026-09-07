@@ -438,6 +438,31 @@ export async function pgAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
+export async function pgAssignEpisodeReviewer(
+  episodeId: string,
+  reviewer: { userId: string; email: string } | null,
+): Promise<LocalProjectRow> {
+  const res = await pgQuery<Record<string, unknown>>(
+    `SELECT ${PROJECT_SELECT} FROM projects WHERE id = $1`,
+    [episodeId],
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Episode not found.");
+  const project = rowToProject(row);
+  const now = new Date().toISOString();
+  const parts = getProjectParts(project).map((p) => ({
+    ...p,
+    reviewerUserId: reviewer?.userId ?? null,
+    reviewerUserEmail: reviewer?.email ?? null,
+    updated_at: now,
+  }));
+  await pgQuery(
+    `UPDATE projects SET parts = $1::jsonb, updated_at = $2::timestamptz WHERE id = $3`,
+    [JSON.stringify(parts), now, episodeId],
+  );
+  return { ...project, parts, updated_at: now };
+}
+
 /**
  * Admin-only data pack import: the pack fully REPLACES the matching part
  * (same id, title, or part number) — all previously saved scenes of that part

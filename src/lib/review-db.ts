@@ -22,6 +22,10 @@ export interface PartReviewRow {
   review_doc_url: string;
   review_doc_name: string;
   rendered_uploaded: string;
+  /** '' | 'ready_for_review' | 'reviewed' | 'redo' */
+  workflow_status: string;
+  workflow_by_email: string;
+  workflow_at: string;
   updated_by_email: string | null;
   updated_at: string;
 }
@@ -39,6 +43,7 @@ export interface PartReviewInput {
   review_doc_url?: string;
   review_doc_name?: string;
   rendered_uploaded?: string;
+  workflow_status?: string;
   updated_by_email?: string | null;
 }
 
@@ -64,6 +69,9 @@ function getDb(): Database.Database {
       review_doc_url TEXT NOT NULL DEFAULT '',
       review_doc_name TEXT NOT NULL DEFAULT '',
       rendered_uploaded TEXT NOT NULL DEFAULT '',
+      workflow_status TEXT NOT NULL DEFAULT '',
+      workflow_by_email TEXT NOT NULL DEFAULT '',
+      workflow_at TEXT NOT NULL DEFAULT '',
       updated_by_email TEXT,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (project_id, part_id)
@@ -71,7 +79,13 @@ function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS part_reviews_course_idx
       ON part_reviews (course_id);
   `);
-  for (const col of ["review_doc_url", "review_doc_name"]) {
+  for (const col of [
+    "review_doc_url",
+    "review_doc_name",
+    "workflow_status",
+    "workflow_by_email",
+    "workflow_at",
+  ]) {
     try {
       db.exec(
         `ALTER TABLE part_reviews ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`,
@@ -97,6 +111,9 @@ export function rowToPartReview(row: Record<string, unknown>): PartReviewRow {
     review_doc_url: String(row.review_doc_url ?? ""),
     review_doc_name: String(row.review_doc_name ?? ""),
     rendered_uploaded: String(row.rendered_uploaded ?? ""),
+    workflow_status: String(row.workflow_status ?? ""),
+    workflow_by_email: String(row.workflow_by_email ?? ""),
+    workflow_at: String(row.workflow_at ?? ""),
     updated_by_email:
       row.updated_by_email != null ? String(row.updated_by_email) : null,
     updated_at: String(row.updated_at ?? ""),
@@ -128,6 +145,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
         review_doc_url: "",
         review_doc_name: "",
         rendered_uploaded: "",
+        workflow_status: "",
       };
   const merged = {
     script_status: input.script_status ?? base.script_status,
@@ -139,6 +157,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
     review_doc_url: input.review_doc_url ?? base.review_doc_url,
     review_doc_name: input.review_doc_name ?? base.review_doc_name,
     rendered_uploaded: input.rendered_uploaded ?? base.rendered_uploaded,
+    workflow_status: input.workflow_status ?? base.workflow_status,
   };
   conn
     .prepare(
@@ -146,8 +165,9 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          project_id, part_id, course_id, script_status, recording_status,
          review_status, issues_found, correction_status, assignee_email,
          review_doc_url, review_doc_name,
-         rendered_uploaded, updated_by_email, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
+         updated_by_email, updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT (project_id, part_id) DO UPDATE SET
          course_id = excluded.course_id,
          script_status = excluded.script_status,
@@ -159,6 +179,9 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          review_doc_url = excluded.review_doc_url,
          review_doc_name = excluded.review_doc_name,
          rendered_uploaded = excluded.rendered_uploaded,
+         workflow_status = excluded.workflow_status,
+         workflow_by_email = excluded.workflow_by_email,
+         workflow_at = excluded.workflow_at,
          updated_by_email = excluded.updated_by_email,
          updated_at = excluded.updated_at`,
     )
@@ -175,6 +198,13 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       merged.review_doc_url,
       merged.review_doc_name,
       merged.rendered_uploaded,
+      merged.workflow_status,
+      input.workflow_status !== undefined
+        ? (input.updated_by_email ?? "")
+        : (existing ? rowToPartReview(existing).workflow_by_email : ""),
+      input.workflow_status !== undefined
+        ? now
+        : (existing ? rowToPartReview(existing).workflow_at : ""),
       input.updated_by_email ?? null,
       now,
     );
@@ -192,6 +222,18 @@ function partAssigneeFromRawParts(parts: unknown, partId: string): string | null
     const rec = p as Record<string, unknown>;
     if (String(rec.id ?? "") !== partId) continue;
     const email = rec.assignedUserEmail ?? rec.assigned_user_email;
+    return email ? String(email) : null;
+  }
+  return null;
+}
+
+function partReviewerFromRawParts(parts: unknown, partId: string): string | null {
+  if (!Array.isArray(parts)) return null;
+  for (const p of parts) {
+    if (!p || typeof p !== "object") continue;
+    const rec = p as Record<string, unknown>;
+    if (String(rec.id ?? "") !== partId) continue;
+    const email = rec.reviewerUserEmail ?? rec.reviewer_user_email;
     return email ? String(email) : null;
   }
   return null;
@@ -258,4 +300,24 @@ export async function partComposerEmail(
   return sqlitePartAssignee(projectId, partId);
 }
 
-export { partAssigneeFromRawParts };
+/** Email of the reviewer assigned to this part's episode (or null). */
+export async function partReviewerEmail(
+  projectId: string,
+  partId: string,
+): Promise<string | null> {
+  if (usePostgres()) {
+    const { pgPartReviewerEmail } = await import("@/lib/pg-review-db");
+    return pgPartReviewerEmail(projectId, partId);
+  }
+  const row = getDb()
+    .prepare(`SELECT parts FROM projects WHERE id = ?`)
+    .get(projectId) as { parts?: string } | undefined;
+  if (!row) return null;
+  try {
+    return partReviewerFromRawParts(JSON.parse(row.parts ?? "[]"), partId);
+  } catch {
+    return null;
+  }
+}
+
+export { partAssigneeFromRawParts, partReviewerFromRawParts };

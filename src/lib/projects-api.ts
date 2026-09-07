@@ -130,6 +130,17 @@ export function apiAssignPart(
   });
 }
 
+export function apiAssignEpisodeReviewer(
+  episodeId: string,
+  reviewerUserId: string | null,
+): Promise<ProjectRecord> {
+  return projectsFetch({
+    action: "assignEpisodeReviewer",
+    id: episodeId,
+    reviewer_user_id: reviewerUserId,
+  });
+}
+
 export function apiDeletePart(
   episodeId: string,
   partId: string,

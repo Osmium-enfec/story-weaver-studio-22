@@ -5,6 +5,7 @@ import {
   getReview,
   listCourseReviews,
   partComposerEmail,
+  partReviewerEmail,
   upsertReview,
 } from "@/lib/review-db";
 import { isAdminUser } from "@/lib/admin";
@@ -34,6 +35,9 @@ const Body = z.discriminatedUnion("action", [
     review_doc_url: z.string().max(2000).optional(),
     review_doc_name: z.string().max(300).optional(),
     rendered_uploaded: STATUS.optional(),
+    workflow_status: z
+      .enum(["", "ready_for_review", "reviewed", "redo"])
+      .optional(),
   }),
 ]);
 
@@ -97,12 +101,17 @@ export const Route = createFileRoute("/api/reviews")({
           const composerEmail = actor.isAdmin
             ? null
             : await partComposerEmail(data.projectId, data.partId);
+          const reviewerEmail = actor.isAdmin
+            ? null
+            : await partReviewerEmail(data.projectId, data.partId);
           const existing = actor.isAdmin
             ? null
             : await getReview(data.projectId, data.partId);
           const ctx = {
             composerEmail,
             reviewAssigneeEmail: existing?.assignee_email ?? null,
+            reviewerEmail,
+            nextWorkflowStatus: data.workflow_status ?? null,
           };
           const denied = touched.filter(
             (f) => !canEditReviewField(f, actor, ctx),
@@ -127,6 +136,7 @@ export const Route = createFileRoute("/api/reviews")({
             review_doc_url: data.review_doc_url,
             review_doc_name: data.review_doc_name,
             rendered_uploaded: data.rendered_uploaded,
+            workflow_status: data.workflow_status,
             updated_by_email: user.email,
           });
           return jsonResponse(row);

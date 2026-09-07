@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowLeft,
@@ -20,6 +20,9 @@ import {
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import { apiPersistAsset } from "@/lib/compose-api";
 import { apiFreezeBundle } from "@/lib/render-bundles-api";
+import { apiListReviews, apiSaveReview } from "@/lib/reviews-api";
+import { ReviewStageBadge } from "@/components/ReviewStageBadge";
+import { normalizeWorkflowStatus } from "@/lib/review-workflow";
 import { apiGetProject, apiSaveProject } from "@/lib/projects-api";
 
 import { startNativeExportJob } from "@/lib/native-export-client";
@@ -542,6 +545,68 @@ export function ComposeProjectPanel({
     }
   }
 
+  const courseIdForReview = project?.course_id ?? null;
+  const { data: reviewRows, refetch: refetchReviews } = useQuery({
+    queryKey: ["reviews", courseIdForReview],
+    queryFn: () => apiListReviews(courseIdForReview!),
+    enabled: !!courseIdForReview,
+    staleTime: 15_000,
+  });
+  const reviewRow =
+    reviewRows?.find(
+      (r) => r.project_id === projectId && r.part_id === selectedPartId,
+    ) ?? null;
+  const workflowStatus = normalizeWorkflowStatus(reviewRow?.workflow_status);
+  const partSaved =
+    !!selectedPartId && savedParts.some((p) => p.id === selectedPartId);
+  const iAmAssignee =
+    !!myEmail &&
+    selectedPart?.assignedUserEmail?.trim().toLowerCase() === myEmail;
+  const iAmReviewer =
+    !!myEmail &&
+    selectedPart?.reviewerUserEmail?.trim().toLowerCase() === myEmail;
+  const [issuesDraft, setIssuesDraft] = useState("");
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+
+  useEffect(() => {
+    setIssuesDraft(reviewRow?.issues_found ?? "");
+  }, [reviewRow?.project_id, reviewRow?.part_id, reviewRow?.issues_found]);
+
+  async function setWorkflow(
+    next: "ready_for_review" | "reviewed" | "redo",
+    withIssues?: string,
+  ) {
+    if (!projectId || !selectedPartId) return;
+    setWorkflowBusy(true);
+    setReadyMsg(null);
+    try {
+      await apiSaveReview({
+        projectId,
+        partId: selectedPartId,
+        courseId: courseIdForReview,
+        workflow_status: next,
+        ...(withIssues !== undefined ? { issues_found: withIssues } : {}),
+      });
+      await refetchReviews();
+      setReadyMsg({
+        ok: true,
+        text:
+          next === "ready_for_review"
+            ? "Sent to the reviewer."
+            : next === "reviewed"
+              ? "Marked as reviewed — ready for download."
+              : "Sent back for redo.",
+      });
+    } catch (e) {
+      setReadyMsg({
+        ok: false,
+        text: e instanceof Error ? e.message : "Could not update review status",
+      });
+    } finally {
+      setWorkflowBusy(false);
+    }
+  }
+
   async function handleReadyForHd() {
     if (!projectId || !selectedPartId) return;
     setReadyBusy(true);
@@ -889,7 +954,84 @@ export function ComposeProjectPanel({
             </button>
           )}
 
-          {selectedPartId && savedParts.some((p) => p.id === selectedPartId) && (
+          {partSaved && (iAmAssignee || iAmReviewer || isAdmin) && (
+            <div className="space-y-1.5 rounded-lg border bg-card px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">Review</span>
+                <ReviewStageBadge
+                  status={workflowStatus}
+                  by={reviewRow?.workflow_by_email}
+                  at={reviewRow?.workflow_at}
+                />
+              </div>
+              {selectedPart?.reviewerUserEmail && (
+                <p className="text-[10px] text-muted-foreground">
+                  Reviewer: {selectedPart.reviewerUserEmail}
+                </p>
+              )}
+              {(iAmAssignee || isAdmin) && workflowStatus !== "reviewed" && (
+                <button
+                  type="button"
+                  disabled={workflowBusy || savingPart || saving || !!stitched}
+                  onClick={() => void setWorkflow("ready_for_review")}
+                  title={
+                    stitched
+                      ? "Save/update the part first, then send it for review"
+                      : "Send this saved part to the reviewer"
+                  }
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-500/15 disabled:opacity-50"
+                >
+                  {workflowBusy ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <CloudUpload size={14} />
+                  )}
+                  Ready for review
+                </button>
+              )}
+              {(iAmReviewer || isAdmin) && (
+                <div className="space-y-1.5">
+                  <textarea
+                    value={issuesDraft}
+                    onChange={(e) => setIssuesDraft(e.target.value)}
+                    rows={3}
+                    placeholder="What needs fixing? (shows in the Issues column)"
+                    className="w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+                  />
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      disabled={workflowBusy}
+                      onClick={() => void setWorkflow("reviewed", issuesDraft)}
+                      className="flex-1 rounded-md border border-emerald-600/40 bg-emerald-500/10 px-2 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-500/15 disabled:opacity-50"
+                    >
+                      Reviewed
+                    </button>
+                    <button
+                      type="button"
+                      disabled={workflowBusy || !issuesDraft.trim()}
+                      onClick={() => void setWorkflow("redo", issuesDraft)}
+                      title="Describe the issue first"
+                      className="flex-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/15 disabled:opacity-50"
+                    >
+                      Needs redo
+                    </button>
+                  </div>
+                </div>
+              )}
+              {readyMsg && (
+                <p
+                  className={`whitespace-pre-line text-xs ${
+                    readyMsg.ok ? "text-emerald-700" : "text-destructive"
+                  }`}
+                >
+                  {readyMsg.text}
+                </p>
+              )}
+            </div>
+          )}
+
+          {isAdmin && partSaved && workflowStatus === "reviewed" && (
             <div className="space-y-1">
               <button
                 type="button"

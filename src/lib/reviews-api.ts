@@ -13,6 +13,9 @@ export type PartReview = {
   review_doc_url: string;
   review_doc_name: string;
   rendered_uploaded: string;
+  workflow_status: string;
+  workflow_by_email: string;
+  workflow_at: string;
   updated_by_email: string | null;
   updated_at: string;
 };
@@ -30,6 +33,7 @@ export type PartReviewPatch = {
   review_doc_url?: string;
   review_doc_name?: string;
   rendered_uploaded?: string;
+  workflow_status?: string;
 };
 
 async function reviewsFetch<T>(body: Record<string, unknown>): Promise<T> {

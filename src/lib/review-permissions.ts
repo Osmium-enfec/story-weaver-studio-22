@@ -14,7 +14,8 @@ export type ReviewField =
   | "assignee_email"
   | "correction_status"
   | "review_doc"
-  | "rendered_uploaded";
+  | "rendered_uploaded"
+  | "workflow_status";
 
 export const REVIEW_FIELDS: ReviewField[] = [
   "script_status",
@@ -25,6 +26,7 @@ export const REVIEW_FIELDS: ReviewField[] = [
   "correction_status",
   "review_doc",
   "rendered_uploaded",
+  "workflow_status",
 ];
 
 function norm(email: string | null | undefined): string {
@@ -52,6 +54,10 @@ export type ReviewRowContext = {
   composerEmail: string | null;
   /** Person assigned to fix / follow up the review. */
   reviewAssigneeEmail: string | null;
+  /** Reviewer assigned to this part's episode. */
+  reviewerEmail?: string | null;
+  /** Value the caller wants to write into workflow_status. */
+  nextWorkflowStatus?: string | null;
 };
 
 export function canEditReviewField(
@@ -73,8 +79,10 @@ export function canEditReviewField(
     case "script_status":
     case "recording_status":
       return me.length > 0 && me === composer;
-    case "review_status":
     case "issues_found":
+      if (me.length > 0 && me === norm(row.reviewerEmail)) return true;
+      return granted ? false : isReviewerEmail(me);
+    case "review_status":
     case "assignee_email":
     case "review_doc":
       return granted ? false : isReviewerEmail(me);
@@ -82,6 +90,17 @@ export function canEditReviewField(
       return me.length > 0 && (me === composer || me === reviewAssignee);
     case "rendered_uploaded":
       return false;
+    case "workflow_status": {
+      const reviewer = norm(row.reviewerEmail);
+      const next = (row.nextWorkflowStatus ?? "").trim();
+      if (next === "ready_for_review") {
+        return me.length > 0 && me === composer;
+      }
+      if (next === "reviewed" || next === "redo") {
+        return me.length > 0 && me === reviewer;
+      }
+      return false;
+    }
   }
 
 }

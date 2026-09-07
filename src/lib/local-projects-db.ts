@@ -567,6 +567,29 @@ function sqliteAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
+function sqliteAssignEpisodeReviewer(
+  episodeId: string,
+  reviewer: { userId: string; email: string } | null,
+): LocalProjectRow {
+  const conn = getDb();
+  const row = conn
+    .prepare("SELECT * FROM projects WHERE id = ?")
+    .get(episodeId) as Record<string, unknown> | undefined;
+  if (!row) throw new Error("Episode not found.");
+  const project = rowToProject(row);
+  const now = new Date().toISOString();
+  const parts = getProjectParts(project).map((p) => ({
+    ...p,
+    reviewerUserId: reviewer?.userId ?? null,
+    reviewerUserEmail: reviewer?.email ?? null,
+    updated_at: now,
+  }));
+  conn
+    .prepare(`UPDATE projects SET parts = ?, updated_at = ? WHERE id = ?`)
+    .run(JSON.stringify(parts), now, episodeId);
+  return { ...project, parts, updated_at: now };
+}
+
 /** Admin-only: remove a part (and its scenes) from an episode. */
 function sqliteDeletePart(episodeId: string, partId: string): { partCount: number } {
   const conn = getDb();
@@ -875,6 +898,17 @@ export async function localAssignPart(...args: any[]): Promise<any> {
     return pgAssignPart(...(args as [any, any, any]));
   }
   return sqliteAssignPart(...(args as [any, any, any]));
+}
+
+export async function localAssignEpisodeReviewer(
+  episodeId: string,
+  reviewer: { userId: string; email: string } | null,
+): Promise<any> {
+  if (usePostgres()) {
+    const { pgAssignEpisodeReviewer } = await import("@/lib/pg-projects-db");
+    return pgAssignEpisodeReviewer(episodeId, reviewer);
+  }
+  return sqliteAssignEpisodeReviewer(episodeId, reviewer);
 }
 
 export async function localImportPart(...args: any[]): Promise<any> {

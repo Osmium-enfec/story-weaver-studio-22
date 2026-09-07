@@ -2,6 +2,7 @@ import { pgQuery } from "@/lib/pg";
 import {
   rowToPartReview,
   partAssigneeFromRawParts,
+  partReviewerFromRawParts,
   type PartReviewRow,
   type PartReviewInput,
 } from "@/lib/review-db";
@@ -10,7 +11,11 @@ const COLS = `project_id, part_id, course_id, script_status, recording_status,
   review_status, issues_found, correction_status, assignee_email,
   COALESCE(review_doc_url,'') AS review_doc_url,
   COALESCE(review_doc_name,'') AS review_doc_name,
-  rendered_uploaded, updated_by_email, updated_at::text AS updated_at`;
+  rendered_uploaded,
+  COALESCE(workflow_status,'') AS workflow_status,
+  COALESCE(workflow_by_email,'') AS workflow_by_email,
+  COALESCE(workflow_at::text,'') AS workflow_at,
+  updated_by_email, updated_at::text AS updated_at`;
 
 let colsReady: Promise<void> | null = null;
 
@@ -23,6 +28,15 @@ async function ensureDocColumns(): Promise<void> {
       );
       await pgQuery(
         `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS review_doc_name TEXT NOT NULL DEFAULT ''`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS workflow_status TEXT NOT NULL DEFAULT ''`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS workflow_by_email TEXT NOT NULL DEFAULT ''`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS workflow_at TIMESTAMPTZ`,
       );
     })().catch((e) => {
       colsReady = null;
@@ -55,11 +69,16 @@ export async function pgUpsertReview(
        project_id, part_id, course_id, script_status, recording_status,
        review_status, issues_found, correction_status, assignee_email,
        review_doc_url, review_doc_name,
-       rendered_uploaded, updated_by_email, updated_at
+       rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
+       updated_by_email, updated_at
      ) VALUES ($1,$2,$3,
        COALESCE($4,''),COALESCE($5,''),COALESCE($6,''),COALESCE($7,''),
        COALESCE($8,''),COALESCE($9,''),COALESCE($13,''),COALESCE($14,''),
-       COALESCE($10,''),$11,$12::timestamptz)
+       COALESCE($10,''),
+       COALESCE($15,''),
+       CASE WHEN $15 IS NULL THEN '' ELSE COALESCE($11,'') END,
+       CASE WHEN $15 IS NULL THEN NULL ELSE $12::timestamptz END,
+       $11,$12::timestamptz)
      ON CONFLICT (project_id, part_id) DO UPDATE SET
        course_id = EXCLUDED.course_id,
        script_status = COALESCE($4, part_reviews.script_status),
@@ -71,6 +90,11 @@ export async function pgUpsertReview(
        review_doc_url = COALESCE($13, part_reviews.review_doc_url),
        review_doc_name = COALESCE($14, part_reviews.review_doc_name),
        rendered_uploaded = COALESCE($10, part_reviews.rendered_uploaded),
+       workflow_status = COALESCE($15, part_reviews.workflow_status),
+       workflow_by_email = CASE WHEN $15 IS NULL
+         THEN part_reviews.workflow_by_email ELSE COALESCE($11,'') END,
+       workflow_at = CASE WHEN $15 IS NULL
+         THEN part_reviews.workflow_at ELSE $12::timestamptz END,
        updated_by_email = EXCLUDED.updated_by_email,
        updated_at = EXCLUDED.updated_at`,
     [
@@ -88,6 +112,7 @@ export async function pgUpsertReview(
       now,
       input.review_doc_url ?? null,
       input.review_doc_name ?? null,
+      input.workflow_status ?? null,
     ],
   );
   const saved = await pgGetReview(input.project_id, input.part_id);
@@ -115,6 +140,19 @@ function safeParse(value: string): unknown {
   } catch {
     return [];
   }
+}
+
+export async function pgPartReviewerEmail(
+  projectId: string,
+  partId: string,
+): Promise<string | null> {
+  const res = await pgQuery<{ parts: unknown }>(
+    `SELECT parts FROM projects WHERE id = $1`,
+    [projectId],
+  );
+  const raw = res.rows[0]?.parts;
+  const parsed = typeof raw === "string" ? safeParse(raw) : raw;
+  return partReviewerFromRawParts(parsed, partId);
 }
 
 export async function pgGetReview(
