@@ -3,13 +3,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { apiGetCourse } from "@/lib/courses-api";
 import {
+  apiAssignEpisodeReviewer,
   apiGetProject,
   apiListProjects,
   apiSaveProject,
   type ProjectListItem,
 } from "@/lib/projects-api";
 import { NavBar } from "@/components/NavBar";
-import { WorkingOnLabel } from "@/components/AssignUserSelect";
+import {
+  AssignUserSelect,
+  WorkingOnLabel,
+} from "@/components/AssignUserSelect";
 import {
   ArrowLeft,
   Check,
@@ -309,6 +313,26 @@ function CourseDetailPage() {
                             : `${ep.scene_count} scenes`}
                         </div>
                         <WorkingOnLabel partEmails={ep.part_assignee_emails} />
+                        <AssignUserSelect
+                          valueUserId={
+                            ep.parts_summary?.find((p) => p.reviewer_user_id)
+                              ?.reviewer_user_id ?? null
+                          }
+                          valueEmail={
+                            ep.parts_summary?.find((p) => p.reviewer_user_email)
+                              ?.reviewer_user_email ?? null
+                          }
+                          label="Reviewer for this episode"
+                          onAssign={async (userId) => {
+                            await apiAssignEpisodeReviewer(ep.id, userId);
+                            await qc.invalidateQueries({
+                              queryKey: ["projects", "course", id],
+                            });
+                            await qc.invalidateQueries({
+                              queryKey: ["project", ep.id],
+                            });
+                          }}
+                        />
                         <button
                           type="button"
                           onClick={() =>
