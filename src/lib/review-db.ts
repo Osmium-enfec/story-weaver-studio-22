@@ -75,6 +75,7 @@ function getDb(): Database.Database {
       workflow_status TEXT NOT NULL DEFAULT '',
       workflow_by_email TEXT NOT NULL DEFAULT '',
       workflow_at TEXT NOT NULL DEFAULT '',
+      progress_status TEXT NOT NULL DEFAULT 'pending',
       updated_by_email TEXT,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (project_id, part_id)
@@ -89,6 +90,23 @@ function getDb(): Database.Database {
     "workflow_by_email",
     "workflow_at",
   ]) {
+    try {
+      db.exec(
+        `ALTER TABLE part_reviews ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`,
+      );
+    } catch {
+      /* column already exists */
+    }
+  }
+  try {
+    db.exec(
+      `ALTER TABLE part_reviews ADD COLUMN progress_status TEXT NOT NULL DEFAULT 'pending'`,
+    );
+  } catch {
+    /* column already exists */
+  }
+  void 0;
+  {
     try {
       db.exec(
         `ALTER TABLE part_reviews ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`,
