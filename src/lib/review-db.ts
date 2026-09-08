@@ -180,8 +180,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          review_status, issues_found, correction_status, assignee_email,
          review_doc_url, review_doc_name,
          rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
-         updated_by_email, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         progress_status, updated_by_email, updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT (project_id, part_id) DO UPDATE SET
          course_id = excluded.course_id,
          script_status = excluded.script_status,
@@ -196,6 +196,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          workflow_status = excluded.workflow_status,
          workflow_by_email = excluded.workflow_by_email,
          workflow_at = excluded.workflow_at,
+         progress_status = excluded.progress_status,
          updated_by_email = excluded.updated_by_email,
          updated_at = excluded.updated_at`,
     )
@@ -219,6 +220,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       input.workflow_status !== undefined
         ? now
         : (existing ? rowToPartReview(existing).workflow_at : ""),
+      merged.progress_status,
       input.updated_by_email ?? null,
       now,
     );
