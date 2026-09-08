@@ -105,16 +105,6 @@ function getDb(): Database.Database {
   } catch {
     /* column already exists */
   }
-  void 0;
-  {
-    try {
-      db.exec(
-        `ALTER TABLE part_reviews ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`,
-      );
-    } catch {
-      /* column already exists */
-    }
-  }
   return db;
 }
 
