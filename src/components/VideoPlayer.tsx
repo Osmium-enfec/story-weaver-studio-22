@@ -1277,6 +1277,7 @@ function SceneStage({
         background={background}
         transparentMap={transparentMap}
         contentOnly={contentOnly}
+        playing={playing}
       />
     );
   }
