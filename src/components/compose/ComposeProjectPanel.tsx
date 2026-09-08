@@ -168,6 +168,14 @@ export function ComposeProjectPanel({
   const visibleParts = useMemo(() => {
     if (isAdmin) return savedParts;
     const normEmail = myEmail?.trim().toLowerCase() ?? null;
+    // Reviewer is an episode-level role — reviewing any part grants read-only
+    // visibility of every part in the episode.
+    const isEpisodeReviewer = savedParts.some(
+      (p) =>
+        (myUserId && p.reviewerUserId === myUserId) ||
+        (normEmail && p.reviewerUserEmail?.trim().toLowerCase() === normEmail),
+    );
+    if (isEpisodeReviewer) return savedParts;
     return savedParts.filter((p) => {
       if (myUserId && p.assignedUserId && p.assignedUserId === myUserId) return true;
       if (normEmail && p.assignedUserEmail?.trim().toLowerCase() === normEmail) return true;
