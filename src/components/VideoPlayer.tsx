@@ -1967,6 +1967,8 @@ export function VideoPlayer({
     clearPerSceneTransitionTimers();
     clearMarkHold();
     setPerSceneTransition(null);
+    // Jumping scenes always starts the target scene from its beginning.
+    sceneSeekRef.current = { index: -1, ms: 0 };
     setIndex(i);
     setPlaying(true);
     if (masterMode && audioRef.current) {
@@ -1979,6 +1981,8 @@ export function VideoPlayer({
     clearPerSceneTransitionTimers();
     clearMarkHold();
     setPerSceneTransition(null);
+    // Replay starts scenes from the beginning, not the last scrub offset.
+    sceneSeekRef.current = { index: -1, ms: 0 };
     setIndex(0);
     setProgress(0);
     setVisualState(null);
