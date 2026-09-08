@@ -355,6 +355,7 @@ function ImageScene({
   background,
   transparentMap,
   contentOnly = false,
+  playing = false,
 }: {
   scene: Scene;
   progress: number;
@@ -362,6 +363,7 @@ function ImageScene({
   background: SceneBackground;
   transparentMap: Map<string, string>;
   contentOnly?: boolean;
+  playing?: boolean;
 }) {
   const t = progress;
   const customBg = background.kind !== "whiteboard";
