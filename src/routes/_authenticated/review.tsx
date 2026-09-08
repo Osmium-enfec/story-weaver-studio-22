@@ -137,6 +137,8 @@ function ReviewPage() {
   );
   const tableRef = useRef<HTMLDivElement | null>(null);
   const [onlyMyReviews, setOnlyMyReviews] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
   const myEmail = session?.user.email ?? "";
@@ -191,14 +193,27 @@ function ReviewPage() {
   }, [load]);
 
   useEffect(() => {
-    const t = setInterval(() => void load(true), POLL_MS);
+    const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void load(true);
+    }, POLL_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [courseId, onlyMyReviews]);
+
+  const pageCount = Math.max(1, Math.ceil(episodes.length / PAGE_SIZE));
+  const pagedEpisodes = useMemo(
+    () => episodes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [episodes, page],
+  );
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
     const me = myEmail.trim().toLowerCase();
-    for (const ep of episodes) {
+    for (const ep of pagedEpisodes) {
       let parts = [...(ep.parts_summary ?? [])].sort(partOrder);
       if (onlyMyReviews) {
         parts = parts.filter((p) => {
