@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+
+const PAGE_SIZE = 10;
 import { Loader2, Trash2 } from "lucide-react";
 import { apiAdminUsersOnly } from "@/lib/admin-api";
 import {
