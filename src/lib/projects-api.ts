@@ -85,11 +85,19 @@ async function projectsFetch<T>(
 
 export function apiListProjects(opts?: {
   courseId?: string | null;
+  /** Optional server-side paging: fetch only the rows a page shows. */
+  limit?: number;
+  offset?: number;
 }): Promise<ProjectListItem[]> {
+  const page = { limit: opts?.limit, offset: opts?.offset };
   if (opts && "courseId" in opts) {
-    return projectsFetch({ action: "list", course_id: opts.courseId ?? null });
+    return projectsFetch({
+      action: "list",
+      course_id: opts.courseId ?? null,
+      ...page,
+    });
   }
-  return projectsFetch({ action: "list" });
+  return projectsFetch({ action: "list", ...page });
 }
 
 /**

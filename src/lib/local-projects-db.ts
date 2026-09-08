@@ -442,9 +442,17 @@ function sqliteListProjects(
     asAdmin?: boolean;
     /** When true, omit episodes with no course (non-admin default). */
     requireCourse?: boolean;
+    /** Server-side paging (optional). */
+    limit?: number;
+    offset?: number;
   },
 ): LocalProjectListItem[] {
   const conn = getDb();
+  const paged = (items: LocalProjectListItem[]): LocalProjectListItem[] => {
+    if (!Number.isFinite(opts?.limit)) return items;
+    const off = Math.max(0, Number(opts?.offset ?? 0));
+    return items.slice(off, off + Math.max(1, Number(opts?.limit)));
+  };
   let rows: Record<string, unknown>[];
   /** Natural sort so "Episode 2" comes before "Episode 10". */
   const naturalByTitle = (a: Record<string, unknown>, b: Record<string, unknown>) =>
@@ -491,7 +499,7 @@ function sqliteListProjects(
         )
         .all() as Record<string, unknown>[];
     }
-    return rows.map(toListItem);
+    return paged(rows.map(toListItem));
   }
 
   // Owner + episode assignee + part assignee (scan candidates, filter in memory).
@@ -520,7 +528,7 @@ function sqliteListProjects(
   }
 
   // Shared catalog: every signed-in user sees all episodes of a course.
-  return rows.map(toListItem);
+  return paged(rows.map(toListItem));
 }
 
 /** Admin-only: set / clear episode-level assignee. */

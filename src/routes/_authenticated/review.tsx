@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
   RefreshCw,
@@ -122,23 +123,21 @@ type Row = {
   count: number;
 };
 
+const PAGE_SIZE = 10;
+
 function ReviewPage() {
-  const [courses, setCourses] = useState<CourseListItem[]>([]);
+  const qc = useQueryClient();
   const [courseId, setCourseId] = useState("");
-  const [episodes, setEpisodes] = useState<ProjectListItem[]>([]);
-  const [reviews, setReviews] = useState<Record<string, PartReview>>({});
-  const [loading, setLoading] = useState(true);
+  const [overrides, setOverrides] = useState<Record<string, PartReview>>({});
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
-  const [lastSync, setLastSync] = useState<Date | null>(null);
   const [grantedFields, setGrantedFields] = useState<ReviewField[] | null>(
     null,
   );
   const tableRef = useRef<HTMLDivElement | null>(null);
   const [onlyMyReviews, setOnlyMyReviews] = useState(false);
   const [page, setPage] = useState(1);
-  const PAGE_SIZE = 10;
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
   const myEmail = session?.user.email ?? "";
@@ -152,63 +151,71 @@ function ReviewPage() {
       .catch(() => setGrantedFields(null));
   }, []);
 
-  useEffect(() => {
-    apiListCourses()
-      .then((list) => {
-        setCourses(list);
-        if (list[0]) setCourseId((prev) => prev || list[0].id);
-      })
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : String(e)),
-      );
-  }, []);
+  const coursesQuery = useQuery({
+    queryKey: ["courses"],
+    queryFn: () => apiListCourses(),
+    staleTime: 5 * 60_000,
+  });
+  const courses: CourseListItem[] = coursesQuery.data ?? [];
 
-  const load = useCallback(
-    async (silent: boolean) => {
-      if (!courseId) return;
-      if (silent && tableRef.current?.contains(document.activeElement)) return;
-      if (!silent) setLoading(true);
-      try {
-        const [eps, revs] = await Promise.all([
-          apiListProjects({ courseId }),
-          apiListReviews(courseId),
-        ]);
-        setEpisodes([...eps].sort(episodeOrder));
-        const map: Record<string, PartReview> = {};
-        for (const r of revs) map[`${r.project_id}:${r.part_id}`] = r;
-        setReviews(map);
-        setError(null);
-        setLastSync(new Date());
-      } catch (e: unknown) {
-        if (!silent) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!silent) setLoading(false);
-      }
-    },
-    [courseId],
+  useEffect(() => {
+    if (!courseId && courses[0]) setCourseId(courses[0].id);
+  }, [courses, courseId]);
+
+  // Pause background refreshes while the tab is hidden or a cell has focus.
+  const liveRefetch = () =>
+    typeof document !== "undefined" &&
+    (document.hidden || tableRef.current?.contains(document.activeElement))
+      ? false
+      : POLL_MS;
+
+  const episodesQuery = useQuery({
+    queryKey: ["projects", "course", courseId, "page", page],
+    queryFn: () =>
+      apiListProjects({
+        courseId,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      }),
+    enabled: !!courseId,
+    placeholderData: (prev) => prev,
+    staleTime: POLL_MS,
+    refetchInterval: liveRefetch,
+  });
+
+  const reviewsQuery = useQuery({
+    queryKey: ["reviews", courseId],
+    queryFn: () => apiListReviews(courseId),
+    enabled: !!courseId,
+    staleTime: POLL_MS,
+    refetchInterval: liveRefetch,
+  });
+
+  const loading = episodesQuery.isPending || reviewsQuery.isPending;
+  const loadError = episodesQuery.error ?? reviewsQuery.error;
+  const lastSync = episodesQuery.dataUpdatedAt
+    ? new Date(episodesQuery.dataUpdatedAt)
+    : null;
+
+  const pagedEpisodes = useMemo(
+    () => [...(episodesQuery.data ?? [])].sort(episodeOrder),
+    [episodesQuery.data],
   );
 
-  useEffect(() => {
-    void load(false);
-  }, [load]);
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      void load(true);
-    }, POLL_MS);
-    return () => clearInterval(t);
-  }, [load]);
+  const reviews: Record<string, PartReview> = useMemo(() => {
+    const map: Record<string, PartReview> = {};
+    for (const r of reviewsQuery.data ?? [])
+      map[`${r.project_id}:${r.part_id}`] = r;
+    return { ...map, ...overrides };
+  }, [reviewsQuery.data, overrides]);
 
   useEffect(() => {
     setPage(1);
   }, [courseId, onlyMyReviews]);
 
-  const pageCount = Math.max(1, Math.ceil(episodes.length / PAGE_SIZE));
-  const pagedEpisodes = useMemo(
-    () => episodes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [episodes, page],
-  );
+  const totalEpisodes =
+    courses.find((c) => c.id === courseId)?.episode_count ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalEpisodes / PAGE_SIZE));
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
@@ -232,7 +239,7 @@ function ReviewPage() {
 
   const knownAssignees = useMemo(() => {
     const set = new Set<string>();
-    for (const ep of episodes) {
+    for (const ep of pagedEpisodes) {
       for (const p of ep.parts_summary ?? []) {
         if (p.assigned_user_email) set.add(p.assigned_user_email);
       }
@@ -241,7 +248,7 @@ function ReviewPage() {
       if (r.assignee_email) set.add(r.assignee_email);
     }
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [episodes, reviews]);
+  }, [pagedEpisodes, reviews]);
 
   function reviewFor(row: Row): PartReview {
     return (
@@ -266,7 +273,7 @@ function ReviewPage() {
     const key = `${row.episode.id}:${row.part.id}`;
     const current = reviewFor(row);
     const next: PartReview = { ...current, ...patch };
-    setReviews((prev) => ({ ...prev, [key]: next }));
+    setOverrides((prev) => ({ ...prev, [key]: next }));
     setSavingKey(key);
     setError(null);
     try {
@@ -276,9 +283,14 @@ function ReviewPage() {
         courseId,
         ...(patch as Record<string, string>),
       });
-      setReviews((prev) => ({ ...prev, [key]: saved }));
+      setOverrides((prev) => ({ ...prev, [key]: saved }));
+      void qc.invalidateQueries({ queryKey: ["reviews", courseId] });
     } catch (e: unknown) {
-      setReviews((prev) => ({ ...prev, [key]: current }));
+      setOverrides((prev) => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
       setError(e instanceof Error ? e.message : "Could not save review");
     } finally {
       setSavingKey(null);
@@ -407,7 +419,10 @@ function ReviewPage() {
           </span>
           <button
             type="button"
-            onClick={() => void load(false)}
+            onClick={() => {
+              void episodesQuery.refetch();
+              void reviewsQuery.refetch();
+            }}
             className="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
           >
             <RefreshCw size={12} /> Refresh
@@ -451,7 +466,14 @@ function ReviewPage() {
           Rendered &amp; uploaded: admin only. Admins can edit everything.
         </p>
 
-        {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
+        {(error || loadError) && (
+          <p className="mb-3 text-sm text-destructive">
+            {error ??
+              (loadError instanceof Error
+                ? loadError.message
+                : String(loadError))}
+          </p>
+        )}
 
         <div ref={tableRef} className="overflow-x-auto rounded-lg border">
           <table className="w-full border-collapse text-left text-sm">
@@ -634,8 +656,9 @@ function ReviewPage() {
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="text-muted-foreground">
-            Showing episodes {episodes.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
-            –{Math.min(page * PAGE_SIZE, episodes.length)} of {episodes.length}
+            Showing episodes{" "}
+            {totalEpisodes === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
+            {Math.min(page * PAGE_SIZE, totalEpisodes)} of {totalEpisodes}
           </span>
           <div className="ml-auto flex items-center gap-1">
             <button
