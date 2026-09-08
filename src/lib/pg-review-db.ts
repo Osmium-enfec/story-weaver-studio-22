@@ -15,6 +15,7 @@ const COLS = `project_id, part_id, course_id, script_status, recording_status,
   COALESCE(workflow_status,'') AS workflow_status,
   COALESCE(workflow_by_email,'') AS workflow_by_email,
   COALESCE(workflow_at::text,'') AS workflow_at,
+  COALESCE(progress_status,'pending') AS progress_status,
   updated_by_email, updated_at::text AS updated_at`;
 
 let colsReady: Promise<void> | null = null;
@@ -37,6 +38,9 @@ async function ensureDocColumns(): Promise<void> {
       );
       await pgQuery(
         `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS workflow_at TIMESTAMPTZ`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS progress_status TEXT NOT NULL DEFAULT 'pending'`,
       );
     })().catch((e) => {
       colsReady = null;
