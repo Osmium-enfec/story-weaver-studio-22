@@ -301,6 +301,35 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
           </tbody>
         </table>
       </div>
+
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          {totalEpisodes > 0
+            ? `Episodes ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, totalEpisodes)} of ${totalEpisodes}`
+            : "No episodes"}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="h-8 rounded-md border px-3 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span>
+            Page {page} of {pageCount}
+          </span>
+          <button
+            type="button"
+            disabled={page >= pageCount}
+            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            className="h-8 rounded-md border px-3 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
