@@ -208,6 +208,14 @@ function ComposePage() {
   const accessibleParts = useMemo(() => {
     const parts = getProjectParts(project);
     if (isAdmin) return parts;
+    // Reviewer is an episode-level role: if this user reviews any part of the
+    // episode, they can see every part (some parts may miss the reviewer field).
+    const isEpisodeReviewer = parts.some(
+      (p) =>
+        (myUserId && p.reviewerUserId === myUserId) ||
+        (myEmail && p.reviewerUserEmail?.trim().toLowerCase() === myEmail),
+    );
+    if (isEpisodeReviewer) return parts;
     return parts.filter((part) => {
       if (myUserId && part.assignedUserId === myUserId) return true;
       if (myEmail && part.assignedUserEmail?.trim().toLowerCase() === myEmail) return true;
