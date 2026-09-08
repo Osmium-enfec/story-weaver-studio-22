@@ -156,6 +156,15 @@ export function getPgPool(): pg.Pool {
       ...pgConnectionOptions(url),
       ...(usingCloudFallback() ? { options: "-c search_path=app,public" } : {}),
       max: Number(process.env.PG_POOL_MAX ?? 10),
+      // Fail fast instead of hanging forever when the database is unreachable
+      // or every pooled connection is stuck on a slow query.
+      connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 8_000),
+      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 30_000),
+      statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 20_000),
+      query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS ?? 20_000),
+    });
+    pool.on("error", (err) => {
+      console.error("[pg] idle client error:", err.message);
     });
   }
   return pool;
@@ -217,14 +226,26 @@ async function proxyQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params?: unknown[],
 ): Promise<pg.QueryResult<T>> {
-  const res = await fetch(sqlProxyUrl(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.SQL_PROXY_SECRET?.trim() ?? ""}`,
-    },
-    body: JSON.stringify({ text, params: params ?? [] }),
-  });
+  const timeoutMs = Number(process.env.SQL_PROXY_TIMEOUT_MS ?? 20_000);
+  let res: Response;
+  try {
+    res = await fetch(sqlProxyUrl(), {
+      method: "POST",
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.SQL_PROXY_SECRET?.trim() ?? ""}`,
+      },
+      body: JSON.stringify({ text, params: params ?? [] }),
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.name : "unknown";
+    throw new Error(
+      reason === "TimeoutError" || reason === "AbortError"
+        ? "Database is not responding (request timed out). The database server may be down or overloaded."
+        : "Database is unreachable right now. Please try again shortly.",
+    );
+  }
   const payload = (await res.json().catch(() => ({}))) as {
     rows?: T[];
     rowCount?: number;
