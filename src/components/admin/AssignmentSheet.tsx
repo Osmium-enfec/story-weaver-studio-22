@@ -49,24 +49,35 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
   });
 
   useEffect(() => {
-    if (!courseId) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    apiListProjects({ courseId })
-      .then((rows) => {
-        if (!cancelled) setEpisodes([...rows].sort(episodeOrder));
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    setPage(1);
   }, [courseId]);
+
+  // Only the 10 episodes on screen are fetched; the rest stay on the server.
+  const episodesQuery = useQuery({
+    queryKey: ["projects", "course", courseId, "assign-page", page],
+    queryFn: () =>
+      apiListProjects({
+        courseId,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      }),
+    enabled: !!courseId,
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
+  });
+
+  const loading = episodesQuery.isFetching;
+  const loadError = episodesQuery.error;
+
+  useEffect(() => {
+    if (episodesQuery.data) {
+      setEpisodes([...episodesQuery.data].sort(episodeOrder));
+    }
+  }, [episodesQuery.data]);
+
+  const totalEpisodes =
+    courses.find((c) => c.id === courseId)?.episode_count ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalEpisodes / PAGE_SIZE));
 
   const rows = useMemo(() => {
     if (!episodes) return [];
