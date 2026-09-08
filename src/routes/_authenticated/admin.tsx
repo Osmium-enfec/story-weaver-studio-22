@@ -187,6 +187,32 @@ function AdminPage() {
     return data.users.slice(start, start + PAGE_SIZE);
   }, [data, safeUsersPage]);
 
+  /** Per-user episode → parts breakdown with a review tag per episode. */
+  const workByUser = useMemo(() => {
+    const map = new Map<string, AssignedEpisode[]>();
+    for (const a of data?.assignments ?? []) {
+      const list = map.get(a.assignedUserId) ?? [];
+      let ep = list.find((e) => e.episodeId === a.episodeId);
+      if (!ep) {
+        ep = { episodeId: a.episodeId, episodeTitle: a.episodeTitle, parts: [] };
+        list.push(ep);
+      }
+      if (a.kind === "part") {
+        ep.parts.push({
+          title: a.partTitle ?? "Part",
+          status: a.workflowStatus ?? "",
+        });
+      }
+      map.set(a.assignedUserId, list);
+    }
+    for (const list of map.values()) {
+      list.sort((x, y) =>
+        x.episodeTitle.localeCompare(y.episodeTitle, undefined, { numeric: true }),
+      );
+    }
+    return map;
+  }, [data]);
+
   const pagedCourses = useMemo(() => {
     if (!data) return [];
     const start = (safeCoursesPage - 1) * PAGE_SIZE;
