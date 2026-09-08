@@ -125,6 +125,7 @@ export function rowToPartReview(row: Record<string, unknown>): PartReviewRow {
     workflow_status: String(row.workflow_status ?? ""),
     workflow_by_email: String(row.workflow_by_email ?? ""),
     workflow_at: String(row.workflow_at ?? ""),
+    progress_status: String(row.progress_status ?? "pending") || "pending",
     updated_by_email:
       row.updated_by_email != null ? String(row.updated_by_email) : null,
     updated_at: String(row.updated_at ?? ""),
@@ -157,6 +158,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
         review_doc_name: "",
         rendered_uploaded: "",
         workflow_status: "",
+        progress_status: "pending",
       };
   const merged = {
     script_status: input.script_status ?? base.script_status,
@@ -169,6 +171,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
     review_doc_name: input.review_doc_name ?? base.review_doc_name,
     rendered_uploaded: input.rendered_uploaded ?? base.rendered_uploaded,
     workflow_status: input.workflow_status ?? base.workflow_status,
+    progress_status: input.progress_status ?? base.progress_status,
   };
   conn
     .prepare(
