@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+
+const PAGE_SIZE = 10;
 import { Loader2, Trash2 } from "lucide-react";
 import { apiAdminUsersOnly } from "@/lib/admin-api";
 import {
@@ -24,8 +26,8 @@ function episodeOrder(a: ProjectListItem, b: ProjectListItem): number {
 /** Spreadsheet-style assignment editor: course → episodes → parts. */
 export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
   const [courseId, setCourseId] = useState<string>(courses[0]?.id ?? "");
+  const [page, setPage] = useState(1);
   const [episodes, setEpisodes] = useState<ProjectListItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
@@ -47,24 +49,35 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
   });
 
   useEffect(() => {
-    if (!courseId) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    apiListProjects({ courseId })
-      .then((rows) => {
-        if (!cancelled) setEpisodes([...rows].sort(episodeOrder));
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    setPage(1);
   }, [courseId]);
+
+  // Only the 10 episodes on screen are fetched; the rest stay on the server.
+  const episodesQuery = useQuery({
+    queryKey: ["projects", "course", courseId, "assign-page", page],
+    queryFn: () =>
+      apiListProjects({
+        courseId,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      }),
+    enabled: !!courseId,
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
+  });
+
+  const loading = episodesQuery.isFetching;
+  const loadError = episodesQuery.error;
+
+  useEffect(() => {
+    if (episodesQuery.data) {
+      setEpisodes([...episodesQuery.data].sort(episodeOrder));
+    }
+  }, [episodesQuery.data]);
+
+  const totalEpisodes =
+    courses.find((c) => c.id === courseId)?.episode_count ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalEpisodes / PAGE_SIZE));
 
   const rows = useMemo(() => {
     if (!episodes) return [];
@@ -191,7 +204,12 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
         {loading && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {(error || loadError) && (
+        <p className="text-sm text-destructive">
+          {error ??
+            (loadError instanceof Error ? loadError.message : String(loadError))}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full border-collapse text-left text-sm">
@@ -282,6 +300,35 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          {totalEpisodes > 0
+            ? `Episodes ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, totalEpisodes)} of ${totalEpisodes}`
+            : "No episodes"}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="h-8 rounded-md border px-3 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span>
+            Page {page} of {pageCount}
+          </span>
+          <button
+            type="button"
+            disabled={page >= pageCount}
+            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            className="h-8 rounded-md border px-3 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
