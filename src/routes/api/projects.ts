@@ -130,12 +130,15 @@ export const Route = createFileRoute("/api/projects")({
         }
 
         if (data.action === "get") {
-          const local = asAdmin
-            ? await localGetProjectById(data.id)
-            : await localGetProject(user.id, user.email, data.id);
+          const local = data.part_id
+            ? await localGetProjectForPart(data.id, data.part_id)
+            : asAdmin
+              ? await localGetProjectById(data.id)
+              : await localGetProject(user.id, user.email, data.id);
           if (!local) return jsonError("Episode not found.", 404);
           return jsonResponse(normalizeProjectRecord(local as unknown as Record<string, unknown>));
         }
+
 
         if (data.action === "assignPart") {
           if (!asAdmin) return jsonError("Admin only.", 403);
