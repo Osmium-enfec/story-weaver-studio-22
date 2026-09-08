@@ -195,7 +195,13 @@ function ComposePage() {
     },
     enabled: !!projectId,
     retry: 1,
-    staleTime: 10_000,
+    // Part switches reuse the cached episode instead of refetching from
+    // scratch, and background focus events no longer re-pull scene JSON.
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
 
