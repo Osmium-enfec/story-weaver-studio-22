@@ -204,7 +204,12 @@ export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
         {loading && <Loader2 size={16} className="animate-spin text-muted-foreground" />}
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {(error || loadError) && (
+        <p className="text-sm text-destructive">
+          {error ??
+            (loadError instanceof Error ? loadError.message : String(loadError))}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full border-collapse text-left text-sm">
