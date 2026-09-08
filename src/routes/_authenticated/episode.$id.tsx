@@ -82,8 +82,15 @@ function EpisodeDetailPage() {
   const isAdmin = session?.user.isAdmin ?? false;
   const myUserId = session?.user.id ?? null;
   const myEmail = session?.user.email?.trim().toLowerCase() ?? null;
-  const parts = getProjectParts(data).filter((part) => {
-    if (isAdmin) return true;
+  const allParts = getProjectParts(data);
+  // Reviewer is an episode-level role: reviewing any part reveals all parts.
+  const isEpisodeReviewer = allParts.some(
+    (p) =>
+      (myUserId && p.reviewerUserId === myUserId) ||
+      (myEmail && p.reviewerUserEmail?.trim().toLowerCase() === myEmail),
+  );
+  const parts = allParts.filter((part) => {
+    if (isAdmin || isEpisodeReviewer) return true;
     if (myUserId && part.assignedUserId === myUserId) return true;
     if (myEmail && part.assignedUserEmail?.trim().toLowerCase() === myEmail) return true;
     if (myUserId && part.reviewerUserId === myUserId) return true;
