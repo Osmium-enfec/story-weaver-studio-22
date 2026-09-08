@@ -15,7 +15,8 @@ export type ReviewField =
   | "correction_status"
   | "review_doc"
   | "rendered_uploaded"
-  | "workflow_status";
+  | "workflow_status"
+  | "progress_status";
 
 export const REVIEW_FIELDS: ReviewField[] = [
   "script_status",
@@ -27,6 +28,7 @@ export const REVIEW_FIELDS: ReviewField[] = [
   "review_doc",
   "rendered_uploaded",
   "workflow_status",
+  "progress_status",
 ];
 
 function norm(email: string | null | undefined): string {
@@ -90,6 +92,12 @@ export function canEditReviewField(
       return me.length > 0 && (me === composer || me === reviewAssignee);
     case "rendered_uploaded":
       return false;
+    case "progress_status": {
+      // Both the assigned composer and the episode reviewer can move a part
+      // through pending → under progress → waiting for review → approved.
+      const reviewer = norm(row.reviewerEmail);
+      return me.length > 0 && (me === composer || me === reviewer);
+    }
     case "workflow_status": {
       const reviewer = norm(row.reviewerEmail);
       const next = (row.nextWorkflowStatus ?? "").trim();
