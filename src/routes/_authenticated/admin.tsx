@@ -319,6 +319,9 @@ function AdminPage() {
                         <th className="px-3 py-2 font-medium">Courses</th>
                         <th className="px-3 py-2 font-medium">Episodes</th>
                         <th className="px-3 py-2 font-medium">Assigned</th>
+                        <th className="min-w-[22rem] px-3 py-2 font-medium">
+                          Assigned episodes &amp; parts
+                        </th>
                         <th className="px-3 py-2 font-medium">Scenes</th>
                         <th className="px-3 py-2 font-medium">Sessions</th>
                         <th className="px-3 py-2 font-medium">Exporting</th>
