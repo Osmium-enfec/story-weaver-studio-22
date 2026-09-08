@@ -44,6 +44,8 @@ export interface AdminOverview {
     assignedUserId: string;
     assignedUserEmail: string;
     sceneCount?: number;
+    /** '' | 'ready_for_review' | 'reviewed' | 'redo' (parts only). */
+    workflowStatus?: string;
     updated_at: string;
   }>;
   exports: Array<{
