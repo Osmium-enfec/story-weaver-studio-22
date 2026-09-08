@@ -26,6 +26,8 @@ export interface PartReviewRow {
   workflow_status: string;
   workflow_by_email: string;
   workflow_at: string;
+  /** 'pending' | 'in_progress' | 'waiting_for_review' | 'approved' */
+  progress_status: string;
   updated_by_email: string | null;
   updated_at: string;
 }
@@ -44,6 +46,7 @@ export interface PartReviewInput {
   review_doc_name?: string;
   rendered_uploaded?: string;
   workflow_status?: string;
+  progress_status?: string;
   updated_by_email?: string | null;
 }
 
