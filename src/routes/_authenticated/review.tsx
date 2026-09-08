@@ -91,6 +91,7 @@ function emptyReview(
     workflow_status: "",
     workflow_by_email: "",
     workflow_at: "",
+    progress_status: "pending",
     updated_by_email: null,
     updated_at: "",
   };
