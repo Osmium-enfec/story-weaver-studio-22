@@ -604,3 +604,67 @@ function Stat({
     </div>
   );
 }
+
+type AssignedPart = { title: string; status: string };
+type AssignedEpisode = {
+  episodeId: string;
+  episodeTitle: string;
+  parts: AssignedPart[];
+};
+
+/** Roll the part statuses of one episode into a single review tag. */
+function episodeReviewTag(parts: AssignedPart[]): {
+  label: string;
+  className: string;
+} {
+  if (parts.length > 0 && parts.every((p) => p.status === "reviewed")) {
+    return {
+      label: "Reviewed",
+      className: "border-emerald-600/40 bg-emerald-500/15 text-emerald-800",
+    };
+  }
+  if (parts.some((p) => p.status === "redo")) {
+    return {
+      label: "Redo",
+      className: "border-destructive/40 bg-destructive/10 text-destructive",
+    };
+  }
+  if (parts.some((p) => p.status === "ready_for_review" || p.status === "reviewed")) {
+    return {
+      label: "Under review",
+      className: "border-amber-500/40 bg-amber-500/15 text-amber-900",
+    };
+  }
+  return {
+    label: "Not reviewed",
+    className: "border-border bg-muted text-muted-foreground",
+  };
+}
+
+function AssignedWork({ episodes }: { episodes: AssignedEpisode[] }) {
+  if (episodes.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <ul className="space-y-1.5">
+      {episodes.map((ep) => {
+        const tag = episodeReviewTag(ep.parts);
+        return (
+          <li key={ep.episodeId} className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-medium">{ep.episodeTitle}</span>
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${tag.className}`}
+            >
+              {tag.label}
+            </span>
+            {ep.parts.length > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                {ep.parts.map((p) => p.title).join(", ")}
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
