@@ -86,9 +86,27 @@ export const Route = createFileRoute("/api/admin")({
           userEmail: emailById.get(c.user_id) ?? "(unknown user)",
         }));
 
+        const { listAllWorkflowStatuses } = await import("@/lib/review-db");
+        const workflowByPart = new Map<string, string>();
+        try {
+          for (const w of await listAllWorkflowStatuses()) {
+            workflowByPart.set(`${w.project_id}:${w.part_id}`, w.workflow_status);
+          }
+        } catch {
+          /* review table may not exist yet */
+        }
+
         const assignments = (await localListAssignments()).map(
-          (a: { assignedUserEmail?: string | null; assignedUserId: string }) => ({
+          (a: {
+            assignedUserEmail?: string | null;
+            assignedUserId: string;
+            episodeId: string;
+            partId?: string;
+          }) => ({
           ...a,
+          workflowStatus: a.partId
+            ? (workflowByPart.get(`${a.episodeId}:${a.partId}`) ?? "")
+            : "",
           assignedUserEmail:
             a.assignedUserEmail ||
             emailById.get(a.assignedUserId) ||
