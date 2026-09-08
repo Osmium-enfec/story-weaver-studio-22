@@ -345,6 +345,9 @@ function AdminPage() {
                           <td className="px-3 py-2 tabular-nums">{u.courseCount}</td>
                           <td className="px-3 py-2 tabular-nums">{u.episodeCount}</td>
                           <td className="px-3 py-2 tabular-nums">{u.assignmentCount}</td>
+                          <td className="px-3 py-2 align-top">
+                            <AssignedWork episodes={workByUser.get(u.id) ?? []} />
+                          </td>
                           <td className="px-3 py-2 tabular-nums font-medium">
                             {u.savedSceneCount > 0 ? u.savedSceneCount : "—"}
                           </td>
