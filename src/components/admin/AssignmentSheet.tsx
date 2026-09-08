@@ -26,8 +26,8 @@ function episodeOrder(a: ProjectListItem, b: ProjectListItem): number {
 /** Spreadsheet-style assignment editor: course → episodes → parts. */
 export function AssignmentSheet({ courses }: { courses: CourseOption[] }) {
   const [courseId, setCourseId] = useState<string>(courses[0]?.id ?? "");
+  const [page, setPage] = useState(1);
   const [episodes, setEpisodes] = useState<ProjectListItem[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
