@@ -20,11 +20,8 @@ import {
   apiAdminOverview,
   type AdminOverview,
 } from "@/lib/admin-api";
-import {
-  apiDeleteBundle,
-  apiListBundles,
-  type RenderBundleItem,
-} from "@/lib/render-bundles-api";
+
+
 
 import { AssignmentSheet } from "@/components/admin/AssignmentSheet";
 import { ReviewAccessSheet } from "@/components/admin/ReviewAccessSheet";
@@ -105,20 +102,14 @@ function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<
-    | "users"
-    | "courses"
-    | "assignment"
-    | "assignments"
-    | "bundles"
-    | "reviewAccess"
+    "users" | "courses" | "assignment" | "reviewAccess"
   >("users");
+
   const [usersPage, setUsersPage] = useState(1);
   const [coursesPage, setCoursesPage] = useState(1);
-  const [assignmentsPage, setAssignmentsPage] = useState(1);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
-  const [bundles, setBundles] = useState<RenderBundleItem[] | null>(null);
-  const [bundlesError, setBundlesError] = useState<string | null>(null);
   const [workCourseId, setWorkCourseId] = useState<string>("all");
+
 
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
@@ -137,22 +128,8 @@ function AdminPage() {
     void refresh();
   }, [refresh]);
 
-  const refreshBundles = useCallback(async () => {
-    try {
-      setBundlesError(null);
-      const { bundles: rows } = await apiListBundles({ all: true });
-      setBundles(rows);
-    } catch (e: unknown) {
-      setBundlesError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
 
-  useEffect(() => {
-    if (tab !== "bundles") return;
-    void refreshBundles();
-    const t = setInterval(() => void refreshBundles(), 8000);
-    return () => clearInterval(t);
-  }, [tab, refreshBundles]);
+
 
 
 
@@ -177,10 +154,9 @@ function AdminPage() {
 
   const usersPages = totalPages(data?.users.length ?? 0);
   const coursesPages = totalPages(data?.courses.length ?? 0);
-  const assignmentsPages = totalPages(data?.assignments.length ?? 0);
   const safeUsersPage = Math.min(usersPage, usersPages);
   const safeCoursesPage = Math.min(coursesPage, coursesPages);
-  const safeAssignmentsPage = Math.min(assignmentsPage, assignmentsPages);
+
 
   const pagedUsers = useMemo(() => {
     if (!data) return [];
@@ -225,11 +201,8 @@ function AdminPage() {
     return data.courses.slice(start, start + PAGE_SIZE);
   }, [data, safeCoursesPage]);
 
-  const pagedAssignments = useMemo(() => {
-    if (!data) return [];
-    const start = (safeAssignmentsPage - 1) * PAGE_SIZE;
-    return data.assignments.slice(start, start + PAGE_SIZE);
-  }, [data, safeAssignmentsPage]);
+
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -293,9 +266,10 @@ function AdminPage() {
                   ["users", "Users"],
                   ["courses", "Courses"],
                   ["assignment", "Assignment"],
-                  ["assignments", "Assigned"],
-                  ["bundles", "Ready for HD"],
                   ["reviewAccess", "Review access"],
+
+
+
 
                 ] as const
               ).map(([id, label]) => (
@@ -489,126 +463,8 @@ function AdminPage() {
               />
             )}
 
-            {tab === "assignments" && (
-              <>
-                <ul className="space-y-2">
-                  {data.assignments.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No episode or part assignments yet.
-                    </p>
-                  ) : (
-                    pagedAssignments.map((a) => (
-                      <li
-                        key={`${a.kind}-${a.episodeId}-${a.partId ?? "ep"}`}
-                        className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3 text-sm"
-                      >
-                        <div className="flex h-10 w-10 items-center justify-center rounded border bg-muted">
-                          <UserRound size={16} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">
-                            {a.kind === "episode"
-                              ? a.episodeTitle
-                              : `${a.partTitle ?? "Part"} · ${a.episodeTitle}`}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {a.kind === "episode" ? "Episode" : "Part"} →{" "}
-                            <span className="text-foreground/80">{a.assignedUserEmail}</span>
-                            {a.kind === "part" ? (
-                              <>
-                                {" · "}
-                                <span className="font-medium text-foreground">
-                                  {a.sceneCount ?? 0} scene
-                                  {(a.sceneCount ?? 0) === 1 ? "" : "s"} saved
-                                </span>
-                              </>
-                            ) : null}
-                            {" · "}
-                            {fmtWhen(a.updated_at)}
-                          </p>
-                        </div>
-                        <Link
-                          to="/episode/$id"
-                          params={{ id: a.episodeId }}
-                          className="rounded-md border px-2 py-1 text-xs hover:bg-accent"
-                        >
-                          Open episode
-                        </Link>
-                      </li>
-                    ))
-                  )}
-                </ul>
-                <PaginationBar
-                  page={safeAssignmentsPage}
-                  total={assignmentsPages}
-                  count={data.assignments.length}
-                  label="assignments"
-                  onPageChange={setAssignmentsPage}
-                />
-              </>
-            )}
-
             {tab === "reviewAccess" && <ReviewAccessSheet />}
 
-            {tab === "bundles" && (
-              <>
-                {bundlesError && (
-                  <p className="mb-2 text-sm text-destructive">{bundlesError}</p>
-                )}
-                <ul className="space-y-2">
-                  {bundles == null ? (
-                    <p className="text-sm text-muted-foreground">Loading…</p>
-                  ) : bundles.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No parts marked “Ready for HD” yet.
-                    </p>
-                  ) : (
-                    bundles.map((b) => (
-                      <li key={b.id} className="rounded-lg border bg-card p-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="font-medium">
-                              {b.episodeTitle} — {b.partTitle}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {b.ownerEmail} · {b.sceneCount} scenes ·{" "}
-                              {Math.round(b.durationMs / 1000)}s · {b.status} ·{" "}
-                              {new Date(b.readyAt).toLocaleString()}
-                            </p>
-                            {b.error && (
-                              <p className="mt-1 text-xs text-destructive">{b.error}</p>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {b.outputUrl && (
-                              <a
-                                href={b.outputUrl}
-                                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
-                              >
-                                Download MP4
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              className="rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/5"
-                              onClick={() =>
-                                void apiDeleteBundle(b.id)
-                                  .then(() => refreshBundles())
-                                  .catch((e) =>
-                                    alert(e instanceof Error ? e.message : String(e)),
-                                  )
-                              }
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </>
-            )}
 
           </>
         ) : null}

@@ -6,6 +6,8 @@ import {
   localDeleteProject,
   localGetProject,
   localGetProjectById,
+  localGetProjectForPart,
+
   localListProjects,
   localSaveProject,
 } from "@/lib/local-projects-db";
@@ -20,7 +22,13 @@ const Body = z.discriminatedUnion("action", [
     /** When set, filter episodes by course. null = unassigned only. */
     course_id: z.string().uuid().nullable().optional(),
   }),
-  z.object({ action: z.literal("get"), id: z.string().uuid() }),
+  z.object({
+    action: z.literal("get"),
+    id: z.string().uuid(),
+    /** Compose page: full scenes for this part only, thumbnails for the rest. */
+    part_id: z.string().optional(),
+  }),
+
   z.object({
     action: z.literal("save"),
     id: z.string().uuid().optional(),
@@ -124,12 +132,15 @@ export const Route = createFileRoute("/api/projects")({
         }
 
         if (data.action === "get") {
-          const local = asAdmin
-            ? await localGetProjectById(data.id)
-            : await localGetProject(user.id, user.email, data.id);
+          const local = data.part_id
+            ? await localGetProjectForPart(data.id, data.part_id)
+            : asAdmin
+              ? await localGetProjectById(data.id)
+              : await localGetProject(user.id, user.email, data.id);
           if (!local) return jsonError("Episode not found.", 404);
           return jsonResponse(normalizeProjectRecord(local as unknown as Record<string, unknown>));
         }
+
 
         if (data.action === "assignPart") {
           if (!asAdmin) return jsonError("Admin only.", 403);

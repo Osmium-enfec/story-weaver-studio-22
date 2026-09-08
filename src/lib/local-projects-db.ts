@@ -882,6 +882,33 @@ export async function localGetProjectById(...args: any[]): Promise<any> {
   return sqliteGetProjectById(...(args as [any]));
 }
 
+/**
+ * Read an episode with full scenes for a single part only (compose page).
+ * Falls back to trimming in JS when Postgres is not the active store.
+ */
+export async function localGetProjectForPart(
+  id: string,
+  partId: string,
+): Promise<any> {
+  if (usePostgres()) {
+    const { pgGetProjectForPart } = await import("@/lib/pg-projects-db");
+    return pgGetProjectForPart(id, partId);
+  }
+  const row = await sqliteGetProjectById(id as any);
+  if (!row) return row;
+  const parts = Array.isArray((row as any).parts) ? (row as any).parts : null;
+  if (!parts) return row;
+  return {
+    ...(row as any),
+    parts: parts.map((p: any) =>
+      p && typeof p === "object" && p.id !== partId
+        ? { ...p, scenes: Array.isArray(p.scenes) ? p.scenes.slice(0, 1) : [] }
+        : p,
+    ),
+  };
+}
+
+
 export async function localListProjects(...args: any[]): Promise<any> {
   if (usePostgres()) {
     const { pgListProjects } = await import("@/lib/pg-projects-db");

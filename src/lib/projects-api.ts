@@ -92,9 +92,18 @@ export function apiListProjects(opts?: {
   return projectsFetch({ action: "list" });
 }
 
-export function apiGetProject(id: string): Promise<ProjectRecord> {
-  return projectsFetch({ action: "get", id });
+/**
+ * Fetch an episode. Pass `partId` on the compose page: the server then sends
+ * full scenes for that part only and a single thumbnail scene for the rest.
+ * Never pass it when the result will be written back (saves need every scene).
+ */
+export function apiGetProject(
+  id: string,
+  opts?: { partId?: string | null },
+): Promise<ProjectRecord> {
+  return projectsFetch({ action: "get", id, part_id: opts?.partId ?? undefined });
 }
+
 
 export function apiSaveProject(data: {
   id?: string;

@@ -313,6 +313,39 @@ export async function pgGetProject(
   return project;
 }
 
+/**
+ * Compose-page fetch: returns the episode with FULL scenes for one part only.
+ * Every other part keeps just its first scene (needed for the thumbnail), so
+ * opening a 30-part episode no longer streams every part's scene blob through
+ * the worker. Never use this for save paths — writes must read the full row.
+ */
+export async function pgGetProjectForPart(
+  id: string,
+  partId: string,
+): Promise<LocalProjectRow | null> {
+  const res = await pgQuery<Record<string, unknown>>(
+    `SELECT
+       id, user_id, title, script, audio_mode, scenes,
+       COALESCE((
+         SELECT jsonb_agg(
+           CASE WHEN p->>'id' = $2 THEN p
+                ELSE jsonb_set(
+                  p, '{scenes}',
+                  CASE WHEN p->'scenes'->0 IS NULL
+                    THEN '[]'::jsonb
+                    ELSE jsonb_build_array(p->'scenes'->0) END)
+           END ORDER BY ord)
+         FROM jsonb_array_elements(projects.parts) WITH ORDINALITY t(p, ord)
+       ), '[]'::jsonb) AS parts,
+       thumbnail_url, course_id, assigned_user_id, assigned_user_email,
+       created_at::text AS created_at, updated_at::text AS updated_at
+     FROM projects WHERE id = $1`,
+    [id, partId],
+  );
+  const row = res.rows[0];
+  return row ? rowToProject(row) : null;
+}
+
 /** Admin / cross-user fetch — no owner filter. */
 export async function pgGetProjectById(id: string): Promise<LocalProjectRow | null> {
   const res = await pgQuery<Record<string, unknown>>(
@@ -322,6 +355,7 @@ export async function pgGetProjectById(id: string): Promise<LocalProjectRow | nu
   const row = res.rows[0];
   return row ? rowToProject(row) : null;
 }
+
 
 export async function pgListProjects(
   userId: string,
