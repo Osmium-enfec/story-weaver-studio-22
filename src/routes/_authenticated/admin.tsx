@@ -118,6 +118,7 @@ function AdminPage() {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [bundles, setBundles] = useState<RenderBundleItem[] | null>(null);
   const [bundlesError, setBundlesError] = useState<string | null>(null);
+  const [workCourseId, setWorkCourseId] = useState<string>("all");
 
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
@@ -194,7 +195,12 @@ function AdminPage() {
       const list = map.get(a.assignedUserId) ?? [];
       let ep = list.find((e) => e.episodeId === a.episodeId);
       if (!ep) {
-        ep = { episodeId: a.episodeId, episodeTitle: a.episodeTitle, parts: [] };
+        ep = {
+          episodeId: a.episodeId,
+          episodeTitle: a.episodeTitle,
+          courseId: a.courseId ?? null,
+          parts: [],
+        };
         list.push(ep);
       }
       if (a.kind === "part") {
@@ -310,6 +316,26 @@ function AdminPage() {
 
             {tab === "users" && (
               <>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Course
+                  </label>
+                  <select
+                    value={workCourseId}
+                    onChange={(e) => setWorkCourseId(e.target.value)}
+                    className="h-8 min-w-[14rem] rounded-md border bg-background px-2 text-xs"
+                  >
+                    <option value="all">All courses</option>
+                    {data.courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[11px] text-muted-foreground">
+                    Filters the assigned-episodes column.
+                  </span>
+                </div>
                 <div className="overflow-x-auto rounded-lg border">
                   <table className="w-full text-left text-sm">
                     <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
@@ -346,7 +372,13 @@ function AdminPage() {
                           <td className="px-3 py-2 tabular-nums">{u.episodeCount}</td>
                           <td className="px-3 py-2 tabular-nums">{u.assignmentCount}</td>
                           <td className="px-3 py-2 align-top">
-                            <AssignedWork episodes={workByUser.get(u.id) ?? []} />
+                            <AssignedWork
+                              episodes={(workByUser.get(u.id) ?? []).filter(
+                                (e) =>
+                                  workCourseId === "all" ||
+                                  e.courseId === workCourseId,
+                              )}
+                            />
                           </td>
                           <td className="px-3 py-2 tabular-nums font-medium">
                             {u.savedSceneCount > 0 ? u.savedSceneCount : "—"}
@@ -609,62 +641,91 @@ type AssignedPart = { title: string; status: string };
 type AssignedEpisode = {
   episodeId: string;
   episodeTitle: string;
+  courseId: string | null;
   parts: AssignedPart[];
 };
 
-/** Roll the part statuses of one episode into a single review tag. */
-function episodeReviewTag(parts: AssignedPart[]): {
-  label: string;
-  className: string;
-} {
-  if (parts.length > 0 && parts.every((p) => p.status === "reviewed")) {
-    return {
-      label: "Reviewed",
-      className: "border-emerald-600/40 bg-emerald-500/15 text-emerald-800",
-    };
-  }
-  if (parts.some((p) => p.status === "redo")) {
-    return {
-      label: "Redo",
-      className: "border-destructive/40 bg-destructive/10 text-destructive",
-    };
-  }
-  if (parts.some((p) => p.status === "ready_for_review" || p.status === "reviewed")) {
-    return {
-      label: "Under review",
-      className: "border-amber-500/40 bg-amber-500/15 text-amber-900",
-    };
-  }
-  return {
+/** Extract the episode number from titles like "Episode 12" / "Ep 12 — Intro". */
+function episodeNumber(title: string): string {
+  const m = title.match(/(\d+)/);
+  return m ? String(Number(m[1])) : title;
+}
+
+const REVIEW_BUCKETS = [
+  {
+    key: "not_reviewed",
     label: "Not reviewed",
-    className: "border-border bg-muted text-muted-foreground",
-  };
+    chip: "border-border bg-muted text-muted-foreground",
+  },
+  {
+    key: "under_review",
+    label: "Under review",
+    chip: "border-amber-500/40 bg-amber-500/15 text-amber-900",
+  },
+  {
+    key: "reviewed",
+    label: "Reviewed",
+    chip: "border-emerald-600/40 bg-emerald-500/15 text-emerald-800",
+  },
+  {
+    key: "redo",
+    label: "Redo",
+    chip: "border-destructive/40 bg-destructive/10 text-destructive",
+  },
+] as const;
+
+type ReviewBucketKey = (typeof REVIEW_BUCKETS)[number]["key"];
+
+/** Roll the part statuses of one episode into a single review bucket. */
+function episodeBucket(parts: AssignedPart[]): ReviewBucketKey {
+  if (parts.length > 0 && parts.every((p) => p.status === "reviewed")) {
+    return "reviewed";
+  }
+  if (parts.some((p) => p.status === "redo")) return "redo";
+  if (parts.some((p) => p.status === "ready_for_review" || p.status === "reviewed")) {
+    return "under_review";
+  }
+  return "not_reviewed";
 }
 
 function AssignedWork({ episodes }: { episodes: AssignedEpisode[] }) {
   if (episodes.length === 0) {
     return <span className="text-xs text-muted-foreground">—</span>;
   }
+  const buckets = new Map<ReviewBucketKey, string[]>();
+  for (const ep of episodes) {
+    const key = episodeBucket(ep.parts);
+    const list = buckets.get(key) ?? [];
+    list.push(episodeNumber(ep.episodeTitle));
+    buckets.set(key, list);
+  }
+  for (const list of buckets.values()) {
+    list.sort(
+      (a, b) =>
+        (Number(a) || Number.POSITIVE_INFINITY) -
+          (Number(b) || Number.POSITIVE_INFINITY) || a.localeCompare(b),
+    );
+  }
+  const rows = REVIEW_BUCKETS.filter(
+    (b) => b.key !== "redo" || (buckets.get("redo")?.length ?? 0) > 0,
+  );
   return (
-    <ul className="space-y-1.5">
-      {episodes.map((ep) => {
-        const tag = episodeReviewTag(ep.parts);
+    <div className="space-y-1">
+      {rows.map((b) => {
+        const nums = buckets.get(b.key) ?? [];
         return (
-          <li key={ep.episodeId} className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs font-medium">{ep.episodeTitle}</span>
+          <div key={b.key} className="flex items-start gap-1.5">
             <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${tag.className}`}
+              className={`mt-0.5 inline-flex w-20 shrink-0 justify-center rounded-full border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${b.chip}`}
             >
-              {tag.label}
+              {b.label}
             </span>
-            {ep.parts.length > 0 && (
-              <span className="text-[11px] text-muted-foreground">
-                {ep.parts.map((p) => p.title).join(", ")}
-              </span>
-            )}
-          </li>
+            <span className="text-[11px] leading-4 text-foreground/80">
+              {nums.length > 0 ? nums.map((n) => `Ep ${n}`).join(", ") : "—"}
+            </span>
+          </div>
         );
       })}
-    </ul>
+    </div>
   );
 }
