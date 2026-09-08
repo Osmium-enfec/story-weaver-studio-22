@@ -30,6 +30,7 @@ import {
   type SceneCompletionProgress,
 } from "@/lib/part-script";
 import { newCodeTypingBeatId } from "@/lib/code-scene-sfx";
+import { PartProgressStatus } from "@/components/compose/PartProgressStatus";
 import { COMMON_INTRO_VIDEO_URL, COMMON_OUTRO_VIDEO_URL } from "@/lib/common-intro-outro";
 
 export interface PartScriptPanelProps {
@@ -40,6 +41,8 @@ export interface PartScriptPanelProps {
   /** Auto-save status shown instead of a manual Save button. */
   saveStatus?: "idle" | "pending" | "saving" | "saved" | "error";
   projectId?: string | null;
+  /** Course id — enables the per-part progress status dropdown. */
+  courseId?: string | null;
   /** Part id — used to remember which scene accordion was open across refresh. */
   selectedPartId?: string | null;
   onGoToScene?: (scene: PartScriptScene) => void;
@@ -58,6 +61,7 @@ export function PartScriptPanel({
   saving,
   saveStatus = "idle",
   projectId = null,
+  courseId = null,
   selectedPartId = null,
   onGoToScene,
   sceneCompletions = [],
@@ -226,6 +230,13 @@ export function PartScriptPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {projectId && selectedPartId && (
+        <PartProgressStatus
+          projectId={projectId}
+          partId={selectedPartId}
+          courseId={courseId}
+        />
+      )}
       {!canSave && (
         <p className="text-xs text-muted-foreground">Open a part from an episode first.</p>
       )}

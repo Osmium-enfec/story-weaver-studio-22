@@ -38,6 +38,9 @@ const Body = z.discriminatedUnion("action", [
     workflow_status: z
       .enum(["", "ready_for_review", "reviewed", "redo"])
       .optional(),
+    progress_status: z
+      .enum(["pending", "in_progress", "waiting_for_review", "approved"])
+      .optional(),
   }),
 ]);
 
@@ -137,6 +140,7 @@ export const Route = createFileRoute("/api/reviews")({
             review_doc_name: data.review_doc_name,
             rendered_uploaded: data.rendered_uploaded,
             workflow_status: data.workflow_status,
+            progress_status: data.progress_status,
             updated_by_email: user.email,
           });
           return jsonResponse(row);

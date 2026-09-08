@@ -15,6 +15,7 @@ const COLS = `project_id, part_id, course_id, script_status, recording_status,
   COALESCE(workflow_status,'') AS workflow_status,
   COALESCE(workflow_by_email,'') AS workflow_by_email,
   COALESCE(workflow_at::text,'') AS workflow_at,
+  COALESCE(progress_status,'pending') AS progress_status,
   updated_by_email, updated_at::text AS updated_at`;
 
 let colsReady: Promise<void> | null = null;
@@ -37,6 +38,9 @@ async function ensureDocColumns(): Promise<void> {
       );
       await pgQuery(
         `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS workflow_at TIMESTAMPTZ`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS progress_status TEXT NOT NULL DEFAULT 'pending'`,
       );
     })().catch((e) => {
       colsReady = null;
@@ -70,7 +74,7 @@ export async function pgUpsertReview(
        review_status, issues_found, correction_status, assignee_email,
        review_doc_url, review_doc_name,
        rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
-       updated_by_email, updated_at
+       progress_status, updated_by_email, updated_at
      ) VALUES ($1,$2,$3,
        COALESCE($4,''),COALESCE($5,''),COALESCE($6,''),COALESCE($7,''),
        COALESCE($8,''),COALESCE($9,''),COALESCE($13,''),COALESCE($14,''),
@@ -78,6 +82,7 @@ export async function pgUpsertReview(
        COALESCE($15,''),
        CASE WHEN $15 IS NULL THEN '' ELSE COALESCE($11,'') END,
        CASE WHEN $15 IS NULL THEN NULL ELSE $12::timestamptz END,
+       COALESCE($16,'pending'),
        $11,$12::timestamptz)
      ON CONFLICT (project_id, part_id) DO UPDATE SET
        course_id = EXCLUDED.course_id,
@@ -95,6 +100,7 @@ export async function pgUpsertReview(
          THEN part_reviews.workflow_by_email ELSE COALESCE($11,'') END,
        workflow_at = CASE WHEN $15 IS NULL
          THEN part_reviews.workflow_at ELSE $12::timestamptz END,
+       progress_status = COALESCE($16, part_reviews.progress_status),
        updated_by_email = EXCLUDED.updated_by_email,
        updated_at = EXCLUDED.updated_at`,
     [
@@ -113,6 +119,7 @@ export async function pgUpsertReview(
       input.review_doc_url ?? null,
       input.review_doc_name ?? null,
       input.workflow_status ?? null,
+      input.progress_status ?? null,
     ],
   );
   const saved = await pgGetReview(input.project_id, input.part_id);

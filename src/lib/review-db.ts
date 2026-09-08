@@ -26,6 +26,8 @@ export interface PartReviewRow {
   workflow_status: string;
   workflow_by_email: string;
   workflow_at: string;
+  /** 'pending' | 'in_progress' | 'waiting_for_review' | 'approved' */
+  progress_status: string;
   updated_by_email: string | null;
   updated_at: string;
 }
@@ -44,6 +46,7 @@ export interface PartReviewInput {
   review_doc_name?: string;
   rendered_uploaded?: string;
   workflow_status?: string;
+  progress_status?: string;
   updated_by_email?: string | null;
 }
 
@@ -72,6 +75,7 @@ function getDb(): Database.Database {
       workflow_status TEXT NOT NULL DEFAULT '',
       workflow_by_email TEXT NOT NULL DEFAULT '',
       workflow_at TEXT NOT NULL DEFAULT '',
+      progress_status TEXT NOT NULL DEFAULT 'pending',
       updated_by_email TEXT,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (project_id, part_id)
@@ -94,6 +98,13 @@ function getDb(): Database.Database {
       /* column already exists */
     }
   }
+  try {
+    db.exec(
+      `ALTER TABLE part_reviews ADD COLUMN progress_status TEXT NOT NULL DEFAULT 'pending'`,
+    );
+  } catch {
+    /* column already exists */
+  }
   return db;
 }
 
@@ -114,6 +125,7 @@ export function rowToPartReview(row: Record<string, unknown>): PartReviewRow {
     workflow_status: String(row.workflow_status ?? ""),
     workflow_by_email: String(row.workflow_by_email ?? ""),
     workflow_at: String(row.workflow_at ?? ""),
+    progress_status: String(row.progress_status ?? "pending") || "pending",
     updated_by_email:
       row.updated_by_email != null ? String(row.updated_by_email) : null,
     updated_at: String(row.updated_at ?? ""),
@@ -146,6 +158,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
         review_doc_name: "",
         rendered_uploaded: "",
         workflow_status: "",
+        progress_status: "pending",
       };
   const merged = {
     script_status: input.script_status ?? base.script_status,
@@ -158,6 +171,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
     review_doc_name: input.review_doc_name ?? base.review_doc_name,
     rendered_uploaded: input.rendered_uploaded ?? base.rendered_uploaded,
     workflow_status: input.workflow_status ?? base.workflow_status,
+    progress_status: input.progress_status ?? base.progress_status,
   };
   conn
     .prepare(
@@ -166,8 +180,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          review_status, issues_found, correction_status, assignee_email,
          review_doc_url, review_doc_name,
          rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
-         updated_by_email, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         progress_status, updated_by_email, updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT (project_id, part_id) DO UPDATE SET
          course_id = excluded.course_id,
          script_status = excluded.script_status,
@@ -182,6 +196,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          workflow_status = excluded.workflow_status,
          workflow_by_email = excluded.workflow_by_email,
          workflow_at = excluded.workflow_at,
+         progress_status = excluded.progress_status,
          updated_by_email = excluded.updated_by_email,
          updated_at = excluded.updated_at`,
     )
@@ -205,6 +220,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       input.workflow_status !== undefined
         ? now
         : (existing ? rowToPartReview(existing).workflow_at : ""),
+      merged.progress_status,
       input.updated_by_email ?? null,
       now,
     );
