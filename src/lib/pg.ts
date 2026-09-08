@@ -155,7 +155,10 @@ export function getPgPool(): pg.Pool {
     pool = new pg.Pool({
       ...pgConnectionOptions(url),
       ...(usingCloudFallback() ? { options: "-c search_path=app,public" } : {}),
-      max: Number(process.env.PG_POOL_MAX ?? 10),
+      // Each pooled connection costs memory on a small droplet; 5 is plenty
+      // for this workload and can be raised with PG_POOL_MAX if needed.
+      max: Number(process.env.PG_POOL_MAX ?? 5),
+
       // Fail fast instead of hanging forever when the database is unreachable
       // or every pooled connection is stuck on a slow query.
       connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 8_000),

@@ -552,71 +552,82 @@ export async function pgAssignedCourseIds(
 
 /** Admin: total saved compose scenes per assignee across all parts. */
 export async function pgSavedSceneCountsByUser(): Promise<Map<string, number>> {
-  const res = await pgQuery<{ parts: unknown }>(
-    `SELECT parts FROM projects WHERE parts::text LIKE '%"assignedUserId"%'`,
+  // Aggregated in SQL: pulling every project's full `parts` JSONB (which holds
+  // all scenes) into Node was the biggest memory spike on the admin page.
+  const res = await pgQuery<{ uid: string; n: string | number }>(
+    `SELECT p->>'assignedUserId' AS uid,
+            SUM(COALESCE(jsonb_array_length(p->'scenes'), 0)) AS n
+       FROM projects,
+            LATERAL jsonb_array_elements(parts) AS p
+      WHERE jsonb_typeof(parts) = 'array'
+        AND COALESCE(p->>'assignedUserId', '') <> ''
+      GROUP BY 1`,
   );
   const byUser = new Map<string, number>();
   for (const row of res.rows) {
-    const partsRaw = parseJsonColumn(row.parts);
-    for (const part of getProjectParts({ parts: partsRaw })) {
-      if (!part.assignedUserId) continue;
-      const n = Array.isArray(part.scenes) ? part.scenes.length : 0;
-      byUser.set(
-        part.assignedUserId,
-        (byUser.get(part.assignedUserId) ?? 0) + n,
-      );
-    }
+    byUser.set(String(row.uid), Number(row.n) || 0);
   }
   return byUser;
 }
 
 /** Admin: episode + part handoffs currently assigned to a collaborator. */
 export async function pgListAssignments(): Promise<LocalAssignmentItem[]> {
-  const res = await pgQuery<Record<string, unknown>>(
-    `SELECT id, title, course_id, assigned_user_id, assigned_user_email, parts,
-            updated_at::text AS updated_at
-     FROM projects
-     WHERE assigned_user_id IS NOT NULL
-        OR parts::text LIKE '%"assignedUserId"%'
-     ORDER BY updated_at DESC`,
-  );
+  const [episodes, parts] = await Promise.all([
+    pgQuery<Record<string, unknown>>(
+      `SELECT id, title, course_id, assigned_user_id, assigned_user_email,
+              updated_at::text AS updated_at
+         FROM projects
+        WHERE assigned_user_id IS NOT NULL
+        ORDER BY updated_at DESC`,
+    ),
+    // Only the small per-part fields are read back — never the scene payloads.
+    pgQuery<Record<string, unknown>>(
+      `SELECT pr.id AS episode_id,
+              pr.title AS episode_title,
+              pr.course_id,
+              p->>'id' AS part_id,
+              p->>'title' AS part_title,
+              p->>'assignedUserId' AS assigned_user_id,
+              COALESCE(p->>'assignedUserEmail', '') AS assigned_user_email,
+              COALESCE(jsonb_array_length(p->'scenes'), 0) AS scene_count,
+              COALESCE(p->>'updated_at', pr.updated_at::text) AS updated_at
+         FROM projects pr,
+              LATERAL jsonb_array_elements(pr.parts) AS p
+        WHERE jsonb_typeof(pr.parts) = 'array'
+          AND COALESCE(p->>'assignedUserId', '') <> ''
+        ORDER BY updated_at DESC`,
+    ),
+  ]);
 
   const out: LocalAssignmentItem[] = [];
-  for (const row of res.rows) {
-    const episodeId = String(row.id);
-    const episodeTitle = String(row.title);
-    const courseId = row.course_id != null ? String(row.course_id) : null;
-    const updated_at = String(row.updated_at);
-    if (row.assigned_user_id) {
-      out.push({
-        kind: "episode",
-        episodeId,
-        episodeTitle,
-        courseId,
-        assignedUserId: String(row.assigned_user_id),
-        assignedUserEmail: String(row.assigned_user_email ?? ""),
-        updated_at,
-      });
-    }
-    const partsRaw = parseJsonColumn(row.parts);
-    for (const part of getProjectParts({ parts: partsRaw })) {
-      if (!part.assignedUserId) continue;
-      out.push({
-        kind: "part",
-        episodeId,
-        episodeTitle,
-        courseId,
-        partId: part.id,
-        partTitle: part.title,
-        assignedUserId: part.assignedUserId,
-        assignedUserEmail: part.assignedUserEmail?.trim() || "",
-        sceneCount: Array.isArray(part.scenes) ? part.scenes.length : 0,
-        updated_at: part.updated_at || updated_at,
-      });
-    }
+  for (const row of episodes.rows) {
+    out.push({
+      kind: "episode",
+      episodeId: String(row.id),
+      episodeTitle: String(row.title),
+      courseId: row.course_id != null ? String(row.course_id) : null,
+      assignedUserId: String(row.assigned_user_id),
+      assignedUserEmail: String(row.assigned_user_email ?? ""),
+      updated_at: String(row.updated_at),
+    });
+  }
+  for (const row of parts.rows) {
+    out.push({
+      kind: "part",
+      episodeId: String(row.episode_id),
+      episodeTitle: String(row.episode_title),
+      courseId: row.course_id != null ? String(row.course_id) : null,
+      partId: String(row.part_id ?? ""),
+      partTitle: String(row.part_title ?? ""),
+      assignedUserId: String(row.assigned_user_id),
+      assignedUserEmail: String(row.assigned_user_email ?? "").trim(),
+      sceneCount: Number(row.scene_count) || 0,
+      updated_at: String(row.updated_at),
+    });
   }
   return out;
 }
+
 
 /** Clear episode/part assignees that point at this user (used when deleting an account). */
 export async function pgClearAssignmentsForUser(userId: string): Promise<void> {
