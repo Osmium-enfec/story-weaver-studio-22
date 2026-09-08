@@ -187,6 +187,32 @@ function AdminPage() {
     return data.users.slice(start, start + PAGE_SIZE);
   }, [data, safeUsersPage]);
 
+  /** Per-user episode → parts breakdown with a review tag per episode. */
+  const workByUser = useMemo(() => {
+    const map = new Map<string, AssignedEpisode[]>();
+    for (const a of data?.assignments ?? []) {
+      const list = map.get(a.assignedUserId) ?? [];
+      let ep = list.find((e) => e.episodeId === a.episodeId);
+      if (!ep) {
+        ep = { episodeId: a.episodeId, episodeTitle: a.episodeTitle, parts: [] };
+        list.push(ep);
+      }
+      if (a.kind === "part") {
+        ep.parts.push({
+          title: a.partTitle ?? "Part",
+          status: a.workflowStatus ?? "",
+        });
+      }
+      map.set(a.assignedUserId, list);
+    }
+    for (const list of map.values()) {
+      list.sort((x, y) =>
+        x.episodeTitle.localeCompare(y.episodeTitle, undefined, { numeric: true }),
+      );
+    }
+    return map;
+  }, [data]);
+
   const pagedCourses = useMemo(() => {
     if (!data) return [];
     const start = (safeCoursesPage - 1) * PAGE_SIZE;
@@ -293,6 +319,9 @@ function AdminPage() {
                         <th className="px-3 py-2 font-medium">Courses</th>
                         <th className="px-3 py-2 font-medium">Episodes</th>
                         <th className="px-3 py-2 font-medium">Assigned</th>
+                        <th className="min-w-[22rem] px-3 py-2 font-medium">
+                          Assigned episodes &amp; parts
+                        </th>
                         <th className="px-3 py-2 font-medium">Scenes</th>
                         <th className="px-3 py-2 font-medium">Sessions</th>
                         <th className="px-3 py-2 font-medium">Exporting</th>
@@ -316,6 +345,9 @@ function AdminPage() {
                           <td className="px-3 py-2 tabular-nums">{u.courseCount}</td>
                           <td className="px-3 py-2 tabular-nums">{u.episodeCount}</td>
                           <td className="px-3 py-2 tabular-nums">{u.assignmentCount}</td>
+                          <td className="px-3 py-2 align-top">
+                            <AssignedWork episodes={workByUser.get(u.id) ?? []} />
+                          </td>
                           <td className="px-3 py-2 tabular-nums font-medium">
                             {u.savedSceneCount > 0 ? u.savedSceneCount : "—"}
                           </td>
@@ -570,5 +602,69 @@ function Stat({
       </div>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
     </div>
+  );
+}
+
+type AssignedPart = { title: string; status: string };
+type AssignedEpisode = {
+  episodeId: string;
+  episodeTitle: string;
+  parts: AssignedPart[];
+};
+
+/** Roll the part statuses of one episode into a single review tag. */
+function episodeReviewTag(parts: AssignedPart[]): {
+  label: string;
+  className: string;
+} {
+  if (parts.length > 0 && parts.every((p) => p.status === "reviewed")) {
+    return {
+      label: "Reviewed",
+      className: "border-emerald-600/40 bg-emerald-500/15 text-emerald-800",
+    };
+  }
+  if (parts.some((p) => p.status === "redo")) {
+    return {
+      label: "Redo",
+      className: "border-destructive/40 bg-destructive/10 text-destructive",
+    };
+  }
+  if (parts.some((p) => p.status === "ready_for_review" || p.status === "reviewed")) {
+    return {
+      label: "Under review",
+      className: "border-amber-500/40 bg-amber-500/15 text-amber-900",
+    };
+  }
+  return {
+    label: "Not reviewed",
+    className: "border-border bg-muted text-muted-foreground",
+  };
+}
+
+function AssignedWork({ episodes }: { episodes: AssignedEpisode[] }) {
+  if (episodes.length === 0) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <ul className="space-y-1.5">
+      {episodes.map((ep) => {
+        const tag = episodeReviewTag(ep.parts);
+        return (
+          <li key={ep.episodeId} className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-medium">{ep.episodeTitle}</span>
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${tag.className}`}
+            >
+              {tag.label}
+            </span>
+            {ep.parts.length > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                {ep.parts.map((p) => p.title).join(", ")}
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

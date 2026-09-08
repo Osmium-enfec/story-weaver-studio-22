@@ -167,3 +167,19 @@ export async function pgGetReview(
   const row = res.rows[0];
   return row ? rowToPartReview(row) : null;
 }
+
+/** All part workflow statuses (admin overview). */
+export async function pgListAllWorkflowStatuses(): Promise<
+  Array<{ project_id: string; part_id: string; workflow_status: string }>
+> {
+  await ensureDocColumns();
+  const res = await pgQuery<Record<string, unknown>>(
+    `SELECT project_id, part_id, COALESCE(workflow_status,'') AS workflow_status
+     FROM part_reviews`,
+  );
+  return res.rows.map((r) => ({
+    project_id: String(r.project_id),
+    part_id: String(r.part_id),
+    workflow_status: String(r.workflow_status ?? ""),
+  }));
+}
