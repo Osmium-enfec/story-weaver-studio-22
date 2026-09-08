@@ -321,3 +321,21 @@ export async function partReviewerEmail(
 }
 
 export { partAssigneeFromRawParts, partReviewerFromRawParts };
+
+/** All part workflow statuses across every course (admin overview). */
+export async function listAllWorkflowStatuses(): Promise<
+  Array<{ project_id: string; part_id: string; workflow_status: string }>
+> {
+  if (usePostgres()) {
+    const { pgListAllWorkflowStatuses } = await import("@/lib/pg-review-db");
+    return pgListAllWorkflowStatuses();
+  }
+  const rows = getDb()
+    .prepare(`SELECT project_id, part_id, workflow_status FROM part_reviews`)
+    .all() as Record<string, unknown>[];
+  return rows.map((r) => ({
+    project_id: String(r.project_id),
+    part_id: String(r.part_id),
+    workflow_status: String(r.workflow_status ?? ""),
+  }));
+}
