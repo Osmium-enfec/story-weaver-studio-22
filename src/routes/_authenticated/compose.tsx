@@ -1289,7 +1289,7 @@ function ComposePage() {
       setPartScriptPlan(nextPlan);
       lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
       setPartScriptSaveStatus("saved");
-      qc.setQueryData(["project", projectId], (prev: unknown) => {
+      qc.setQueryData(projectQueryKey, (prev: unknown) => {
         if (!prev || typeof prev !== "object") return prev;
         return {
           ...(prev as Record<string, unknown>),
@@ -2099,7 +2099,7 @@ function ComposePage() {
             course_id: fresh.record.course_id ?? undefined,
             allow_scene_shrink: true,
           });
-          qc.setQueryData(["project", projectId], (prev: unknown) => {
+          qc.setQueryData(projectQueryKey, (prev: unknown) => {
             if (!prev || typeof prev !== "object") return prev;
             return {
               ...(prev as Record<string, unknown>),
@@ -2157,7 +2157,7 @@ function ComposePage() {
           allow_scene_shrink:
             aligned.scenes.length < partScenes.length ? true : undefined,
         });
-        qc.setQueryData(["project", projectId], (prev: unknown) => {
+        qc.setQueryData(projectQueryKey, (prev: unknown) => {
           if (!prev || typeof prev !== "object") return prev;
           return {
             ...(prev as Record<string, unknown>),
@@ -2360,7 +2360,7 @@ function ComposePage() {
         setPartScriptPlan(nextPlan);
         lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
         setPartScriptSaveStatus("saved");
-        qc.setQueryData(["project", projectId], (prev: unknown) => {
+        qc.setQueryData(projectQueryKey, (prev: unknown) => {
           if (!prev || typeof prev !== "object") return prev;
           return {
             ...(prev as Record<string, unknown>),
@@ -2473,7 +2473,7 @@ function ComposePage() {
         setPartScriptPlan(nextPlan);
         lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
         setPartScriptSaveStatus("saved");
-        qc.setQueryData(["project", projectId], (prev: unknown) => {
+        qc.setQueryData(projectQueryKey, (prev: unknown) => {
           if (!prev || typeof prev !== "object") return prev;
           return {
             ...(prev as Record<string, unknown>),
@@ -3135,7 +3135,7 @@ function ComposePage() {
       });
       lastSavedScriptKeyRef.current = JSON.stringify(planToSave.scenes);
       setPartScriptSaveStatus("saved");
-      qc.setQueryData(["project", projectId], (prev: unknown) => {
+      qc.setQueryData(projectQueryKey, (prev: unknown) => {
         if (!prev || typeof prev !== "object") return prev;
         return {
           ...(prev as Record<string, unknown>),
@@ -3228,7 +3228,7 @@ function ComposePage() {
           if (seq !== scriptAutosaveSeqRef.current) return;
           lastSavedScriptKeyRef.current = "[]";
           setPartScriptSaveStatus("saved");
-          qc.setQueryData(["project", projectId], (prev: unknown) => {
+          qc.setQueryData(projectQueryKey, (prev: unknown) => {
             if (!prev || typeof prev !== "object") return prev;
             return {
               ...(prev as Record<string, unknown>),
@@ -3318,7 +3318,7 @@ function ComposePage() {
       lastSavedScriptKeyRef.current = JSON.stringify(planToSave.scenes);
       setPartScriptSaveStatus("saved");
       // Patch cache only — never invalidate (avoids remount / focus loss).
-      qc.setQueryData(["project", projectId], (prev: unknown) => {
+      qc.setQueryData(projectQueryKey, (prev: unknown) => {
         if (!prev || typeof prev !== "object") return prev;
         return {
           ...(prev as Record<string, unknown>),
@@ -3537,7 +3537,7 @@ function ComposePage() {
       ].join("|");
 
       // Soft-update stitch list in cache (no invalidate → no remount).
-      qc.setQueryData(["project", projectId], (prev: unknown) => {
+      qc.setQueryData(projectQueryKey, (prev: unknown) => {
         if (!prev || typeof prev !== "object") return prev;
         return {
           ...(prev as Record<string, unknown>),
