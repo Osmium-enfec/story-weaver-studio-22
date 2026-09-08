@@ -224,6 +224,7 @@ interface ComposeStepsAccordionProps {
   savingPartScript?: boolean;
   partScriptSaveStatus?: "idle" | "pending" | "saving" | "saved" | "error";
   projectId?: string | null;
+  courseId?: string | null;
   selectedPartId?: string | null;
   onGoToScriptScene?: (scene: import("@/lib/part-script").PartScriptScene) => void;
   useDirectImagePrompt: boolean;
@@ -576,6 +577,7 @@ export function ComposeStepsAccordion({
           saving={savingPartScript}
           saveStatus={partScriptSaveStatus}
           projectId={projectId}
+          courseId={courseId}
           selectedPartId={selectedPartId}
           onGoToScene={onGoToScriptScene}
         />
