@@ -3762,6 +3762,7 @@ function ComposePage() {
           savingPartScript={savingPartScript}
           partScriptSaveStatus={partScriptSaveStatus}
           projectId={projectId}
+          courseId={project?.course_id ?? null}
           selectedPartId={selectedPartId}
           onGoToScriptScene={handleGoToScriptScene}
           useDirectImagePrompt={useDirectImagePrompt}

@@ -328,6 +328,7 @@ export function ComposeStepsAccordion({
   savingPartScript = false,
   partScriptSaveStatus = "idle",
   projectId = null,
+  courseId = null,
   selectedPartId = null,
   onGoToScriptScene,
   useDirectImagePrompt,
