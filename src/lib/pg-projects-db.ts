@@ -334,13 +334,17 @@ export async function pgListProjects(
   },
 ): Promise<LocalProjectListItem[]> {
   let rows: Record<string, unknown>[];
+  // Cap unscoped listings: nobody browses past a few hundred episodes, and an
+  // unbounded scan is what pushed the small server into swap.
+  const LIST_CAP = Number(process.env.PROJECT_LIST_CAP ?? 500);
 
   if (opts?.asAdmin) {
     if (opts && "courseId" in opts) {
       if (opts.courseId === null) {
         const res = await pgQuery<Record<string, unknown>>(
           `SELECT ${LIST_SELECT}
-           FROM projects WHERE course_id IS NULL ORDER BY updated_at DESC`,
+           FROM projects WHERE course_id IS NULL ORDER BY updated_at DESC
+           LIMIT ${LIST_CAP}`,
         );
         rows = res.rows;
       } else {
@@ -354,12 +358,14 @@ export async function pgListProjects(
     } else if (opts?.requireCourse) {
       const res = await pgQuery<Record<string, unknown>>(
         `SELECT ${LIST_SELECT}
-         FROM projects WHERE course_id IS NOT NULL ORDER BY updated_at DESC`,
+         FROM projects WHERE course_id IS NOT NULL ORDER BY updated_at DESC
+         LIMIT ${LIST_CAP}`,
       );
       rows = res.rows;
     } else {
       const res = await pgQuery<Record<string, unknown>>(
-        `SELECT ${LIST_SELECT} FROM projects ORDER BY updated_at DESC`,
+        `SELECT ${LIST_SELECT} FROM projects ORDER BY updated_at DESC
+         LIMIT ${LIST_CAP}`,
       );
       rows = res.rows;
     }
@@ -382,10 +388,12 @@ export async function pgListProjects(
     // Non-admins never browse unassigned episodes.
     const res = await pgQuery<Record<string, unknown>>(
       `SELECT ${LIST_SELECT}
-       FROM projects WHERE course_id IS NOT NULL ORDER BY updated_at DESC`,
+       FROM projects WHERE course_id IS NOT NULL ORDER BY updated_at DESC
+       LIMIT ${LIST_CAP}`,
     );
     rows = res.rows;
   }
+
 
   // Shared catalog: every signed-in user sees all episodes of a course.
   return rows.map(toListItem);
