@@ -20,7 +20,13 @@ const Body = z.discriminatedUnion("action", [
     /** When set, filter episodes by course. null = unassigned only. */
     course_id: z.string().uuid().nullable().optional(),
   }),
-  z.object({ action: z.literal("get"), id: z.string().uuid() }),
+  z.object({
+    action: z.literal("get"),
+    id: z.string().uuid(),
+    /** Compose page: full scenes for this part only, thumbnails for the rest. */
+    part_id: z.string().optional(),
+  }),
+
   z.object({
     action: z.literal("save"),
     id: z.string().uuid().optional(),

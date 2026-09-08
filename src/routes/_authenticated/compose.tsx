@@ -272,7 +272,8 @@ function ComposePage() {
   const [composeAutosaveStatus, setComposeAutosaveStatus] = useState<
     "idle" | "pending" | "saving" | "saved" | "error"
   >("idle");
-  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+
+
   const [editingSceneId, setEditingSceneId] = useState<string | null>(null);
   const [stitchActive, setStitchActive] = useState(false);
   const [backgroundPreset, setBackgroundPreset] =
