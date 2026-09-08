@@ -137,6 +137,8 @@ function ReviewPage() {
   );
   const tableRef = useRef<HTMLDivElement | null>(null);
   const [onlyMyReviews, setOnlyMyReviews] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
   const myEmail = session?.user.email ?? "";
@@ -191,14 +193,27 @@ function ReviewPage() {
   }, [load]);
 
   useEffect(() => {
-    const t = setInterval(() => void load(true), POLL_MS);
+    const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void load(true);
+    }, POLL_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [courseId, onlyMyReviews]);
+
+  const pageCount = Math.max(1, Math.ceil(episodes.length / PAGE_SIZE));
+  const pagedEpisodes = useMemo(
+    () => episodes.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [episodes, page],
+  );
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
     const me = myEmail.trim().toLowerCase();
-    for (const ep of episodes) {
+    for (const ep of pagedEpisodes) {
       let parts = [...(ep.parts_summary ?? [])].sort(partOrder);
       if (onlyMyReviews) {
         parts = parts.filter((p) => {
@@ -213,7 +228,7 @@ function ReviewPage() {
       );
     }
     return out;
-  }, [episodes, onlyMyReviews, reviews, myEmail]);
+  }, [pagedEpisodes, onlyMyReviews, reviews, myEmail]);
 
   const knownAssignees = useMemo(() => {
     const set = new Set<string>();
@@ -616,6 +631,42 @@ function ReviewPage() {
             </tbody>
           </table>
         </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">
+            Showing episodes {episodes.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
+            –{Math.min(page * PAGE_SIZE, episodes.length)} of {episodes.length}
+          </span>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="rounded-md border px-2.5 py-1 hover:bg-accent disabled:opacity-50"
+            >
+              Previous
+            </button>
+            {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPage(p)}
+                className={`rounded-md border px-2.5 py-1 ${p === page ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={page >= pageCount}
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              className="rounded-md border px-2.5 py-1 hover:bg-accent disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
         <datalist id="review-assignees">
           {knownAssignees.map((email) => (
             <option key={email} value={email} />
