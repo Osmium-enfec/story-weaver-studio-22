@@ -120,7 +120,27 @@ CREATE TABLE IF NOT EXISTS part_reviews (
 CREATE INDEX IF NOT EXISTS part_reviews_course_idx
   ON part_reviews (course_id);
 
+-- Indexes for the hot filters/sorts used by the episode, course, admin and
+-- review screens. Without them Postgres full-scans and holds far more memory.
+CREATE INDEX IF NOT EXISTS projects_updated_idx
+  ON projects (updated_at DESC);
+CREATE INDEX IF NOT EXISTS projects_course_title_idx
+  ON projects (course_id, title);
+CREATE INDEX IF NOT EXISTS projects_course_updated_idx
+  ON projects (course_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS courses_updated_idx
+  ON courses (updated_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx
+  ON users (lower(email));
+CREATE INDEX IF NOT EXISTS sessions_expires_idx
+  ON sessions (expires_at);
+CREATE INDEX IF NOT EXISTS part_reviews_assignee_idx
+  ON part_reviews (assignee_email);
+CREATE INDEX IF NOT EXISTS image_assets_created_by_idx
+  ON image_assets (created_by);
+
 `;
+
 
 /**
  * DO Managed Postgres uses a private CA. Newer `pg` maps sslmode=require →
@@ -162,9 +182,14 @@ export function getPgPool(): pg.Pool {
       // Fail fast instead of hanging forever when the database is unreachable
       // or every pooled connection is stuck on a slow query.
       connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 8_000),
-      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 30_000),
-      statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 20_000),
-      query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS ?? 20_000),
+      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 10_000),
+      // Keep at least one warm connection but let extra idle ones go, and stop
+      // the pool from holding the process open when everything is idle.
+      keepAlive: true,
+      allowExitOnIdle: false,
+      statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 15_000),
+      query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS ?? 15_000),
+
     });
     pool.on("error", (err) => {
       console.error("[pg] idle client error:", err.message);
