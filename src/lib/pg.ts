@@ -182,9 +182,14 @@ export function getPgPool(): pg.Pool {
       // Fail fast instead of hanging forever when the database is unreachable
       // or every pooled connection is stuck on a slow query.
       connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS ?? 8_000),
-      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 30_000),
-      statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 20_000),
-      query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS ?? 20_000),
+      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 10_000),
+      // Keep at least one warm connection but let extra idle ones go, and stop
+      // the pool from holding the process open when everything is idle.
+      keepAlive: true,
+      allowExitOnIdle: false,
+      statement_timeout: Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 15_000),
+      query_timeout: Number(process.env.PG_QUERY_TIMEOUT_MS ?? 15_000),
+
     });
     pool.on("error", (err) => {
       console.error("[pg] idle client error:", err.message);
