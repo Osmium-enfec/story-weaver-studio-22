@@ -357,6 +357,18 @@ export async function pgGetProjectById(id: string): Promise<LocalProjectRow | nu
 }
 
 
+/** Natural episode order: "Episode 2" before "Episode 10". */
+const NATURAL_ORDER = `
+  NULLIF(regexp_replace(title, '\\D', '', 'g'), '')::numeric NULLS LAST,
+  title ASC`;
+
+function pageClause(opts?: { limit?: number; offset?: number }): string {
+  const limit = Number.isFinite(opts?.limit) ? Math.max(1, Number(opts?.limit)) : null;
+  const offset = Number.isFinite(opts?.offset) ? Math.max(0, Number(opts?.offset)) : 0;
+  if (limit === null) return "";
+  return ` LIMIT ${limit} OFFSET ${offset}`;
+}
+
 export async function pgListProjects(
   userId: string,
   userEmail: string,
@@ -365,12 +377,16 @@ export async function pgListProjects(
     asAdmin?: boolean;
     /** When true, omit episodes with no course (non-admin default). */
     requireCourse?: boolean;
+    /** Server-side paging (optional). */
+    limit?: number;
+    offset?: number;
   },
 ): Promise<LocalProjectListItem[]> {
   let rows: Record<string, unknown>[];
   // Cap unscoped listings: nobody browses past a few hundred episodes, and an
   // unbounded scan is what pushed the small server into swap.
   const LIST_CAP = Number(process.env.PROJECT_LIST_CAP ?? 500);
+  const page = pageClause(opts);
 
   if (opts?.asAdmin) {
     if (opts && "courseId" in opts) {
@@ -378,13 +394,13 @@ export async function pgListProjects(
         const res = await pgQuery<Record<string, unknown>>(
           `SELECT ${LIST_SELECT}
            FROM projects WHERE course_id IS NULL ORDER BY updated_at DESC
-           LIMIT ${LIST_CAP}`,
+           ${page || `LIMIT ${LIST_CAP}`}`,
         );
         rows = res.rows;
       } else {
         const res = await pgQuery<Record<string, unknown>>(
           `SELECT ${LIST_SELECT}
-           FROM projects WHERE course_id = $1 ORDER BY title ASC`,
+           FROM projects WHERE course_id = $1 ORDER BY ${NATURAL_ORDER}${page}`,
           [opts.courseId],
         );
         rows = res.rows;
@@ -414,7 +430,7 @@ export async function pgListProjects(
     }
     const res = await pgQuery<Record<string, unknown>>(
       `SELECT ${LIST_SELECT}
-       FROM projects WHERE course_id = $1 ORDER BY title ASC`,
+       FROM projects WHERE course_id = $1 ORDER BY ${NATURAL_ORDER}${page}`,
       [opts.courseId],
     );
     rows = res.rows;

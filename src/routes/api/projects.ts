@@ -21,6 +21,9 @@ const Body = z.discriminatedUnion("action", [
     action: z.literal("list"),
     /** When set, filter episodes by course. null = unassigned only. */
     course_id: z.string().uuid().nullable().optional(),
+    /** Optional server-side paging. */
+    limit: z.number().int().min(1).max(200).optional(),
+    offset: z.number().int().min(0).optional(),
   }),
   z.object({
     action: z.literal("get"),
@@ -119,6 +122,8 @@ export const Route = createFileRoute("/api/projects")({
               await localListProjects(user.id, user.email, {
                 courseId: data.course_id,
                 asAdmin,
+                limit: data.limit,
+                offset: data.offset,
               }),
             );
           }
@@ -127,6 +132,8 @@ export const Route = createFileRoute("/api/projects")({
               asAdmin,
               // Non-admins only see episodes that belong to a course.
               requireCourse: !asAdmin,
+              limit: data.limit,
+              offset: data.offset,
             }),
           );
         }

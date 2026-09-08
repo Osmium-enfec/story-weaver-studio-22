@@ -115,7 +115,11 @@ function ExportPage() {
 
   useEffect(() => {
     void refresh();
-    const t = setInterval(() => void refresh(), 1000);
+    // Poll gently and only while the tab is actually being looked at.
+    const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void refresh();
+    }, 3000);
     return () => clearInterval(t);
   }, [refresh]);
 

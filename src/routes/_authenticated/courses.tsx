@@ -81,17 +81,29 @@ function CoursesPage() {
     queryFn: () => apiListCourses(),
   });
 
-  const { data: orphanEpisodes, isLoading: orphansLoading } = useQuery({
-    queryKey: ["projects", "unassigned"],
+  // Only the rows this page shows (plus one probe row for "is there a next
+  // page?") are fetched — the full unassigned list used to be pulled every time.
+  const { data: orphanPage, isLoading: orphansLoading } = useQuery({
+    queryKey: ["projects", "unassigned", episodesPage],
     queryFn: async () => {
-      const rows = await apiListProjects({ courseId: null });
+      const rows = await apiListProjects({
+        courseId: null,
+        limit: PAGE_SIZE + 1,
+        offset: (episodesPage - 1) * PAGE_SIZE,
+      });
       return Array.isArray(rows) ? rows : [];
     },
     enabled: isAdmin,
+    placeholderData: (prev) => prev,
+    staleTime: 60_000,
   });
+  const orphanEpisodes = orphanPage ?? [];
+  const hasNextEpisodesPage = orphanEpisodes.length > PAGE_SIZE;
 
   const coursesTotalPages = totalPages(courses?.length ?? 0);
-  const episodesTotalPages = totalPages(orphanEpisodes?.length ?? 0);
+  const episodesTotalPages = hasNextEpisodesPage
+    ? episodesPage + 1
+    : episodesPage;
 
   const pagedCourses = useMemo(() => {
     if (!courses) return [];
@@ -99,11 +111,10 @@ function CoursesPage() {
     return pageSlice(courses, page);
   }, [courses, coursesPage, coursesTotalPages]);
 
-  const pagedEpisodes = useMemo(() => {
-    if (!orphanEpisodes) return [];
-    const page = Math.min(episodesPage, episodesTotalPages);
-    return pageSlice(orphanEpisodes, page);
-  }, [orphanEpisodes, episodesPage, episodesTotalPages]);
+  const pagedEpisodes = useMemo(
+    () => orphanEpisodes.slice(0, PAGE_SIZE),
+    [orphanEpisodes],
+  );
 
   const createCourse = useMutation({
     mutationFn: async (title: string) => apiSaveCourse({ title }),
