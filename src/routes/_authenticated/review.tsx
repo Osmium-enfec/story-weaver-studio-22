@@ -228,7 +228,7 @@ function ReviewPage() {
       );
     }
     return out;
-  }, [episodes, onlyMyReviews, reviews, myEmail]);
+  }, [pagedEpisodes, onlyMyReviews, reviews, myEmail]);
 
   const knownAssignees = useMemo(() => {
     const set = new Set<string>();
