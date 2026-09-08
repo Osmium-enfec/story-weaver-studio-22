@@ -631,6 +631,42 @@ function ReviewPage() {
             </tbody>
           </table>
         </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">
+            Showing episodes {episodes.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
+            –{Math.min(page * PAGE_SIZE, episodes.length)} of {episodes.length}
+          </span>
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="rounded-md border px-2.5 py-1 hover:bg-accent disabled:opacity-50"
+            >
+              Previous
+            </button>
+            {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPage(p)}
+                className={`rounded-md border px-2.5 py-1 ${p === page ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              type="button"
+              disabled={page >= pageCount}
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              className="rounded-md border px-2.5 py-1 hover:bg-accent disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+
         <datalist id="review-assignees">
           {knownAssignees.map((email) => (
             <option key={email} value={email} />
