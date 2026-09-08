@@ -378,29 +378,49 @@ function ImageScene({
   const padPct = customBg ? CARD_PADDING_FRAC * 100 : 0;
   const els = scene.elements ?? [];
   const playedSfxRef = useRef<Set<string>>(new Set());
-  const prevProgressRef = useRef(0);
+  const sfxCacheRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const sceneDurMs = scene.durationMs || 1;
 
   useEffect(() => {
     playedSfxRef.current.clear();
-    prevProgressRef.current = 0;
   }, [scene.id]);
 
+  // Preload the reveal sounds so the first tick/pop isn't swallowed by a fetch.
   useEffect(() => {
-    const prev = prevProgressRef.current;
-    const curr = progress;
-    prevProgressRef.current = curr;
-    if (curr < prev - 0.01) playedSfxRef.current.clear();
+    if (typeof window === "undefined") return;
+    for (const el of els) {
+      if (!el.sfxUrl || sfxCacheRef.current.has(el.sfxUrl)) continue;
+      const a = new Audio(el.sfxUrl);
+      a.preload = "auto";
+      a.load();
+      sfxCacheRef.current.set(el.sfxUrl, a);
+    }
+  }, [els]);
 
+  useEffect(() => {
+    if (contentOnly) return;
+    const elapsed = elapsedSpeechMs;
+    // Anything far behind the playhead is treated as already revealed (seek/scrub).
+    const LATE_MS = 400;
     for (const el of els) {
       if (!el.sfxUrl) continue;
-      if (prev < el.appearAt && curr >= el.appearAt && !playedSfxRef.current.has(el.id)) {
-        playedSfxRef.current.add(el.id);
-        const sfx = new Audio(el.sfxUrl);
-        sfx.volume = 0.85;
-        void sfx.play().catch(() => {});
+      const atMs = el.appearAt * sceneDurMs;
+      if (elapsed < atMs) {
+        playedSfxRef.current.delete(el.id);
+        continue;
       }
+      if (playedSfxRef.current.has(el.id)) continue;
+      playedSfxRef.current.add(el.id);
+      if (!playing) continue;
+      if (elapsed - atMs > LATE_MS) continue;
+      const base = sfxCacheRef.current.get(el.sfxUrl);
+      const sfx = base
+        ? (base.cloneNode(true) as HTMLAudioElement)
+        : new Audio(el.sfxUrl);
+      sfx.volume = 0.85;
+      void sfx.play().catch(() => {});
     }
-  }, [progress, els]);
+  }, [elapsedSpeechMs, els, playing, contentOnly, sceneDurMs]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
