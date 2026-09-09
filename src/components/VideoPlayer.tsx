@@ -409,9 +409,11 @@ function ImageScene({
         playedSfxRef.current.delete(el.id);
         continue;
       }
+      // Never mark as played while paused — otherwise a sound at appearAt 0 is
+      // consumed by the initial paused render and skipped once Play is pressed.
+      if (!playing) continue;
       if (playedSfxRef.current.has(el.id)) continue;
       playedSfxRef.current.add(el.id);
-      if (!playing) continue;
       if (elapsed - atMs > LATE_MS) continue;
       const base = sfxCacheRef.current.get(el.sfxUrl);
       const sfx = base
