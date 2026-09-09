@@ -2084,10 +2084,27 @@ function ComposePage() {
     // with a stale parts blob. Selection is local UI state only.
     setSelectedPartId(part.id);
     setPartTitle(part.title);
-    const partScenes = (Array.isArray(part.scenes) ? part.scenes : []) as Scene[];
+
+    // The cached project only carries full scenes for the focused part; every
+    // other part is trimmed to a single thumbnail scene. Fetch the real scenes
+    // before aligning, or the script would be rewritten to that one scene.
+    let sourcePart = part;
+    if (part.id !== focusPartId) {
+      try {
+        const rec = await apiGetProject(projectId, { partId: part.id });
+        const full = getProjectParts(rec).find((p) => p.id === part.id);
+        if (!full) throw new Error("Part not found");
+        sourcePart = full;
+      } catch {
+        toast.error("Could not load that part. Try again.");
+        return;
+      }
+    }
+
+    const partScenes = (Array.isArray(sourcePart.scenes) ? sourcePart.scenes : []) as Scene[];
     const leftoverScript =
-      (Array.isArray(part.scriptScenes) && part.scriptScenes.length > 0) ||
-      !!part.script?.trim();
+      (Array.isArray(sourcePart.scriptScenes) && sourcePart.scriptScenes.length > 0) ||
+      !!sourcePart.script?.trim();
 
     // Empty stitch is authoritative — never rematerialize stubs from leftover
     // scriptScenes (that was bringing deleted scenes back after refresh).
@@ -2144,7 +2161,7 @@ function ComposePage() {
 
     const hadScriptOrScenes = partScenes.length > 0 || leftoverScript;
     const aligned = alignScriptAndComposeScenes(
-      partScriptPlanFromPart(part),
+      partScriptPlanFromPart(sourcePart),
       partScenes,
       { preferComposeOrder: true },
     );
