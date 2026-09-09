@@ -2161,7 +2161,7 @@ function ComposePage() {
 
     const hadScriptOrScenes = partScenes.length > 0 || leftoverScript;
     const aligned = alignScriptAndComposeScenes(
-      partScriptPlanFromPart(part),
+      partScriptPlanFromPart(sourcePart),
       partScenes,
       { preferComposeOrder: true },
     );
