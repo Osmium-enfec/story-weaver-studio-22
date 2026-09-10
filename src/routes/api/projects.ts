@@ -7,6 +7,7 @@ import {
   localGetProject,
   localGetProjectById,
   localGetProjectForPart,
+  localGetProjectSummary,
 
   localListProjects,
   localSaveProject,
@@ -30,6 +31,8 @@ const Body = z.discriminatedUnion("action", [
     id: z.string().uuid(),
     /** Compose page: full scenes for this part only, thumbnails for the rest. */
     part_id: z.string().optional(),
+    /** Episode page: part metadata only, no scene payloads. */
+    summary: z.boolean().optional(),
   }),
 
   z.object({
@@ -139,7 +142,9 @@ export const Route = createFileRoute("/api/projects")({
         }
 
         if (data.action === "get") {
-          const local = data.part_id
+          const local = data.summary
+            ? await localGetProjectSummary(data.id)
+            : data.part_id
             ? await localGetProjectForPart(data.id, data.part_id)
             : asAdmin
               ? await localGetProjectById(data.id)

@@ -39,6 +39,20 @@ export const Route = createFileRoute("/_authenticated/episode/$id")({
   component: EpisodeDetailPage,
 });
 
+/**
+ * The episode page loads a light summary (no scene payloads), so scene counts
+ * and thumbnails come from `sceneCount`/`thumbUrl` when present.
+ */
+function partSceneCount(part: ProjectPart): number {
+  const n = (part as unknown as { sceneCount?: number }).sceneCount;
+  return typeof n === "number" ? n : part.scenes.length;
+}
+
+function partThumbUrl(part: ProjectPart): string | undefined {
+  const t = (part as unknown as { thumbUrl?: string | null }).thumbUrl;
+  return t ?? partThumb(part);
+}
+
 function EpisodeDetailPage() {
   const { id } = Route.useParams();
   const router = useRouter();
@@ -60,7 +74,7 @@ function EpisodeDetailPage() {
     queryFn: async () => {
       const timeoutMs = 25_000;
       return Promise.race([
-        apiGetProject(id),
+        apiGetProject(id, { summary: true }),
         new Promise<never>((_, reject) =>
           setTimeout(
             () =>
@@ -237,7 +251,7 @@ function EpisodeDetailPage() {
     if (deletingPartId) return;
     if (
       !confirm(
-        `Delete part \u201C${part.title}\u201D? This permanently removes its ${part.scenes.length} scene(s) from this episode.`,
+        `Delete part \u201C${part.title}\u201D? This permanently removes its ${partSceneCount(part)} scene(s) from this episode.`,
       )
     ) {
       return;
@@ -433,9 +447,9 @@ function EpisodeDetailPage() {
                           at={reviewByPart.get(part.id)?.workflow_at}
                         />
                       </span>
-                      {partThumb(part) ? (
+                      {partThumbUrl(part) ? (
                         <img
-                          src={partThumb(part)!}
+                          src={partThumbUrl(part)!}
                           alt=""
                           className="h-full w-full object-cover"
                         />
@@ -522,8 +536,8 @@ function EpisodeDetailPage() {
                         </div>
                       )}
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {part.scenes.length} scene{part.scenes.length === 1 ? "" : "s"}
-                        {!part.scenes.length ? " · draft" : ""}
+                        {partSceneCount(part)} scene{partSceneCount(part) === 1 ? "" : "s"}
+                        {!partSceneCount(part) ? " · draft" : ""}
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Working:{" "}
