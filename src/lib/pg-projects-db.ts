@@ -182,24 +182,36 @@ export async function pgSaveProject(
 ): Promise<string> {
   const now = new Date().toISOString();
   const id = data.id ?? randomUUID();
-  const scenesJson = JSON.stringify(data.scenes ?? []);
+  let scenesJson = JSON.stringify(data.scenes ?? []);
   const asAdmin = opts?.asAdmin === true;
 
   const existingRes = await pgQuery<{
     id: string;
     user_id: string;
     parts: unknown;
+    scenes: unknown;
     course_id: string | null;
     assigned_user_id: string | null;
     assigned_user_email: string | null;
   }>(
-    `SELECT id, user_id, parts, course_id, assigned_user_id, assigned_user_email
+    `SELECT id, user_id, parts, scenes, course_id, assigned_user_id, assigned_user_email
      FROM projects WHERE id = $1`,
     [id],
   );
   const existing = existingRes.rows[0];
 
   if (existing) {
+    // A lightweight (summary) snapshot sends no top-level scenes — never let
+    // that blank out the stored legacy scene payload.
+    const incomingScenes = data.scenes;
+    const existingScenes = parseJsonColumn(existing.scenes);
+    if (
+      (!Array.isArray(incomingScenes) || incomingScenes.length === 0) &&
+      Array.isArray(existingScenes) &&
+      existingScenes.length > 0
+    ) {
+      scenesJson = JSON.stringify(existingScenes);
+    }
     const partsRaw = parseJsonColumn(existing.parts);
     const canWrite = userCanAccessProject(
       { userId, userEmail },
