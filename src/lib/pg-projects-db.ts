@@ -374,16 +374,18 @@ export async function pgGetProjectSummary(
        '[]'::jsonb AS scenes,
        COALESCE((
          SELECT jsonb_agg(
+           CASE WHEN jsonb_typeof(p) <> 'object' THEN p ELSE
            ((p - 'scenes') || jsonb_build_object(
               'scenes', '[]'::jsonb,
-              'sceneCount', COALESCE(jsonb_array_length(p->'scenes'), 0),
+              'sceneCount', CASE WHEN jsonb_typeof(p->'scenes') = 'array'
+                                 THEN jsonb_array_length(p->'scenes') ELSE 0 END,
               'thumbUrl', COALESCE(
                 to_jsonb(p->'scenes'->0->>'compositeThumbUrl'),
                 to_jsonb(p->'scenes'->0->>'backgroundUrl'),
                 to_jsonb(p->'scenes'->0->'elements'->0->>'mediaUrl'),
                 to_jsonb(p->>'thumbnail_url'),
                 'null'::jsonb)
-           )) ORDER BY ord)
+           )) END ORDER BY ord)
          FROM jsonb_array_elements(projects.parts) WITH ORDINALITY t(p, ord)
        ), '[]'::jsonb) AS parts,
        thumbnail_url, course_id, assigned_user_id, assigned_user_email,
