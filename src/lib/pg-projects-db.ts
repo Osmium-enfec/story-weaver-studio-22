@@ -346,6 +346,43 @@ export async function pgGetProjectForPart(
   return row ? rowToProject(row) : null;
 }
 
+/**
+ * Episode page fetch: part metadata only. Every part's `scenes` comes back
+ * empty, with `sceneCount` and `thumbUrl` carried alongside, so opening an
+ * episode no longer streams megabytes of scene data. Saves that start from
+ * this snapshot are safe: an empty incoming `scenes` array preserves the
+ * database copy (see mergePartScenesPreserving).
+ */
+export async function pgGetProjectSummary(
+  id: string,
+): Promise<LocalProjectRow | null> {
+  const res = await pgQuery<Record<string, unknown>>(
+    `SELECT
+       id, user_id, title, script, audio_mode,
+       '[]'::jsonb AS scenes,
+       COALESCE((
+         SELECT jsonb_agg(
+           ((p - 'scenes') || jsonb_build_object(
+              'scenes', '[]'::jsonb,
+              'sceneCount', COALESCE(jsonb_array_length(p->'scenes'), 0),
+              'thumbUrl', COALESCE(
+                to_jsonb(p->'scenes'->0->>'compositeThumbUrl'),
+                to_jsonb(p->'scenes'->0->>'backgroundUrl'),
+                to_jsonb(p->'scenes'->0->'elements'->0->>'mediaUrl'),
+                to_jsonb(p->>'thumbnail_url'),
+                'null'::jsonb)
+           )) ORDER BY ord)
+         FROM jsonb_array_elements(projects.parts) WITH ORDINALITY t(p, ord)
+       ), '[]'::jsonb) AS parts,
+       thumbnail_url, course_id, assigned_user_id, assigned_user_email,
+       created_at::text AS created_at, updated_at::text AS updated_at
+     FROM projects WHERE id = $1`,
+    [id],
+  );
+  const row = res.rows[0];
+  return row ? rowToProject(row) : null;
+}
+
 /** Admin / cross-user fetch — no owner filter. */
 export async function pgGetProjectById(id: string): Promise<LocalProjectRow | null> {
   const res = await pgQuery<Record<string, unknown>>(
