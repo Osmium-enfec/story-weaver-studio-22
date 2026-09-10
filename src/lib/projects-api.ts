@@ -107,9 +107,14 @@ export function apiListProjects(opts?: {
  */
 export function apiGetProject(
   id: string,
-  opts?: { partId?: string | null },
+  opts?: { partId?: string | null; summary?: boolean },
 ): Promise<ProjectRecord> {
-  return projectsFetch({ action: "get", id, part_id: opts?.partId ?? undefined });
+  return projectsFetch({
+    action: "get",
+    id,
+    part_id: opts?.partId ?? undefined,
+    summary: opts?.summary === true ? true : undefined,
+  });
 }
 
 

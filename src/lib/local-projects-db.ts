@@ -917,6 +917,40 @@ export async function localGetProjectForPart(
 }
 
 
+/**
+ * Episode page read: part metadata only (no scene payloads).
+ */
+export async function localGetProjectSummary(id: string): Promise<any> {
+  if (usePostgres()) {
+    const { pgGetProjectSummary } = await import("@/lib/pg-projects-db");
+    return pgGetProjectSummary(id);
+  }
+  const row = await sqliteGetProjectById(id as any);
+  if (!row) return row;
+  const parts = Array.isArray((row as any).parts) ? (row as any).parts : null;
+  if (!parts) return row;
+  return {
+    ...(row as any),
+    scenes: [],
+    parts: parts.map((p: any) => {
+      if (!p || typeof p !== "object") return p;
+      const scenes = Array.isArray(p.scenes) ? p.scenes : [];
+      const first: any = scenes[0];
+      return {
+        ...p,
+        scenes: [],
+        sceneCount: scenes.length,
+        thumbUrl:
+          first?.compositeThumbUrl ??
+          first?.backgroundUrl ??
+          first?.elements?.[0]?.mediaUrl ??
+          p.thumbnail_url ??
+          null,
+      };
+    }),
+  };
+}
+
 export async function localListProjects(...args: any[]): Promise<any> {
   if (usePostgres()) {
     const { pgListProjects } = await import("@/lib/pg-projects-db");
