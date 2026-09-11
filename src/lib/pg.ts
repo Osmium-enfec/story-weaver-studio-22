@@ -250,44 +250,71 @@ async function restQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
  * self-hosted app, which has raw TCP access to the DO Postgres. Keeps both
  * deployments on one database.
  */
+const UNAVAILABLE_MESSAGE =
+  "The database service is temporarily unavailable. Please try again in a moment.";
+
 async function proxyQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params?: unknown[],
 ): Promise<pg.QueryResult<T>> {
   const timeoutMs = Number(process.env.SQL_PROXY_TIMEOUT_MS ?? 20_000);
-  let res: Response;
-  try {
-    res = await fetch(sqlProxyUrl(), {
-      method: "POST",
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.SQL_PROXY_SECRET?.trim() ?? ""}`,
-      },
-      body: JSON.stringify({ text, params: params ?? [] }),
-    });
-  } catch (err) {
-    const reason = err instanceof Error ? err.name : "unknown";
-    throw new Error(
-      reason === "TimeoutError" || reason === "AbortError"
-        ? "Database is not responding (request timed out). The database server may be down or overloaded."
-        : "Database is unreachable right now. Please try again shortly.",
-    );
+  const attempts = Math.max(1, Number(process.env.SQL_PROXY_RETRIES ?? 3));
+  let lastError = new Error(UNAVAILABLE_MESSAGE);
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      // Short backoff: the gateway usually recovers within a second or two.
+      await new Promise((r) => setTimeout(r, 300 * 2 ** (attempt - 1)));
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(sqlProxyUrl(), {
+        method: "POST",
+        signal: AbortSignal.timeout(timeoutMs),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.SQL_PROXY_SECRET?.trim() ?? ""}`,
+        },
+        body: JSON.stringify({ text, params: params ?? [] }),
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.name : "unknown";
+      lastError = new Error(
+        reason === "TimeoutError" || reason === "AbortError"
+          ? "Database is not responding (request timed out). The database server may be down or overloaded."
+          : "Database is unreachable right now. Please try again shortly.",
+      );
+      continue; // transient network/timeout — retry
+    }
+
+    const payload = (await res.json().catch(() => ({}))) as {
+      rows?: T[];
+      rowCount?: number;
+      error?: string;
+    };
+
+    if (res.ok) {
+      return {
+        rows: payload.rows ?? [],
+        rowCount: payload.rowCount ?? 0,
+        command: "",
+        oid: 0,
+        fields: [],
+      } as unknown as pg.QueryResult<T>;
+    }
+
+    // 502/503/504/429 come from the reverse proxy while the origin restarts or
+    // is overloaded — worth retrying. Anything else is a real query failure.
+    const retryable = res.status === 429 || res.status >= 500;
+    const message = payload.error ?? (retryable ? UNAVAILABLE_MESSAGE : `Database request failed (${res.status})`);
+    lastError = new Error(message);
+    if (!retryable) throw lastError;
   }
-  const payload = (await res.json().catch(() => ({}))) as {
-    rows?: T[];
-    rowCount?: number;
-    error?: string;
-  };
-  if (!res.ok) throw new Error(payload.error ?? `SQL proxy failed (${res.status})`);
-  return {
-    rows: payload.rows ?? [],
-    rowCount: payload.rowCount ?? 0,
-    command: "",
-    oid: 0,
-    fields: [],
-  } as unknown as pg.QueryResult<T>;
+
+  throw lastError;
 }
+
 
 export async function pgQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
