@@ -253,12 +253,34 @@ async function restQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
 const UNAVAILABLE_MESSAGE =
   "The database service is temporarily unavailable. Please try again in a moment.";
 
+/**
+ * Only read-only statements may be retried. Retrying an INSERT/UPDATE/DELETE
+ * after a timeout or gateway 502 can duplicate a write the origin already
+ * committed, so those get exactly one attempt.
+ */
+function isReadOnlyStatement(text: string): boolean {
+  // Strip leading comments/whitespace, then require a SELECT-ish start.
+  const sql = text
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--[^\n]*/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!/^(select|with|show|explain|table|values)\b/.test(sql)) return false;
+  // A CTE can still write: WITH x AS (INSERT ... RETURNING ...) SELECT ...
+  if (/\b(insert|update|delete|merge|create|alter|drop|truncate|grant|revoke)\b/.test(sql)) {
+    return false;
+  }
+  return true;
+}
+
 async function proxyQuery<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   params?: unknown[],
 ): Promise<pg.QueryResult<T>> {
   const timeoutMs = Number(process.env.SQL_PROXY_TIMEOUT_MS ?? 20_000);
-  const attempts = Math.max(1, Number(process.env.SQL_PROXY_RETRIES ?? 3));
+  const attempts = isReadOnlyStatement(text)
+    ? Math.max(1, Number(process.env.SQL_PROXY_RETRIES ?? 3))
+    : 1;
   let lastError = new Error(UNAVAILABLE_MESSAGE);
 
   for (let attempt = 0; attempt < attempts; attempt++) {
