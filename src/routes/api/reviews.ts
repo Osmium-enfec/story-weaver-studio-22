@@ -34,6 +34,8 @@ const Body = z.discriminatedUnion("action", [
     assignee_email: z.string().max(200).optional(),
     review_doc_url: z.string().max(2000).optional(),
     review_doc_name: z.string().max(300).optional(),
+    script_doc_url: z.string().max(2000).optional(),
+    script_doc_name: z.string().max(300).optional(),
     rendered_uploaded: STATUS.optional(),
     workflow_status: z
       .enum(["", "ready_for_review", "reviewed", "redo"])
@@ -90,7 +92,10 @@ export const Route = createFileRoute("/api/reviews")({
             f === "review_doc"
               ? rec.review_doc_url !== undefined ||
                 rec.review_doc_name !== undefined
-              : rec[f] !== undefined,
+              : f === "script_doc"
+                ? rec.script_doc_url !== undefined ||
+                  rec.script_doc_name !== undefined
+                : rec[f] !== undefined,
           ) as ReviewField[];
           if (touched.length === 0) return jsonError("Nothing to update", 400);
 
@@ -138,6 +143,8 @@ export const Route = createFileRoute("/api/reviews")({
             assignee_email: data.assignee_email,
             review_doc_url: data.review_doc_url,
             review_doc_name: data.review_doc_name,
+            script_doc_url: data.script_doc_url,
+            script_doc_name: data.script_doc_name,
             rendered_uploaded: data.rendered_uploaded,
             workflow_status: data.workflow_status,
             progress_status: data.progress_status,

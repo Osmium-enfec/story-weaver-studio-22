@@ -39,7 +39,7 @@ export const Route = createFileRoute("/_authenticated/review")({
       {
         name: "description",
         content:
-          "Shared part-by-part review sheet: script, screen recording, composing, review status, issues, corrections and render tracking.",
+          "Shared part-by-part review sheet: script, script files, screen recording, composing status, issues, corrections and render tracking.",
       },
     ],
   }),
@@ -88,6 +88,8 @@ function emptyReview(
     assignee_email: "",
     review_doc_url: "",
     review_doc_name: "",
+    script_doc_url: "",
+    script_doc_name: "",
     rendered_uploaded: "",
     workflow_status: "",
     workflow_by_email: "",
@@ -297,8 +299,12 @@ function ReviewPage() {
     }
   }
 
-  async function uploadDoc(row: Row, file: File) {
-    const key = `${row.episode.id}:${row.part.id}`;
+  async function uploadDoc(
+    row: Row,
+    file: File,
+    target: "review" | "script" = "review",
+  ) {
+    const key = `${row.episode.id}:${row.part.id}:${target}`;
     setUploadingKey(key);
     setError(null);
     try {
@@ -308,7 +314,12 @@ function ReviewPage() {
         projectId: row.episode.id,
         ext,
       });
-      await save(row, { review_doc_url: url, review_doc_name: file.name });
+      await save(
+        row,
+        target === "script"
+          ? { script_doc_url: url, script_doc_name: file.name }
+          : { review_doc_url: url, review_doc_name: file.name },
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not upload document");
     } finally {
@@ -321,27 +332,40 @@ function ReviewPage() {
   const inputCls =
     "h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs disabled:cursor-not-allowed disabled:opacity-60";
 
-  function DocCell({ row }: { row: Row }) {
+  function DocCell({
+    row,
+    target = "review",
+  }: {
+    row: Row;
+    target?: "review" | "script";
+  }) {
     const r = reviewFor(row);
-    const editable = can(row, "review_doc");
-    const key = `${row.episode.id}:${row.part.id}`;
+    const isScript = target === "script";
+    const editable = can(row, isScript ? "script_doc" : "review_doc");
+    const key = `${row.episode.id}:${row.part.id}:${target}`;
     const uploading = uploadingKey === key;
+    const docUrl = isScript ? r.script_doc_url : r.review_doc_url;
+    const docName = isScript ? r.script_doc_name : r.review_doc_name;
     return (
       <div className="flex flex-col gap-1">
-        {r.review_doc_url ? (
+        {docUrl ? (
           <a
-            href={r.review_doc_url}
-            download={r.review_doc_name || undefined}
+            href={docUrl}
+            download={docName || undefined}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 truncate text-xs text-primary underline"
-            title={r.review_doc_name || "Download document"}
+            title={docName || "Download document"}
           >
             <FileText size={12} className="shrink-0" />
-            <span className="truncate">{r.review_doc_name || "Document"}</span>
+            <span className="truncate">
+              {docName || (isScript ? "Script" : "Document")}
+            </span>
           </a>
         ) : (
-          <span className="text-xs text-muted-foreground">No document</span>
+          <span className="text-xs text-muted-foreground">
+            {isScript ? "No script file" : "No document"}
+          </span>
         )}
         {editable && (
           <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
@@ -350,20 +374,16 @@ function ReviewPage() {
             ) : (
               <Upload size={11} />
             )}
-            {uploading
-              ? "Uploading…"
-              : r.review_doc_url
-                ? "Replace"
-                : "Upload"}
+            {uploading ? "Uploading…" : docUrl ? "Replace" : "Upload"}
             <input
               type="file"
               className="hidden"
               disabled={uploading}
-              accept=".pdf,.doc,.docx,.txt,.rtf,.xls,.xlsx,.ppt,.pptx,.csv"
+              accept=".pdf,.doc,.docx,.txt,.rtf,.md,.xls,.xlsx,.ppt,.pptx,.csv"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
-                if (file) void uploadDoc(row, file);
+                if (file) void uploadDoc(row, file, target);
               }}
             />
           </label>
@@ -379,7 +399,7 @@ function ReviewPage() {
     kind,
   }: {
     row: Row;
-    field: Exclude<ReviewField, "review_doc">;
+    field: Exclude<ReviewField, "review_doc" | "script_doc">;
     options: string[];
     kind: "progress" | "review" | "correction" | "rendered";
   }) {
@@ -461,7 +481,8 @@ function ReviewPage() {
 
         <p className="mb-4 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Lock size={11} />
-          Script &amp; recording: the part's assigned editor. Review status
+          Script &amp; recording: the part's assigned editor. Script file: the
+          assigned editor or reviewer. Composing status
           &amp; issues: the reviewer. Correction status: the assigned person.
           Rendered &amp; uploaded: admin only. Admins can edit everything.
         </p>
@@ -483,14 +504,17 @@ function ReviewPage() {
                 <th className="w-28 border-r px-3 py-2 font-medium">Part</th>
                 <th className="w-40 border-r px-3 py-2 font-medium">Stage</th>
                 <th className="w-32 border-r px-3 py-2 font-medium">Script</th>
+                <th className="w-44 border-r px-3 py-2 font-medium">
+                  Script File
+                </th>
                 <th className="w-36 border-r px-3 py-2 font-medium">
                   Screen Recording
                 </th>
                 <th className="w-44 border-r px-3 py-2 font-medium">
                   Composing (assigned)
                 </th>
-                <th className="w-32 border-r px-3 py-2 font-medium">
-                  Review Status
+                <th className="w-36 border-r px-3 py-2 font-medium">
+                  Composing Status
                 </th>
                 <th className="min-w-[280px] border-r px-3 py-2 font-medium">
                   Issues Found
@@ -513,7 +537,7 @@ function ReviewPage() {
               {rows.length === 0 && !loading ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     className="px-3 py-6 text-sm text-muted-foreground"
                   >
                     No episode parts in this course.
@@ -567,6 +591,9 @@ function ReviewPage() {
                           options={PROGRESS_OPTIONS}
                           kind="progress"
                         />
+                      </td>
+                      <td className="border-r px-3 py-1.5">
+                        <DocCell row={row} target="script" />
                       </td>
                       <td className="border-r px-3 py-1.5">
                         <StatusCell

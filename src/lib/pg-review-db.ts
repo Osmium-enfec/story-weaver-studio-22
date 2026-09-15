@@ -11,6 +11,8 @@ const COLS = `project_id, part_id, course_id, script_status, recording_status,
   review_status, issues_found, correction_status, assignee_email,
   COALESCE(review_doc_url,'') AS review_doc_url,
   COALESCE(review_doc_name,'') AS review_doc_name,
+  COALESCE(script_doc_url,'') AS script_doc_url,
+  COALESCE(script_doc_name,'') AS script_doc_name,
   rendered_uploaded,
   COALESCE(workflow_status,'') AS workflow_status,
   COALESCE(workflow_by_email,'') AS workflow_by_email,
@@ -29,6 +31,12 @@ async function ensureDocColumns(): Promise<void> {
       );
       await pgQuery(
         `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS review_doc_name TEXT NOT NULL DEFAULT ''`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS script_doc_url TEXT NOT NULL DEFAULT ''`,
+      );
+      await pgQuery(
+        `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS script_doc_name TEXT NOT NULL DEFAULT ''`,
       );
       await pgQuery(
         `ALTER TABLE part_reviews ADD COLUMN IF NOT EXISTS workflow_status TEXT NOT NULL DEFAULT ''`,
@@ -72,12 +80,13 @@ export async function pgUpsertReview(
     `INSERT INTO part_reviews (
        project_id, part_id, course_id, script_status, recording_status,
        review_status, issues_found, correction_status, assignee_email,
-       review_doc_url, review_doc_name,
+       review_doc_url, review_doc_name, script_doc_url, script_doc_name,
        rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
        progress_status, updated_by_email, updated_at
      ) VALUES ($1,$2,$3,
        COALESCE($4,''),COALESCE($5,''),COALESCE($6,''),COALESCE($7,''),
        COALESCE($8,''),COALESCE($9,''),COALESCE($13,''),COALESCE($14,''),
+       COALESCE($17,''),COALESCE($18,''),
        COALESCE($10,''),
        COALESCE($15,''),
        CASE WHEN $15 IS NULL THEN '' ELSE COALESCE($11,'') END,
@@ -94,6 +103,8 @@ export async function pgUpsertReview(
        assignee_email = COALESCE($9, part_reviews.assignee_email),
        review_doc_url = COALESCE($13, part_reviews.review_doc_url),
        review_doc_name = COALESCE($14, part_reviews.review_doc_name),
+       script_doc_url = COALESCE($17, part_reviews.script_doc_url),
+       script_doc_name = COALESCE($18, part_reviews.script_doc_name),
        rendered_uploaded = COALESCE($10, part_reviews.rendered_uploaded),
        workflow_status = COALESCE($15, part_reviews.workflow_status),
        workflow_by_email = CASE WHEN $15 IS NULL
@@ -120,6 +131,8 @@ export async function pgUpsertReview(
       input.review_doc_name ?? null,
       input.workflow_status ?? null,
       input.progress_status ?? null,
+      input.script_doc_url ?? null,
+      input.script_doc_name ?? null,
     ],
   );
   const saved = await pgGetReview(input.project_id, input.part_id);

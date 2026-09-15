@@ -14,6 +14,7 @@ export type ReviewField =
   | "assignee_email"
   | "correction_status"
   | "review_doc"
+  | "script_doc"
   | "rendered_uploaded"
   | "workflow_status"
   | "progress_status";
@@ -26,6 +27,7 @@ export const REVIEW_FIELDS: ReviewField[] = [
   "assignee_email",
   "correction_status",
   "review_doc",
+  "script_doc",
   "rendered_uploaded",
   "workflow_status",
   "progress_status",
@@ -88,6 +90,12 @@ export function canEditReviewField(
     case "assignee_email":
     case "review_doc":
       return granted ? false : isReviewerEmail(me);
+    case "script_doc": {
+      // Script files can be uploaded by the assigned composer or the episode
+      // reviewer (admins and explicit grants are handled above).
+      const reviewer = norm(row.reviewerEmail);
+      return me.length > 0 && (me === composer || me === reviewer);
+    }
     case "correction_status":
       return me.length > 0 && (me === composer || me === reviewAssignee);
     case "rendered_uploaded":
