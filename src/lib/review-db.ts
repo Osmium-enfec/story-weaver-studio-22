@@ -21,6 +21,8 @@ export interface PartReviewRow {
   assignee_email: string;
   review_doc_url: string;
   review_doc_name: string;
+  script_doc_url: string;
+  script_doc_name: string;
   rendered_uploaded: string;
   /** '' | 'ready_for_review' | 'reviewed' | 'redo' */
   workflow_status: string;
@@ -44,6 +46,8 @@ export interface PartReviewInput {
   assignee_email?: string;
   review_doc_url?: string;
   review_doc_name?: string;
+  script_doc_url?: string;
+  script_doc_name?: string;
   rendered_uploaded?: string;
   workflow_status?: string;
   progress_status?: string;
@@ -71,6 +75,8 @@ function getDb(): Database.Database {
       assignee_email TEXT NOT NULL DEFAULT '',
       review_doc_url TEXT NOT NULL DEFAULT '',
       review_doc_name TEXT NOT NULL DEFAULT '',
+      script_doc_url TEXT NOT NULL DEFAULT '',
+      script_doc_name TEXT NOT NULL DEFAULT '',
       rendered_uploaded TEXT NOT NULL DEFAULT '',
       workflow_status TEXT NOT NULL DEFAULT '',
       workflow_by_email TEXT NOT NULL DEFAULT '',
@@ -86,6 +92,8 @@ function getDb(): Database.Database {
   for (const col of [
     "review_doc_url",
     "review_doc_name",
+    "script_doc_url",
+    "script_doc_name",
     "workflow_status",
     "workflow_by_email",
     "workflow_at",
@@ -121,6 +129,8 @@ export function rowToPartReview(row: Record<string, unknown>): PartReviewRow {
     assignee_email: String(row.assignee_email ?? ""),
     review_doc_url: String(row.review_doc_url ?? ""),
     review_doc_name: String(row.review_doc_name ?? ""),
+    script_doc_url: String(row.script_doc_url ?? ""),
+    script_doc_name: String(row.script_doc_name ?? ""),
     rendered_uploaded: String(row.rendered_uploaded ?? ""),
     workflow_status: String(row.workflow_status ?? ""),
     workflow_by_email: String(row.workflow_by_email ?? ""),
@@ -156,6 +166,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
         assignee_email: "",
         review_doc_url: "",
         review_doc_name: "",
+        script_doc_url: "",
+        script_doc_name: "",
         rendered_uploaded: "",
         workflow_status: "",
         progress_status: "pending",
@@ -169,6 +181,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
     assignee_email: input.assignee_email ?? base.assignee_email,
     review_doc_url: input.review_doc_url ?? base.review_doc_url,
     review_doc_name: input.review_doc_name ?? base.review_doc_name,
+    script_doc_url: input.script_doc_url ?? base.script_doc_url,
+    script_doc_name: input.script_doc_name ?? base.script_doc_name,
     rendered_uploaded: input.rendered_uploaded ?? base.rendered_uploaded,
     workflow_status: input.workflow_status ?? base.workflow_status,
     progress_status: input.progress_status ?? base.progress_status,
@@ -178,10 +192,10 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       `INSERT INTO part_reviews (
          project_id, part_id, course_id, script_status, recording_status,
          review_status, issues_found, correction_status, assignee_email,
-         review_doc_url, review_doc_name,
+         review_doc_url, review_doc_name, script_doc_url, script_doc_name,
          rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
          progress_status, updated_by_email, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT (project_id, part_id) DO UPDATE SET
          course_id = excluded.course_id,
          script_status = excluded.script_status,
@@ -192,6 +206,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
          assignee_email = excluded.assignee_email,
          review_doc_url = excluded.review_doc_url,
          review_doc_name = excluded.review_doc_name,
+         script_doc_url = excluded.script_doc_url,
+         script_doc_name = excluded.script_doc_name,
          rendered_uploaded = excluded.rendered_uploaded,
          workflow_status = excluded.workflow_status,
          workflow_by_email = excluded.workflow_by_email,
@@ -212,6 +228,8 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       merged.assignee_email,
       merged.review_doc_url,
       merged.review_doc_name,
+      merged.script_doc_url,
+      merged.script_doc_name,
       merged.rendered_uploaded,
       merged.workflow_status,
       input.workflow_status !== undefined

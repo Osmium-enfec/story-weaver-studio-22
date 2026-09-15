@@ -12,6 +12,8 @@ export type PartReview = {
   assignee_email: string;
   review_doc_url: string;
   review_doc_name: string;
+  script_doc_url: string;
+  script_doc_name: string;
   rendered_uploaded: string;
   workflow_status: string;
   workflow_by_email: string;
@@ -33,6 +35,8 @@ export type PartReviewPatch = {
   assignee_email?: string;
   review_doc_url?: string;
   review_doc_name?: string;
+  script_doc_url?: string;
+  script_doc_name?: string;
   rendered_uploaded?: string;
   workflow_status?: string;
   progress_status?: string;

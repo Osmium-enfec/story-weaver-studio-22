@@ -8,8 +8,9 @@ import {
 
 const FIELDS: Array<{ id: string; label: string }> = [
   { id: "script_status", label: "Script" },
+  { id: "script_doc", label: "Script File" },
   { id: "recording_status", label: "Screen Recording" },
-  { id: "review_status", label: "Review Status" },
+  { id: "review_status", label: "Composing Status" },
   { id: "issues_found", label: "Issues Found" },
   { id: "assignee_email", label: "Review Assignment" },
   { id: "correction_status", label: "Correction Status" },
