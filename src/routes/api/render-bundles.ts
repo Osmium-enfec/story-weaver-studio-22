@@ -3,6 +3,9 @@ import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import { isAdminUser } from "@/lib/admin";
 import { localGetProjectById } from "@/lib/local-projects-db";
+import { localGetCourseById } from "@/lib/local-courses-db";
+import { normalizeCourseSettings } from "@/lib/course-settings";
+import { DEFAULT_BACKGROUND, type SceneBackground } from "@/lib/scene-background";
 import { userCanAccessPart } from "@/lib/project-parts";
 import {
   BundleValidationError,
@@ -94,6 +97,7 @@ async function handlePost(request: Request): Promise<Response> {
             episodeTitle: String(project.title ?? "Episode"),
             part,
             baseUrl: bundleBaseUrl(request),
+            background: await courseBackground(project.course_id),
           });
           const row = await createRenderBundle({
             projectId: project.id,
@@ -112,6 +116,20 @@ async function handlePost(request: Request): Promise<Response> {
           if (e instanceof BundleValidationError) return jsonError(e.message, 422);
           return jsonError(e instanceof Error ? e.message : "Freeze failed", 500);
         }
+}
+
+/** Background the course theme dictates, so HD renders match the preview. */
+async function courseBackground(courseId: string | null): Promise<SceneBackground> {
+  if (!courseId) return DEFAULT_BACKGROUND;
+  try {
+    const course = await localGetCourseById(courseId);
+    const settings = normalizeCourseSettings(course?.settings);
+    if (settings.backgroundPreset === "plain-white") return { kind: "whiteboard" };
+    if (settings.bgLoopUrl) return { kind: "video", url: settings.bgLoopUrl };
+  } catch (e) {
+    console.error("[render-bundles] course background lookup failed", e);
+  }
+  return DEFAULT_BACKGROUND;
 }
 
 async function ownerEmail(userId: string): Promise<string> {
