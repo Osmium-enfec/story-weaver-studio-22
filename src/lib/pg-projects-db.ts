@@ -764,6 +764,8 @@ export async function pgListAssignments(): Promise<LocalAssignmentItem[]> {
       courseId: row.course_id != null ? String(row.course_id) : null,
       assignedUserId: String(row.assigned_user_id),
       assignedUserEmail: String(row.assigned_user_email ?? ""),
+      partCount: Number(row.part_count) || 0,
+      partIds: parsePartIds(row.part_ids),
       updated_at: String(row.updated_at),
     });
   }
