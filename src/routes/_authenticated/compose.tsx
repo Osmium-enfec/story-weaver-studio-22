@@ -4,6 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { apiGetCourse } from "@/lib/courses-api";
+import { normalizeCourseSettings } from "@/lib/course-settings";
+import { clearActiveCourseMedia, setActiveCourseMedia } from "@/lib/course-media";
 import { NavBar } from "@/components/NavBar";
 import { ComposeProjectPanel } from "@/components/compose/ComposeProjectPanel";
 import { ImportPartPack } from "@/components/ImportPartPack";
@@ -292,10 +295,32 @@ function ComposePage() {
   const [stitchActive, setStitchActive] = useState(false);
   const [backgroundPreset, setBackgroundPreset] =
     useState<ComposeBackgroundPreset>("video-loop");
+  const [courseMediaVersion, setCourseMediaVersion] = useState(0);
   const sceneBackground: SceneBackground = useMemo(
     () => backgroundFromPreset(backgroundPreset),
-    [backgroundPreset],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [backgroundPreset, courseMediaVersion],
   );
+
+  // Course theme (background loop, intro/outro bumpers, voice) applies to
+  // every episode and part of the course.
+  const courseId = project?.course_id ?? null;
+  const { data: courseSettings } = useQuery({
+    queryKey: ["course-settings", courseId],
+    queryFn: async () => normalizeCourseSettings((await apiGetCourse(courseId!)).settings),
+    enabled: !!courseId,
+    staleTime: 300_000,
+  });
+
+  useEffect(() => {
+    if (!courseSettings) {
+      clearActiveCourseMedia();
+      return;
+    }
+    setActiveCourseMedia(courseSettings);
+    setBackgroundPreset(courseSettings.backgroundPreset);
+    setCourseMediaVersion((v) => v + 1);
+  }, [courseSettings]);
 
   /** Prefer URL part, then explicit selection, then the only assigned part. */
   const activePartId = useMemo(() => {
