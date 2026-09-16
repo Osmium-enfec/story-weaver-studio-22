@@ -118,6 +118,9 @@ export function canEditReviewField(
         return me.length > 0 && me === composer;
       }
       if (next === "reviewed" || next === "redo") {
+        // Round-2 reviewers (course-wide grant) can also flip a part back to
+        // redo so the composer knows changes are needed.
+        if (granted?.includes("issues_found_2")) return true;
         return me.length > 0 && me === reviewer;
       }
       return false;
