@@ -53,6 +53,7 @@ import { getProjectParts, defaultPartTitle } from "@/lib/project-parts";
 import {
   commonIntroOutroRecordingDraft,
   commonIntroOutroScene,
+  healCommonBumperScene,
 } from "@/lib/common-intro-outro";
 import {
   emptyPartScriptPlan,
