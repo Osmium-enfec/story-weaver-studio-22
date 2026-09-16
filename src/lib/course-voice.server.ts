@@ -1,8 +1,5 @@
-import {
-  DEFAULT_VOICE_ENGINE,
-  voiceEngineForCourseName,
-  type VoiceEngine,
-} from "@/lib/course-voice";
+import { DEFAULT_VOICE_ENGINE, type VoiceEngine } from "@/lib/course-voice";
+import { resolveCourseVoiceEngine } from "@/lib/course-settings";
 
 /** Small in-process cache — course titles rarely change. */
 const cache = new Map<string, { engine: VoiceEngine; at: number }>();
@@ -19,8 +16,14 @@ export async function resolveVoiceEngineForCourse(
 
   try {
     const { localGetCourseById } = await import("@/lib/local-courses-db");
-    const course = (await localGetCourseById(id)) as { title?: string } | null;
-    const engine = voiceEngineForCourseName(course?.title ?? null);
+    const course = (await localGetCourseById(id)) as
+      | { title?: string; settings?: unknown }
+      | null;
+    const { normalizeCourseSettings } = await import("@/lib/course-settings");
+    const engine = resolveCourseVoiceEngine(
+      course ? normalizeCourseSettings(course.settings) : null,
+      course?.title ?? null,
+    );
     cache.set(id, { engine, at: Date.now() });
     return engine;
   } catch (err) {

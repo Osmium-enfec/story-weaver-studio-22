@@ -8,6 +8,7 @@ import { sceneGapMs } from "@/lib/scene-transition";
 import commonIntroAsset from "@/assets/media/common-intro.mp4.asset.json";
 import commonOutroAsset from "@/assets/media/common-outro.mp4.asset.json";
 import commonIntroOutroAsset from "@/assets/media/common-intro-outro.mp4.asset.json";
+import { getActiveCourseMedia } from "@/lib/course-media";
 
 /** Brand bumper for Script Intro scenes. */
 export const COMMON_INTRO_VIDEO_URL = commonIntroAsset.url;
@@ -36,19 +37,42 @@ export const COMMON_INTRO_OUTRO_DURATION_MS = COMMON_INTRO_DURATION_MS;
 
 export type CommonBumperLabel = "Intro" | "Outro";
 
+/** Course-level bumper override (set from the course settings), if any. */
+function courseBumper(label: CommonBumperLabel): { url: string; ms: number | null } | null {
+  const media = getActiveCourseMedia();
+  const url = label === "Outro" ? media.outroUrl : media.introUrl;
+  if (!url) return null;
+  return {
+    url,
+    ms: label === "Outro" ? media.outroDurationMs : media.introDurationMs,
+  };
+}
+
 export function commonBumperVideoUrl(label: CommonBumperLabel): string {
-  return label === "Outro" ? COMMON_OUTRO_VIDEO_URL : COMMON_INTRO_VIDEO_URL;
+  return (
+    courseBumper(label)?.url ??
+    (label === "Outro" ? COMMON_OUTRO_VIDEO_URL : COMMON_INTRO_VIDEO_URL)
+  );
 }
 
 export function commonBumperAudioUrl(label: CommonBumperLabel): string {
-  return label === "Outro" ? COMMON_OUTRO_AUDIO_URL : COMMON_INTRO_AUDIO_URL;
+  // A custom course bumper carries its own embedded audio track.
+  return (
+    courseBumper(label)?.url ??
+    (label === "Outro" ? COMMON_OUTRO_AUDIO_URL : COMMON_INTRO_AUDIO_URL)
+  );
 }
 
 export function commonBumperDurationMs(label: CommonBumperLabel): number {
+  const custom = courseBumper(label);
+  if (custom?.ms) return custom.ms;
+  if (custom) return label === "Outro" ? COMMON_OUTRO_DURATION_MS : COMMON_INTRO_DURATION_MS;
   return label === "Outro" ? COMMON_OUTRO_DURATION_MS : COMMON_INTRO_DURATION_MS;
 }
 
 export function isCommonIntroOutroMediaUrl(url: string | null | undefined): boolean {
+  const media = getActiveCourseMedia();
+  if (url != null && (url === media.introUrl || url === media.outroUrl)) return true;
   return (
     url === COMMON_INTRO_VIDEO_URL ||
     url === COMMON_OUTRO_VIDEO_URL ||
@@ -179,6 +203,9 @@ export function commonBumperLabelForScene(
   if (scene.subtitle === "Intro" || scene.subtitle === "Outro") {
     return scene.subtitle;
   }
+  const media = getActiveCourseMedia();
+  if (scene.mediaUrl != null && scene.mediaUrl === media.outroUrl) return "Outro";
+  if (scene.mediaUrl != null && scene.mediaUrl === media.introUrl) return "Intro";
   if (scene.mediaUrl === COMMON_OUTRO_VIDEO_URL || scene.mediaUrl === "/common-outro.mp4") {
     return "Outro";
   }

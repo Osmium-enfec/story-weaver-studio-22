@@ -34,10 +34,13 @@ async function resolveCourseEngine(
   if (cached) return cached;
   try {
     const { apiListCourses } = await import("@/lib/courses-api");
-    const { voiceEngineForCourseName } = await import("@/lib/course-voice");
+    const { resolveCourseVoiceEngine } = await import("@/lib/course-settings");
     const courses = await apiListCourses();
     for (const course of courses) {
-      courseEngineCache.set(course.id, voiceEngineForCourseName(course.title));
+      courseEngineCache.set(
+        course.id,
+        resolveCourseVoiceEngine(course.settings, course.title),
+      );
     }
     return courseEngineCache.get(courseId) ?? "elevenlabs";
   } catch {
