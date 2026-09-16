@@ -538,7 +538,11 @@ const REVIEW_BUCKETS = [
 type ReviewBucketKey = (typeof REVIEW_BUCKETS)[number]["key"];
 
 /** Roll the part statuses of one episode into a single review bucket. */
-function episodeBucket(parts: AssignedPart[]): ReviewBucketKey {
+function episodeBucket(ep: AssignedEpisode): ReviewBucketKey {
+  const parts: AssignedPart[] =
+    ep.parts.length > 0
+      ? ep.parts
+      : (ep.episodeStatuses ?? []).map((status) => ({ title: "Part", status }));
   if (parts.length > 0 && parts.every((p) => p.status === "reviewed")) {
     return "reviewed";
   }
