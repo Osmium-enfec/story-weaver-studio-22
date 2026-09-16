@@ -1,382 +1,424 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
-import { Download, Loader2, Film, CheckCircle2, XCircle, Clock, Trash2, Square } from "lucide-react";
+import { useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Download,
+  Loader2,
+  Play,
+  RotateCcw,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { NavBar } from "@/components/NavBar";
+import { apiListCourses } from "@/lib/courses-api";
 import {
-  cancelExportJob,
-  deleteExportJob,
-  downloadExportJob,
-  fetchExportJobStatus,
-  listExportJobs,
-  resumeNativeExportJob,
-  type ExportJobStatusRow,
-} from "@/lib/native-export-client";
-import {
-  deleteRenderAgentJob,
-  downloadRenderAgentJob,
-  fetchRenderAgentJobStatus,
-  listRenderAgentJobs,
-  probeRenderAgent,
-  RENDER_AGENT_BASE,
-  resumeRenderAgentJob,
-} from "@/lib/render-agent-client";
+  apiDeleteRenderJob,
+  apiDeleteRenderVideo,
+  apiListRenderJobs,
+  apiRequeueRenderJob,
+  apiStopRenderJob,
+  type RenderJobItem,
+} from "@/lib/render-jobs-api";
 import { getStoredSession } from "@/lib/auth-client";
-import { isAdminEmail } from "@/lib/admin";
 
 export const Route = createFileRoute("/_authenticated/export")({
-  validateSearch: (
-    s: Record<string, unknown>,
-  ): { jobId?: string; runner?: "agent" | "server" } => ({
-    jobId: typeof s.jobId === "string" ? s.jobId : undefined,
-    runner: s.runner === "agent" || s.runner === "server" ? s.runner : undefined,
+  head: () => ({
+    meta: [
+      { title: "HD renders — Div Studio" },
+      {
+        name: "description",
+        content:
+          "Queue reviewed parts for HD rendering, watch live progress and download finished videos.",
+      },
+      { property: "og:title", content: "HD renders — Div Studio" },
+      {
+        property: "og:description",
+        content: "Queue, track and download HD renders for every course part.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
   }),
-  head: () => ({ meta: [{ title: "Export — Div Studio" }] }),
   component: ExportPage,
 });
 
-function statusIcon(status: ExportJobStatusRow["status"]) {
-  if (status === "done") return <CheckCircle2 size={16} className="text-emerald-600" />;
-  if (status === "error") return <XCircle size={16} className="text-destructive" />;
-  if (status === "cancelled") return <Square size={16} className="text-muted-foreground" />;
-  if (status === "running" || status === "queued") {
-    return <Loader2 size={16} className="animate-spin text-primary" />;
-  }
-  return <Clock size={16} className="text-muted-foreground" />;
+type TabId = "queued" | "progress" | "rendered";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "queued", label: "Queued" },
+  { id: "progress", label: "In progress" },
+  { id: "rendered", label: "Rendered" },
+];
+
+const PAGE_SIZE = 10;
+
+function matchesTab(job: RenderJobItem, tab: TabId): boolean {
+  if (tab === "queued") return job.status === "queued" || job.status === "cancelled";
+  if (tab === "progress") return job.status === "rendering";
+  return job.status === "done" || job.status === "failed";
+}
+
+function fmtDuration(ms: number): string {
+  if (!ms) return "—";
+  const s = Math.round(ms / 1000);
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+}
+
+function fmtElapsed(from: string | null): string {
+  if (!from) return "—";
+  const start = new Date(from).getTime();
+  if (!Number.isFinite(start)) return "—";
+  return fmtDuration(Date.now() - start);
+}
+
+function fmtDate(value: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isFinite(d.getTime()) ? d.toLocaleString() : "—";
 }
 
 function ExportPage() {
-  const { jobId: focusJobId, runner: focusRunner } = Route.useSearch();
-  const [jobs, setJobs] = useState<ExportJobStatusRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [stoppingId, setStoppingId] = useState<string | null>(null);
-  const [resumingId, setResumingId] = useState<string | null>(null);
+  const qc = useQueryClient();
   const session = getStoredSession();
-  const isAdmin =
-    session?.user.isAdmin === true || isAdminEmail(session?.user.email);
+  const isAdmin = session?.user.isAdmin ?? false;
 
-  const refresh = useCallback(async () => {
-    try {
-      const agentUp = await probeRenderAgent();
-      setAgentOnline(agentUp);
+  const [courseId, setCourseId] = useState<string>("all");
+  const [tab, setTab] = useState<TabId>("queued");
+  const [page, setPage] = useState(1);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
 
-      const serverList = await listExportJobs({ allUsers: isAdmin });
-      const serverJobs = serverList.map((j) => ({
-        ...j,
-        runner: j.runner ?? ("server" as const),
-      }));
+  const coursesQuery = useQuery({
+    queryKey: ["courses"],
+    queryFn: apiListCourses,
+    staleTime: 5 * 60_000,
+  });
 
-      let agentJobs: ExportJobStatusRow[] = [];
-      if (agentUp) {
-        try {
-          agentJobs = await listRenderAgentJobs();
-        } catch {
-          agentJobs = [];
-        }
-      }
+  const jobsQuery = useQuery({
+    queryKey: ["render-jobs", courseId],
+    queryFn: () =>
+      apiListRenderJobs(courseId === "all" ? undefined : { courseId }),
+    refetchInterval: 4000,
+  });
 
-      if (
-        focusJobId &&
-        focusRunner === "agent" &&
-        !agentJobs.some((j) => j.jobId === focusJobId)
-      ) {
-        try {
-          const one = await fetchRenderAgentJobStatus(focusJobId);
-          agentJobs = [one, ...agentJobs];
-        } catch {
-          /* keep */
-        }
-      }
+  const jobs = jobsQuery.data?.jobs ?? [];
 
-      if (
-        focusJobId &&
-        focusRunner !== "agent" &&
-        !serverJobs.some((j) => j.jobId === focusJobId)
-      ) {
-        try {
-          const one = await fetchExportJobStatus(focusJobId);
-          serverJobs.unshift({ ...one, runner: "server" });
-        } catch {
-          /* keep */
-        }
-      }
+  const invalidate = () =>
+    void qc.invalidateQueries({ queryKey: ["render-jobs"] });
 
-      const merged = [...agentJobs, ...serverJobs].sort(
-        (a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0),
-      );
-      setJobs(merged);
-      setError(null);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+  const stopJob = useMutation({
+    mutationFn: apiStopRenderJob,
+    onSuccess: invalidate,
+    onError: (e: Error) => alert(e.message),
+  });
+  const deleteJob = useMutation({
+    mutationFn: apiDeleteRenderJob,
+    onSuccess: invalidate,
+    onError: (e: Error) => alert(e.message),
+  });
+  const deleteVideo = useMutation({
+    mutationFn: apiDeleteRenderVideo,
+    onSuccess: invalidate,
+    onError: (e: Error) => alert(e.message),
+  });
+  const requeueJob = useMutation({
+    mutationFn: apiRequeueRenderJob,
+    onSuccess: invalidate,
+    onError: (e: Error) => alert(e.message),
+  });
+
+  const tabJobs = useMemo(() => jobs.filter((j) => matchesTab(j, tab)), [jobs, tab]);
+
+  const episodes = useMemo(() => {
+    const byEpisode = new Map<
+      string,
+      { projectId: string; title: string; jobs: RenderJobItem[] }
+    >();
+    for (const job of tabJobs) {
+      const entry = byEpisode.get(job.projectId) ?? {
+        projectId: job.projectId,
+        title: job.episodeTitle || "Episode",
+        jobs: [],
+      };
+      entry.jobs.push(job);
+      byEpisode.set(job.projectId, entry);
     }
-  }, [focusJobId, focusRunner, isAdmin]);
+    return [...byEpisode.values()].sort((a, b) => a.title.localeCompare(b.title));
+  }, [tabJobs]);
 
-  useEffect(() => {
-    void refresh();
-    // Poll gently and only while the tab is actually being looked at.
-    const t = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      void refresh();
-    }, 3000);
-    return () => clearInterval(t);
-  }, [refresh]);
+  const pageCount = Math.max(1, Math.ceil(episodes.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const visible = episodes.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  async function onDownload(job: ExportJobStatusRow) {
-    setDownloadingId(job.jobId);
-    try {
-      if (job.runner === "agent") {
-        await downloadRenderAgentJob(job.jobId, job.filename || "export.mp4");
-      } else {
-        await downloadExportJob(job.jobId, job.filename || "export.mp4");
-      }
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Download failed");
-    } finally {
-      setDownloadingId(null);
-    }
-  }
-
-  async function onDelete(job: ExportJobStatusRow) {
-    if (
-      !confirm(
-        `Delete “${job.filename || "export"}”? This removes the file and cannot be undone.`,
-      )
-    ) {
-      return;
-    }
-    setDeletingId(job.jobId);
-    try {
-      if (job.runner === "agent") {
-        await deleteRenderAgentJob(job.jobId);
-      } else {
-        await deleteExportJob(job.jobId);
-      }
-      setJobs((prev) => prev.filter((j) => j.jobId !== job.jobId));
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Delete failed");
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  async function onResume(job: ExportJobStatusRow) {
-    setResumingId(job.jobId);
-    try {
-      if (job.runner === "agent") {
-        await resumeRenderAgentJob(job.jobId);
-      } else {
-        await resumeNativeExportJob(job.jobId);
-      }
-      await refresh();
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : String(e));
-    } finally {
-      setResumingId(null);
-    }
-  }
-
-  async function onStop(job: ExportJobStatusRow) {
-    if (job.runner === "agent") {
-      alert(
-        "Stop from the Explainer Render Agent window for local jobs (server stop is not wired yet).",
-      );
-      return;
-    }
-    if (!confirm(`Stop export “${job.filename || "export"}”?`)) return;
-    setStoppingId(job.jobId);
-    try {
-      await cancelExportJob(job.jobId);
-      await refresh();
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : "Stop failed");
-    } finally {
-      setStoppingId(null);
-    }
-  }
-
-  const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const queuedCount = jobs.filter((j) => j.status === "queued").length;
+  const activeMachines = [
+    ...new Set(
+      jobs.filter((j) => j.status === "rendering" && j.machine).map((j) => j.machine!),
+    ),
+  ];
 
   return (
     <div className="min-h-screen bg-background">
       <NavBar />
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <div className="mb-6">
-          <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-            <Film size={22} className="text-primary" />
-            Export
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Choose <span className="text-foreground/90">Studio Mac</span> (encode on this host) or{" "}
-            <span className="text-foreground/90">This Mac · Render Agent</span> (encode on the Mac
-            where the agent app is open). Only the last 10 server exports are kept.
-            Failed Studio Mac jobs can Resume — they reuse cached video and baked
-            recording frames instead of starting over.
-            {isAdmin ? " Admin view: server exports from all users are listed below." : ""}
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Render Agent:{" "}
-            {agentOnline === null
-              ? "checking…"
-              : agentOnline
-                ? "online on this Mac"
-                : "offline — open the agent (port 3850 stable, or 3851 isolated)"}
-          </p>
+      <main className="mx-auto w-full max-w-6xl px-4 py-6">
+        <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold">HD renders</h1>
+            <p className="text-sm text-muted-foreground">
+              Reviewed parts queue here; render machines pick them up one by one.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>
+              <strong className="text-foreground">{queuedCount}</strong> waiting
+            </span>
+            <span>
+              <strong className="text-foreground">{activeMachines.length}</strong>{" "}
+              machine(s) rendering
+              {activeMachines.length > 0 && `: ${activeMachines.join(", ")}`}
+            </span>
+          </div>
+        </header>
+
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <select
+            value={courseId}
+            onChange={(e) => {
+              setCourseId(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-md border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="all">All courses</option>
+            {(coursesQuery.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex rounded-md border p-0.5">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setTab(t.id);
+                  setPage(1);
+                }}
+                className={`rounded px-3 py-1.5 text-xs font-medium ${
+                  tab === t.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {t.label} ({jobs.filter((j) => matchesTab(j, t.id)).length})
+              </button>
+            ))}
+          </div>
+
+          {jobsQuery.isFetching && (
+            <Loader2 size={14} className="animate-spin text-muted-foreground" />
+          )}
         </div>
 
-        {error && (
-          <p className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            {error}
+        {visible.length === 0 ? (
+          <p className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+            Nothing here yet.
           </p>
-        )}
-
-        {active.length > 1 && (
-          <p className="mb-4 text-xs text-muted-foreground">
-            {active.length} exports running at once — heavy on CPU. Prefer one HD at a time if
-            your Mac gets hot.
-          </p>
-        )}
-
-        {jobs.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-10 text-center">
-            <p className="text-sm text-muted-foreground">No export jobs yet.</p>
-            <Link
-              to="/compose"
-              search={{}}
-              className="mt-4 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            >
-              Go to Compose
-            </Link>
-          </div>
         ) : (
-          <ul className="space-y-3">
-            {jobs.map((job) => {
-              const focused = focusJobId === job.jobId;
-              const pct = Math.round((job.progress ?? 0) * 100);
+          <div className="space-y-2">
+            {visible.map((ep) => {
+              const expanded = open[ep.projectId] ?? true;
               return (
-                <li
-                  key={`${job.runner ?? "server"}-${job.jobId}`}
-                  className={`rounded-lg border bg-card p-4 ${
-                    focused ? "ring-2 ring-primary/40" : ""
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5">{statusIcon(job.status)}</div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-medium">{job.filename}</p>
-                        {job.userEmail && (
-                          <span className="truncate text-[11px] text-muted-foreground">
-                            {job.userEmail}
-                          </span>
-                        )}
-                        <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-                          {job.runner === "agent" ? "this Mac" : "server"}
-                        </span>
-                        {job.quality && (
-                          <span className="rounded border px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-                            {job.quality === "hd" ? "1080p" : "720p"}
-                          </span>
-                        )}
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                          {job.status}
-                        </span>
-                      </div>
-                      {(job.status === "running" || job.status === "queued") && (
-                        <div className="mt-2">
-                          <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-                            <span className="truncate pr-2">{job.stage || "working…"}</span>
-                            <span className="tabular-nums">{pct}%</span>
-                          </div>
-                          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className="h-full bg-primary transition-[width]"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                      {job.status === "error" && (
-                        <p className="mt-2 text-sm text-destructive">{job.error ?? "Failed"}</p>
-                      )}
-                      {job.status === "cancelled" && (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {job.error ?? "Stopped by user"}
-                        </p>
-                      )}
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {(job.status === "running" || job.status === "queued") &&
-                          job.runner !== "agent" && (
-                            <button
-                              type="button"
-                              disabled={stoppingId === job.jobId}
-                              onClick={() => void onStop(job)}
-                              className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/5 disabled:opacity-60"
-                            >
-                              {stoppingId === job.jobId ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Square size={14} />
-                              )}
-                              Stop export
-                            </button>
-                          )}
-                        {job.status === "done" && (
-                          <button
-                            type="button"
-                            disabled={downloadingId === job.jobId || deletingId === job.jobId}
-                            onClick={() => void onDownload(job)}
-                            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
-                          >
-                            {downloadingId === job.jobId ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Download size={14} />
-                            )}
-                            Download MP4
-                          </button>
-                        )}
-                        {(job.status === "done" ||
-                          job.status === "error" ||
-                          job.status === "cancelled") && (
-                          <button
-                            type="button"
-                            disabled={deletingId === job.jobId || downloadingId === job.jobId}
-                            onClick={() => void onDelete(job)}
-                            className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/5 disabled:opacity-60"
-                          >
-                            {deletingId === job.jobId ? (
-                              <Loader2 size={14} className="animate-spin" />
-                            ) : (
-                              <Trash2 size={14} />
-                            )}
-                            Delete
-                          </button>
-                        )}
+                <section key={ep.projectId} className="rounded-lg border bg-card">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpen((o) => ({ ...o, [ep.projectId]: !expanded }))
+                    }
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium"
+                  >
+                    {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                    <span className="flex-1 truncate">{ep.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {ep.jobs.length} part{ep.jobs.length === 1 ? "" : "s"}
+                    </span>
+                  </button>
 
-                        {(job.status === "error" || job.status === "cancelled") && (
+                  {expanded && (
+                    <ul className="divide-y border-t">
+                      {ep.jobs.map((job) => (
+                        <li
+                          key={job.id}
+                          className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm"
+                        >
+                          <div className="min-w-[160px] flex-1">
+                            <p className="truncate font-medium">{job.partTitle}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {job.sceneCount} scenes · {fmtDuration(job.durationMs)} ·{" "}
+                              {job.requestedByEmail}
+                            </p>
+                          </div>
+
+                          {job.status === "rendering" && (
+                            <div className="min-w-[180px] flex-1">
+                              <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                                <div
+                                  className="h-full bg-primary transition-[width]"
+                                  style={{
+                                    width: `${Math.round((job.progress || 0) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                {Math.round((job.progress || 0) * 100)}% ·{" "}
+                                {job.stage || "rendering"} · {job.machine ?? "machine"} ·{" "}
+                                {fmtElapsed(job.claimedAt)}
+                              </p>
+                            </div>
+                          )}
+
+                          {job.status !== "rendering" && (
+                            <span
+                              className={`rounded px-2 py-0.5 text-[11px] font-medium ${
+                                job.status === "done"
+                                  ? "bg-emerald-500/10 text-emerald-700"
+                                  : job.status === "failed"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : job.status === "cancelled"
+                                      ? "bg-muted text-muted-foreground"
+                                      : "bg-amber-500/10 text-amber-800"
+                              }`}
+                              title={job.error ?? undefined}
+                            >
+                              {job.status}
+                            </span>
+                          )}
+
+                          <span className="text-[11px] text-muted-foreground">
+                            {fmtDate(
+                              job.status === "done" ? job.finishedAt : job.createdAt,
+                            )}
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            {job.outputUrl && (
+                              <>
+                                <a
+                                  href={job.outputUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="Play"
+                                  className="rounded border p-1.5 hover:bg-muted"
+                                >
+                                  <Play size={14} />
+                                </a>
+                                <a
+                                  href={job.outputUrl}
+                                  download
+                                  title="Download"
+                                  className="rounded border p-1.5 hover:bg-muted"
+                                >
+                                  <Download size={14} />
+                                </a>
+                                <button
+                                  type="button"
+                                  title="Copy link"
+                                  onClick={() =>
+                                    void navigator.clipboard.writeText(job.outputUrl!)
+                                  }
+                                  className="rounded border p-1.5 hover:bg-muted"
+                                >
+                                  <Copy size={14} />
+                                </button>
+                              </>
+                            )}
+
+                            {(job.status === "queued" || job.status === "rendering") && (
+                              <button
+                                type="button"
+                                title="Stop"
+                                onClick={() => stopJob.mutate(job.id)}
+                                className="rounded border p-1.5 text-destructive hover:bg-destructive/10"
+                              >
+                                <Square size={14} />
+                              </button>
+                            )}
+
+                            {job.status !== "rendering" && (
+                              <button
+                                type="button"
+                                title="Re-queue"
+                                onClick={() => requeueJob.mutate(job.id)}
+                                className="rounded border p-1.5 hover:bg-muted"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                            )}
+
+                            {job.outputUrl && isAdmin && (
+                              <button
+                                type="button"
+                                title="Delete rendered video (admin)"
+                                onClick={() => {
+                                  if (confirm("Remove this rendered video?")) {
+                                    deleteVideo.mutate(job.id);
+                                  }
+                                }}
+                                className="rounded border border-destructive/40 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/10"
+                              >
+                                Delete video
+                              </button>
+                            )}
+
                             <button
                               type="button"
-                              disabled={resumingId === job.jobId || deletingId === job.jobId || downloadingId === job.jobId}
-                              onClick={() => void onResume(job)}
-                              className="inline-flex items-center gap-2 rounded-md border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/5 disabled:opacity-60"
+                              title="Delete job"
+                              onClick={() => {
+                                if (confirm("Delete this render job?")) {
+                                  deleteJob.mutate(job.id);
+                                }
+                              }}
+                              className="rounded border p-1.5 text-destructive hover:bg-destructive/10"
                             >
-                              {resumingId === job.jobId ? (
-                                <Loader2 size={14} className="animate-spin" />
-                              ) : (
-                                <Clock size={14} />
-                              )}
-                              Resume
+                              <Trash2 size={14} />
                             </button>
-                          )}
-                      </div>
-                    </div>
-                  </div>
-                </li>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
               );
             })}
-          </ul>
+          </div>
+        )}
+
+        {pageCount > 1 && (
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setPage(currentPage - 1)}
+              className="rounded border px-2 py-1 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-muted-foreground">
+              Page {currentPage} of {pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={currentPage >= pageCount}
+              onClick={() => setPage(currentPage + 1)}
+              className="rounded border px-2 py-1 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
         )}
       </main>
     </div>

@@ -18,6 +18,7 @@ import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
 import { Route as ApiSpacesCorsRouteImport } from './routes/api/spaces-cors'
 import { Route as ApiReviewsRouteImport } from './routes/api/reviews'
+import { Route as ApiRenderJobsRouteImport } from './routes/api/render-jobs'
 import { Route as ApiRenderBundlesRouteImport } from './routes/api/render-bundles'
 import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
@@ -47,6 +48,7 @@ import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 import { Route as AuthenticatedEpisodeIdRouteImport } from './routes/_authenticated/episode.$id'
 import { Route as AuthenticatedCourseIdRouteImport } from './routes/_authenticated/course.$id'
+import { Route as ApiPublicRenderSplatRouteImport } from './routes/api/public/render.$'
 import { Route as ApiPublicBundlesSplatRouteImport } from './routes/api/public/bundles.$'
 import { Route as ApiPublicAssetsSplatRouteImport } from './routes/api/public/assets/$'
 
@@ -92,6 +94,11 @@ const ApiSpacesCorsRoute = ApiSpacesCorsRouteImport.update({
 const ApiReviewsRoute = ApiReviewsRouteImport.update({
   id: '/api/reviews',
   path: '/api/reviews',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRenderJobsRoute = ApiRenderJobsRouteImport.update({
+  id: '/api/render-jobs',
+  path: '/api/render-jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRenderBundlesRoute = ApiRenderBundlesRouteImport.update({
@@ -242,6 +249,11 @@ const AuthenticatedCourseIdRoute = AuthenticatedCourseIdRouteImport.update({
   path: '/course/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicRenderSplatRoute = ApiPublicRenderSplatRouteImport.update({
+  id: '/api/public/render/$',
+  path: '/api/public/render/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicBundlesSplatRoute = ApiPublicBundlesSplatRouteImport.update({
   id: '/$',
   path: '/$',
@@ -275,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/render-jobs': typeof ApiRenderJobsRoute
   '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
@@ -293,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
   '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
+  '/api/public/render/$': typeof ApiPublicRenderSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -316,6 +330,7 @@ export interface FileRoutesByTo {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/render-jobs': typeof ApiRenderJobsRoute
   '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
@@ -334,6 +349,7 @@ export interface FileRoutesByTo {
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
   '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
+  '/api/public/render/$': typeof ApiPublicRenderSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -359,6 +375,7 @@ export interface FileRoutesById {
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
   '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/render-jobs': typeof ApiRenderJobsRoute
   '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
@@ -377,6 +394,7 @@ export interface FileRoutesById {
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
   '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
+  '/api/public/render/$': typeof ApiPublicRenderSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -402,6 +420,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/render-jobs'
     | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
@@ -420,6 +439,7 @@ export interface FileRouteTypes {
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
     | '/api/public/bundles/$'
+    | '/api/public/render/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -443,6 +463,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/render-jobs'
     | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
@@ -461,6 +482,7 @@ export interface FileRouteTypes {
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
     | '/api/public/bundles/$'
+    | '/api/public/render/$'
   id:
     | '__root__'
     | '/'
@@ -485,6 +507,7 @@ export interface FileRouteTypes {
     | '/api/projects'
     | '/api/recording2-voice-replace'
     | '/api/render-bundles'
+    | '/api/render-jobs'
     | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
@@ -503,6 +526,7 @@ export interface FileRouteTypes {
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
     | '/api/public/bundles/$'
+    | '/api/public/render/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -521,6 +545,7 @@ export interface RootRouteChildren {
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiRecording2VoiceReplaceRoute: typeof ApiRecording2VoiceReplaceRoute
   ApiRenderBundlesRoute: typeof ApiRenderBundlesRoute
+  ApiRenderJobsRoute: typeof ApiRenderJobsRoute
   ApiReviewsRoute: typeof ApiReviewsRoute
   ApiSpacesCorsRoute: typeof ApiSpacesCorsRoute
   ApiSyncRoute: typeof ApiSyncRoute
@@ -535,6 +560,7 @@ export interface RootRouteChildren {
   ApiRenderAgentUpdatesSplatRoute: typeof ApiRenderAgentUpdatesSplatRoute
   ApiSyncFeedSplatRoute: typeof ApiSyncFeedSplatRoute
   ApiPublicAssetsSplatRoute: typeof ApiPublicAssetsSplatRoute
+  ApiPublicRenderSplatRoute: typeof ApiPublicRenderSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -600,6 +626,13 @@ declare module '@tanstack/react-router' {
       path: '/api/reviews'
       fullPath: '/api/reviews'
       preLoaderRoute: typeof ApiReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/render-jobs': {
+      id: '/api/render-jobs'
+      path: '/api/render-jobs'
+      fullPath: '/api/render-jobs'
+      preLoaderRoute: typeof ApiRenderJobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/render-bundles': {
@@ -805,6 +838,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCourseIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/render/$': {
+      id: '/api/public/render/$'
+      path: '/api/public/render/$'
+      fullPath: '/api/public/render/$'
+      preLoaderRoute: typeof ApiPublicRenderSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/bundles/$': {
       id: '/api/public/bundles/$'
       path: '/$'
@@ -878,6 +918,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProjectsRoute: ApiProjectsRoute,
   ApiRecording2VoiceReplaceRoute: ApiRecording2VoiceReplaceRoute,
   ApiRenderBundlesRoute: ApiRenderBundlesRoute,
+  ApiRenderJobsRoute: ApiRenderJobsRoute,
   ApiReviewsRoute: ApiReviewsRoute,
   ApiSpacesCorsRoute: ApiSpacesCorsRoute,
   ApiSyncRoute: ApiSyncRoute,
@@ -892,6 +933,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiRenderAgentUpdatesSplatRoute: ApiRenderAgentUpdatesSplatRoute,
   ApiSyncFeedSplatRoute: ApiSyncFeedSplatRoute,
   ApiPublicAssetsSplatRoute: ApiPublicAssetsSplatRoute,
+  ApiPublicRenderSplatRoute: ApiPublicRenderSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
