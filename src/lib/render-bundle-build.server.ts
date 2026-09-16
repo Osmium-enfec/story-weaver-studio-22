@@ -92,6 +92,8 @@ export function buildBundlePayload(opts: {
   episodeTitle: string;
   part: ProjectPart;
   baseUrl: string;
+  /** Course theme background (bg loop / plain white). Falls back to the part's own. */
+  background?: unknown;
 }): { payload: BundlePayload; durationMs: number; sceneCount: number } {
   const { part, baseUrl } = opts;
   const scenes = Array.isArray(part.scenes) ? part.scenes : [];
