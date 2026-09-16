@@ -751,6 +751,10 @@ export interface LocalAssignmentItem {
   assignedUserEmail: string;
   /** Saved compose scenes on this part (part assignments only). */
   sceneCount?: number;
+  /** Total parts in this episode (episode assignments only). */
+  partCount?: number;
+  /** Part ids of this episode (episode assignments only). */
+  partIds?: string[];
   updated_at: string;
 }
 
