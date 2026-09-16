@@ -921,15 +921,13 @@ export function sceneCompletionProgress(
   const audioOk = !!(cs?.audioUrl && cs.audioUrl.trim() && (cs.durationMs ?? 0) > 0);
   const type = scriptScene.type;
 
+  if (type === "intro" || type === "outro") {
+    // Brand bumpers are fixed course assets — always counted as done.
+    return { percent: 100, missing: [], complete: true };
+  }
+
   if (type === "unset") {
     pushStep(steps, "Select a scene type", false);
-  } else if (type === "intro" || type === "outro") {
-    const bumperOk =
-      !!cs &&
-      isCommonIntroOutroMediaUrl(cs.mediaUrl) &&
-      (cs.durationMs ?? 0) > 0 &&
-      (!!cs.audioUrl?.trim() || !!cs.recordingUseEmbeddedAudio);
-    pushStep(steps, "Brand bumper added", bumperOk);
   } else if (type === "image") {
     const imageOk = !!(
       cs?.backgroundUrl?.trim() ||
