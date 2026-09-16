@@ -755,7 +755,7 @@ export function ComposeProjectPanel({
         scenes: part.scenes,
         masterAudioUrl: part.masterAudioUrl,
         quality,
-        background: DEFAULT_BACKGROUND,
+        background: previewBackground,
         bgm: part.bgm ?? partBgmConfig,
         projectId,
         filename,
