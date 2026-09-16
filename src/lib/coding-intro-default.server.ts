@@ -3,7 +3,7 @@ import {
   CODING_INTRO_SCREEN_TEXT_DEFAULT,
   isDefaultCodingIntroText,
 } from "@/lib/question-scene-layout";
-import { normalizeNarrationText } from "@/lib/narration-text";
+import { generateTtsMp3Buffer } from "@/lib/tts.server";
 
 const DEFAULT_FILENAME = "coding-intro-default.mp3";
 
@@ -12,37 +12,7 @@ export function defaultCodingIntroTtsUrl(): string {
 }
 
 async function synthesizeMp3(rawText: string): Promise<Buffer> {
-  const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) throw new Error("ELEVENLABS_API_KEY missing");
-
-  const text = normalizeNarrationText(rawText);
-  const ELEVEN_VOICE_ID = process.env.ELEVEN_VOICE_ID ?? "TX3LPaxmHKxFdv7VOQHJ";
-  const ELEVEN_MODEL = process.env.ELEVEN_MODEL ?? "eleven_v3";
-
-  const res = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}?output_format=mp3_44100_128`,
-    {
-      method: "POST",
-      headers: {
-        "xi-api-key": key,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        text: text.replace(/[.!?…]*\s*$/, "") + " ... ",
-        model_id: ELEVEN_MODEL,
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.5,
-          use_speaker_boost: true,
-        },
-      }),
-    },
-  );
-  if (!res.ok) {
-    throw new Error(`Coding intro TTS failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
-  }
-  return Buffer.from(await res.arrayBuffer());
+  return generateTtsMp3Buffer(rawText);
 }
 
 async function writeDefaultFile(buf: Buffer): Promise<string> {
