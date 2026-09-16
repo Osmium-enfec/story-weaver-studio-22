@@ -23,7 +23,12 @@ import {
   apiReviewGrants,
   type PartReview,
 } from "@/lib/reviews-api";
-import { ReviewStageBadge } from "@/components/ReviewStageBadge";
+import {
+  normalizeWorkflowStatus,
+  workflowClasses,
+  workflowLabel,
+  type WorkflowStatus,
+} from "@/lib/review-workflow";
 import { getStoredSession } from "@/lib/auth-client";
 import { isAdminEmail } from "@/lib/admin";
 import {
