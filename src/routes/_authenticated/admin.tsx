@@ -184,6 +184,9 @@ function AdminPage() {
           title: a.partTitle ?? "Part",
           status: a.workflowStatus ?? "",
         });
+      } else if (Array.isArray(a.partStatuses)) {
+        // Whole episode handed to this user: use every part's review stage.
+        ep.episodeStatuses = a.partStatuses.map((s: string) => s ?? "");
       }
       map.set(a.assignedUserId, list);
     }
@@ -499,6 +502,8 @@ type AssignedEpisode = {
   episodeTitle: string;
   courseId: string | null;
   parts: AssignedPart[];
+  /** Review stage of every part, when the whole episode is assigned. */
+  episodeStatuses?: string[];
 };
 
 /** Extract the episode number from titles like "Episode 12" / "Ep 12 — Intro". */
@@ -533,7 +538,11 @@ const REVIEW_BUCKETS = [
 type ReviewBucketKey = (typeof REVIEW_BUCKETS)[number]["key"];
 
 /** Roll the part statuses of one episode into a single review bucket. */
-function episodeBucket(parts: AssignedPart[]): ReviewBucketKey {
+function episodeBucket(ep: AssignedEpisode): ReviewBucketKey {
+  const parts: AssignedPart[] =
+    ep.parts.length > 0
+      ? ep.parts
+      : (ep.episodeStatuses ?? []).map((status) => ({ title: "Part", status }));
   if (parts.length > 0 && parts.every((p) => p.status === "reviewed")) {
     return "reviewed";
   }
@@ -550,7 +559,7 @@ function AssignedWork({ episodes }: { episodes: AssignedEpisode[] }) {
   }
   const buckets = new Map<ReviewBucketKey, string[]>();
   for (const ep of episodes) {
-    const key = episodeBucket(ep.parts);
+    const key = episodeBucket(ep);
     const list = buckets.get(key) ?? [];
     list.push(episodeNumber(ep.episodeTitle));
     buckets.set(key, list);

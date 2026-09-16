@@ -718,11 +718,32 @@ export async function pgSavedSceneCountsByUser(): Promise<Map<string, number>> {
   return byUser;
 }
 
+function parsePartIds(raw: unknown): string[] {
+  const value = typeof raw === "string" ? safeJson(raw) : raw;
+  return Array.isArray(value) ? value.map((v) => String(v)) : [];
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return [];
+  }
+}
+
 /** Admin: episode + part handoffs currently assigned to a collaborator. */
 export async function pgListAssignments(): Promise<LocalAssignmentItem[]> {
   const [episodes, parts] = await Promise.all([
     pgQuery<Record<string, unknown>>(
       `SELECT id, title, course_id, assigned_user_id, assigned_user_email,
+              CASE WHEN jsonb_typeof(parts) = 'array'
+                   THEN jsonb_array_length(parts) ELSE 0 END AS part_count,
+              CASE WHEN jsonb_typeof(parts) = 'array'
+                   THEN (SELECT COALESCE(
+                           jsonb_agg(x->>'id') FILTER (WHERE x->>'id' IS NOT NULL),
+                           '[]'::jsonb)
+                         FROM jsonb_array_elements(parts) x)
+                   ELSE '[]'::jsonb END AS part_ids,
               updated_at::text AS updated_at
          FROM projects
         WHERE assigned_user_id IS NOT NULL
@@ -756,6 +777,8 @@ export async function pgListAssignments(): Promise<LocalAssignmentItem[]> {
       courseId: row.course_id != null ? String(row.course_id) : null,
       assignedUserId: String(row.assigned_user_id),
       assignedUserEmail: String(row.assigned_user_email ?? ""),
+      partCount: Number(row.part_count) || 0,
+      partIds: parsePartIds(row.part_ids),
       updated_at: String(row.updated_at),
     });
   }

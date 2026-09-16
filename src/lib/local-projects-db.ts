@@ -751,6 +751,10 @@ export interface LocalAssignmentItem {
   assignedUserEmail: string;
   /** Saved compose scenes on this part (part assignments only). */
   sceneCount?: number;
+  /** Total parts in this episode (episode assignments only). */
+  partCount?: number;
+  /** Part ids of this episode (episode assignments only). */
+  partIds?: string[];
   updated_at: string;
 }
 
@@ -813,6 +817,14 @@ function sqliteListAssignments(): LocalAssignmentItem[] {
       partsRaw = JSON.parse(String(row.parts ?? "[]"));
     } catch {
       partsRaw = [];
+    }
+    if (row.assigned_user_id) {
+      const all = getProjectParts({ parts: partsRaw });
+      const episodeEntry = out[out.length - 1];
+      if (episodeEntry && episodeEntry.kind === "episode") {
+        episodeEntry.partCount = all.length;
+        episodeEntry.partIds = all.map((p) => p.id);
+      }
     }
     for (const part of getProjectParts({ parts: partsRaw })) {
       if (!part.assignedUserId) continue;

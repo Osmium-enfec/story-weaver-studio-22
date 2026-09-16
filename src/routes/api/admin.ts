@@ -102,11 +102,22 @@ export const Route = createFileRoute("/api/admin")({
             assignedUserId: string;
             episodeId: string;
             partId?: string;
+            partIds?: string[];
+            partCount?: number;
           }) => ({
           ...a,
           workflowStatus: a.partId
             ? (workflowByPart.get(`${a.episodeId}:${a.partId}`) ?? "")
             : "",
+          // Episode-level assignment: roll up every part's review stage so the
+          // admin view matches the review page even when the parts themselves
+          // are assigned to other collaborators.
+          partStatuses: a.partId
+            ? undefined
+            : (a.partIds && a.partIds.length > 0
+                ? a.partIds
+                : Array.from({ length: a.partCount ?? 0 }, () => "")
+              ).map((pid) => workflowByPart.get(`${a.episodeId}:${pid}`) ?? ""),
           assignedUserEmail:
             a.assignedUserEmail ||
             emailById.get(a.assignedUserId) ||
