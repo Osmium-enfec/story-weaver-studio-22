@@ -559,7 +559,7 @@ function AssignedWork({ episodes }: { episodes: AssignedEpisode[] }) {
   }
   const buckets = new Map<ReviewBucketKey, string[]>();
   for (const ep of episodes) {
-    const key = episodeBucket(ep.parts);
+    const key = episodeBucket(ep);
     const list = buckets.get(key) ?? [];
     list.push(episodeNumber(ep.episodeTitle));
     buckets.set(key, list);
