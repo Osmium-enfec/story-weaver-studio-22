@@ -154,6 +154,17 @@ export function apiAssignPart(
   });
 }
 
+export function apiAssignEpisodeUser(
+  episodeId: string,
+  assignedUserId: string | null,
+): Promise<ProjectRecord> {
+  return projectsFetch({
+    action: "assignEpisodeUser",
+    id: episodeId,
+    assigned_user_id: assignedUserId,
+  });
+}
+
 export function apiAssignEpisodeReviewer(
   episodeId: string,
   reviewerUserId: string | null,

@@ -553,6 +553,45 @@ export async function pgAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
+/** Admin-only: assign one user to EVERY part of an episode. */
+export async function pgAssignEpisodeAssignee(
+  episodeId: string,
+  assignee: { userId: string; email: string } | null,
+): Promise<LocalProjectRow> {
+  const res = await pgQuery<Record<string, unknown>>(
+    `SELECT ${PROJECT_SELECT} FROM projects WHERE id = $1`,
+    [episodeId],
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Episode not found.");
+  const project = rowToProject(row);
+  const now = new Date().toISOString();
+  const parts = getProjectParts(project).map((p) => ({
+    ...p,
+    assignedUserId: assignee?.userId ?? null,
+    assignedUserEmail: assignee?.email ?? null,
+    updated_at: now,
+  }));
+  await pgQuery(
+    `UPDATE projects SET parts = $1::jsonb, assigned_user_id = $2, assigned_user_email = $3,
+       updated_at = $4::timestamptz WHERE id = $5`,
+    [
+      JSON.stringify(parts),
+      assignee?.userId ?? null,
+      assignee?.email ?? null,
+      now,
+      episodeId,
+    ],
+  );
+  return {
+    ...project,
+    parts,
+    assigned_user_id: assignee?.userId ?? null,
+    assigned_user_email: assignee?.email ?? null,
+    updated_at: now,
+  };
+}
+
 export async function pgAssignEpisodeReviewer(
   episodeId: string,
   reviewer: { userId: string; email: string } | null,
