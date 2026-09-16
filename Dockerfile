@@ -16,6 +16,11 @@ RUN if [ -f package-lock.json ]; then \
       npm install; \
     fi
 
+# Kokoro runs in the browser (and in the separate kokoro service), so the
+# multi-GB CUDA/TensorRT ONNX providers are dead weight in the server bundle.
+RUN find node_modules/onnxruntime-node -type f \
+      \( -name '*providers_cuda*' -o -name '*providers_tensorrt*' \) -delete || true
+
 FROM deps AS build
 
 WORKDIR /app
@@ -25,7 +30,9 @@ COPY . .
 
 ENV NODE_ENV=production
 
-RUN npm run build
+RUN npm run build \
+    && npm prune --omit=dev \
+    && npm cache clean --force
 
 FROM node:22-bookworm-slim AS runner
 
