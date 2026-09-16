@@ -818,6 +818,14 @@ function sqliteListAssignments(): LocalAssignmentItem[] {
     } catch {
       partsRaw = [];
     }
+    if (row.assigned_user_id) {
+      const all = getProjectParts({ parts: partsRaw });
+      const episodeEntry = out[out.length - 1];
+      if (episodeEntry && episodeEntry.kind === "episode") {
+        episodeEntry.partCount = all.length;
+        episodeEntry.partIds = all.map((p) => p.id);
+      }
+    }
     for (const part of getProjectParts({ parts: partsRaw })) {
       if (!part.assignedUserId) continue;
       out.push({
