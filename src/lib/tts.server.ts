@@ -1,5 +1,6 @@
 import { generateKokoroMp3Buffer } from "@/lib/kokoro-tts.server";
 import { normalizeNarrationText } from "@/lib/narration-text";
+import { DEFAULT_VOICE_ENGINE, type VoiceEngine } from "@/lib/course-voice";
 
 export class TtsError extends Error {
   status: number;
@@ -33,6 +34,8 @@ async function generateTtsMp3(
     voiceSettings: TtsVoiceSettings;
     /** Append trailing ellipsis cue used by image/code narration pacing. */
     appendEllipsisCue?: boolean;
+    /** Which voice to use — defaults to ElevenLabs Liam. */
+    engine?: VoiceEngine;
   },
 ): Promise<Buffer> {
   const text = normalizeNarrationText(rawText);
@@ -42,21 +45,29 @@ async function generateTtsMp3(
     ? text.replace(/[.!?…]*\s*$/, "") + " ... "
     : text;
 
-  // Primary: local Kokoro TTS (Heart voice). Falls back to ElevenLabs only
-  // when the Kokoro server is not running (e.g. cloud deployment).
-  try {
-    return await generateKokoroMp3Buffer(spoken, "af_heart");
-  } catch (kokoroErr) {
-    console.warn("Kokoro TTS unavailable, falling back to ElevenLabs:", kokoroErr);
+  const engine = opts.engine ?? DEFAULT_VOICE_ENGINE;
+
+  // Kokoro courses (Zero Code): Heart voice, with ElevenLabs as fallback when
+  // the Kokoro server is unreachable.
+  if (engine === "kokoro") {
+    try {
+      return await generateKokoroMp3Buffer(spoken, "af_heart");
+    } catch (kokoroErr) {
+      console.warn("Kokoro TTS unavailable, falling back to ElevenLabs:", kokoroErr);
+    }
   }
 
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) {
     throw new TtsError(
-      "Kokoro TTS server is not running, and no ElevenLabs fallback key is configured.",
+      engine === "kokoro"
+        ? "Kokoro TTS server is not running, and no ElevenLabs fallback key is configured."
+        : "No ElevenLabs API key is configured.",
       503,
     );
   }
+
+
 
   let res: Response | null = null;
   let lastErr = "";
@@ -108,21 +119,38 @@ async function generateTtsMp3(
   return Buffer.from(await res.arrayBuffer());
 }
 
-export async function generateTtsAudioUrl(rawText: string): Promise<{ audioUrl: string }> {
+export async function generateTtsAudioUrl(
+  rawText: string,
+  opts?: { engine?: VoiceEngine; courseId?: string | null },
+): Promise<{ audioUrl: string }> {
+  const engine = opts?.engine ?? (await resolveEngine(opts?.courseId));
   const buf = await generateTtsMp3(rawText, {
     voiceSettings: DEFAULT_VOICE_SETTINGS,
     appendEllipsisCue: true,
+    engine,
   });
   return { audioUrl: `data:audio/mpeg;base64,${buf.toString("base64")}` };
 }
 
 /** Same as generateTtsAudioUrl but returns raw mp3 bytes (for server-side stitching). */
-export async function generateTtsMp3Buffer(rawText: string): Promise<Buffer> {
+export async function generateTtsMp3Buffer(
+  rawText: string,
+  opts?: { engine?: VoiceEngine; courseId?: string | null },
+): Promise<Buffer> {
+  const engine = opts?.engine ?? (await resolveEngine(opts?.courseId));
   return generateTtsMp3(rawText, {
     voiceSettings: DEFAULT_VOICE_SETTINGS,
     appendEllipsisCue: true,
+    engine,
   });
 }
+
+async function resolveEngine(courseId?: string | null): Promise<VoiceEngine> {
+  if (!courseId) return DEFAULT_VOICE_ENGINE;
+  const { resolveVoiceEngineForCourse } = await import("@/lib/course-voice.server");
+  return resolveVoiceEngineForCourse(courseId);
+}
+
 
 /**
  * Screen recording 2: local Kokoro (downloaded once on this Mac).

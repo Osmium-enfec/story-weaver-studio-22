@@ -1006,7 +1006,7 @@ function ComposePage() {
     setGeneratingTts(true);
     setShowPreview(false);
     try {
-      const tts = await apiGenerateTts(script);
+      const tts = await apiGenerateTts(script, project?.course_id ?? null);
       const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
       const title =
         q.title.trim() ||
@@ -1156,7 +1156,7 @@ function ComposePage() {
     setGeneratingTts(true);
     setShowPreview(false);
     try {
-      const tts = await apiGenerateTts(script);
+      const tts = await apiGenerateTts(script, project?.course_id ?? null);
       const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
       const title =
         draft.title ??
@@ -1353,7 +1353,7 @@ function ComposePage() {
         templateDraft.templateKind === "countdown"
           ? countdownNarrationText(script, templateDraft.countdownSec)
           : script;
-      const tts = await apiGenerateTts(ttsText);
+      const tts = await apiGenerateTts(ttsText, project?.course_id ?? null);
       const audioMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
       const durationMs =
         templateDraft.templateKind === "countdown"
@@ -1399,7 +1399,7 @@ function ComposePage() {
     setGeneratingTts(true);
     setShowPreview(false);
     try {
-      const tts = await apiGenerateTts(script);
+      const tts = await apiGenerateTts(script, project?.course_id ?? null);
       const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
       const first = beats[0];
       setCodeDraft((d) => ({
@@ -1497,7 +1497,7 @@ function ComposePage() {
     setGeneratingTts(true);
     setShowPreview(false);
     try {
-      const tts = await apiGenerateTts(script);
+      const tts = await apiGenerateTts(script, project?.course_id ?? null);
       // Safari cannot reliably play large data:audio URLs in the sync timeline.
       const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
       const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;

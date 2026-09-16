@@ -1195,11 +1195,14 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
 
 
 // ---------- TTS (Kokoro Heart voice, ElevenLabs fallback) ----------
-const TtsInput = z.object({ text: z.string().min(1).max(4000) });
+const TtsInput = z.object({
+  text: z.string().min(1).max(4000),
+  courseId: z.string().trim().min(1).optional().nullable(),
+});
 
 export const generateNarration = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => TtsInput.parse(d))
   .handler(async ({ data }) => {
     const { generateTtsAudioUrl } = await import("@/lib/tts.server");
-    return generateTtsAudioUrl(data.text);
+    return generateTtsAudioUrl(data.text, { courseId: data.courseId ?? null });
   });
