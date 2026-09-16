@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ExportRunnerRouteImport } from './routes/export-runner'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
@@ -18,13 +17,12 @@ import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiSyncRouteImport } from './routes/api/sync'
 import { Route as ApiSpacesCorsRouteImport } from './routes/api/spaces-cors'
 import { Route as ApiReviewsRouteImport } from './routes/api/reviews'
-import { Route as ApiRenderBundlesRouteImport } from './routes/api/render-bundles'
+import { Route as ApiRenderJobsRouteImport } from './routes/api/render-jobs'
 import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
 import { Route as ApiProjectsRouteImport } from './routes/api/projects'
 import { Route as ApiPersistAssetRouteImport } from './routes/api/persist-asset'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiExtractVideoAudioRouteImport } from './routes/api/extract-video-audio'
-import { Route as ApiExportRouteImport } from './routes/api/export'
 import { Route as ApiCoursesRouteImport } from './routes/api/courses'
 import { Route as ApiComposeActionsRouteImport } from './routes/api/compose-actions'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
@@ -37,24 +35,17 @@ import { Route as AuthenticatedCoursesRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedComposeRouteImport } from './routes/_authenticated/compose'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiSyncFeedSplatRouteImport } from './routes/api/sync-feed.$'
-import { Route as ApiRenderAgentUpdatesSplatRouteImport } from './routes/api/render-agent-updates.$'
 import { Route as ApiPublicSqlRouteImport } from './routes/api/public/sql'
 import { Route as ApiPublicRuntimeInfoRouteImport } from './routes/api/public/runtime-info'
-import { Route as ApiPublicBundlesRouteImport } from './routes/api/public/bundles'
 import { Route as ApiDivStudioUpdatesSplatRouteImport } from './routes/api/div-studio-updates.$'
 import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
 import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
 import { Route as AuthenticatedEpisodeIdRouteImport } from './routes/_authenticated/episode.$id'
 import { Route as AuthenticatedCourseIdRouteImport } from './routes/_authenticated/course.$id'
-import { Route as ApiPublicBundlesSplatRouteImport } from './routes/api/public/bundles.$'
+import { Route as ApiPublicRenderSplatRouteImport } from './routes/api/public/render.$'
 import { Route as ApiPublicAssetsSplatRouteImport } from './routes/api/public/assets/$'
 
-const ExportRunnerRoute = ExportRunnerRouteImport.update({
-  id: '/export-runner',
-  path: '/export-runner',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -94,9 +85,9 @@ const ApiReviewsRoute = ApiReviewsRouteImport.update({
   path: '/api/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiRenderBundlesRoute = ApiRenderBundlesRouteImport.update({
-  id: '/api/render-bundles',
-  path: '/api/render-bundles',
+const ApiRenderJobsRoute = ApiRenderJobsRouteImport.update({
+  id: '/api/render-jobs',
+  path: '/api/render-jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRecording2VoiceReplaceRoute =
@@ -123,11 +114,6 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
 const ApiExtractVideoAudioRoute = ApiExtractVideoAudioRouteImport.update({
   id: '/api/extract-video-audio',
   path: '/api/extract-video-audio',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiExportRoute = ApiExportRouteImport.update({
-  id: '/api/export',
-  path: '/api/export',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCoursesRoute = ApiCoursesRouteImport.update({
@@ -190,12 +176,6 @@ const ApiSyncFeedSplatRoute = ApiSyncFeedSplatRouteImport.update({
   path: '/api/sync-feed/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiRenderAgentUpdatesSplatRoute =
-  ApiRenderAgentUpdatesSplatRouteImport.update({
-    id: '/api/render-agent-updates/$',
-    path: '/api/render-agent-updates/$',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicSqlRoute = ApiPublicSqlRouteImport.update({
   id: '/api/public/sql',
   path: '/api/public/sql',
@@ -204,11 +184,6 @@ const ApiPublicSqlRoute = ApiPublicSqlRouteImport.update({
 const ApiPublicRuntimeInfoRoute = ApiPublicRuntimeInfoRouteImport.update({
   id: '/api/public/runtime-info',
   path: '/api/public/runtime-info',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicBundlesRoute = ApiPublicBundlesRouteImport.update({
-  id: '/api/public/bundles',
-  path: '/api/public/bundles',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDivStudioUpdatesSplatRoute =
@@ -242,10 +217,10 @@ const AuthenticatedCourseIdRoute = AuthenticatedCourseIdRouteImport.update({
   path: '/course/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiPublicBundlesSplatRoute = ApiPublicBundlesSplatRouteImport.update({
-  id: '/$',
-  path: '/$',
-  getParentRoute: () => ApiPublicBundlesRoute,
+const ApiPublicRenderSplatRoute = ApiPublicRenderSplatRouteImport.update({
+  id: '/api/public/render/$',
+  path: '/api/public/render/$',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicAssetsSplatRoute = ApiPublicAssetsSplatRouteImport.update({
   id: '/api/public/assets/$',
@@ -256,7 +231,6 @@ const ApiPublicAssetsSplatRoute = ApiPublicAssetsSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/export-runner': typeof ExportRunnerRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/compose': typeof AuthenticatedComposeRoute
   '/courses': typeof AuthenticatedCoursesRoute
@@ -268,13 +242,12 @@ export interface FileRoutesByFullPath {
   '/api/auth': typeof ApiAuthRoute
   '/api/compose-actions': typeof ApiComposeActionsRoute
   '/api/courses': typeof ApiCoursesRoute
-  '/api/export': typeof ApiExportRoute
   '/api/extract-video-audio': typeof ApiExtractVideoAudioRoute
   '/api/health': typeof ApiHealthRoute
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
-  '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/render-jobs': typeof ApiRenderJobsRoute
   '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
@@ -286,18 +259,15 @@ export interface FileRoutesByFullPath {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
-  '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/public/sql': typeof ApiPublicSqlRoute
-  '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
-  '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
+  '/api/public/render/$': typeof ApiPublicRenderSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/export-runner': typeof ExportRunnerRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/compose': typeof AuthenticatedComposeRoute
   '/courses': typeof AuthenticatedCoursesRoute
@@ -309,13 +279,12 @@ export interface FileRoutesByTo {
   '/api/auth': typeof ApiAuthRoute
   '/api/compose-actions': typeof ApiComposeActionsRoute
   '/api/courses': typeof ApiCoursesRoute
-  '/api/export': typeof ApiExportRoute
   '/api/extract-video-audio': typeof ApiExtractVideoAudioRoute
   '/api/health': typeof ApiHealthRoute
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
-  '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/render-jobs': typeof ApiRenderJobsRoute
   '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
@@ -327,20 +296,17 @@ export interface FileRoutesByTo {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
-  '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/public/sql': typeof ApiPublicSqlRoute
-  '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
-  '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
+  '/api/public/render/$': typeof ApiPublicRenderSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
-  '/export-runner': typeof ExportRunnerRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/compose': typeof AuthenticatedComposeRoute
   '/_authenticated/courses': typeof AuthenticatedCoursesRoute
@@ -352,13 +318,12 @@ export interface FileRoutesById {
   '/api/auth': typeof ApiAuthRoute
   '/api/compose-actions': typeof ApiComposeActionsRoute
   '/api/courses': typeof ApiCoursesRoute
-  '/api/export': typeof ApiExportRoute
   '/api/extract-video-audio': typeof ApiExtractVideoAudioRoute
   '/api/health': typeof ApiHealthRoute
   '/api/persist-asset': typeof ApiPersistAssetRoute
   '/api/projects': typeof ApiProjectsRoute
   '/api/recording2-voice-replace': typeof ApiRecording2VoiceReplaceRoute
-  '/api/render-bundles': typeof ApiRenderBundlesRoute
+  '/api/render-jobs': typeof ApiRenderJobsRoute
   '/api/reviews': typeof ApiReviewsRoute
   '/api/spaces-cors': typeof ApiSpacesCorsRoute
   '/api/sync': typeof ApiSyncRoute
@@ -370,20 +335,17 @@ export interface FileRoutesById {
   '/api/app-assets/$': typeof ApiAppAssetsSplatRoute
   '/api/assets/$': typeof ApiAssetsSplatRoute
   '/api/div-studio-updates/$': typeof ApiDivStudioUpdatesSplatRoute
-  '/api/public/bundles': typeof ApiPublicBundlesRouteWithChildren
   '/api/public/runtime-info': typeof ApiPublicRuntimeInfoRoute
   '/api/public/sql': typeof ApiPublicSqlRoute
-  '/api/render-agent-updates/$': typeof ApiRenderAgentUpdatesSplatRoute
   '/api/sync-feed/$': typeof ApiSyncFeedSplatRoute
   '/api/public/assets/$': typeof ApiPublicAssetsSplatRoute
-  '/api/public/bundles/$': typeof ApiPublicBundlesSplatRoute
+  '/api/public/render/$': typeof ApiPublicRenderSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
-    | '/export-runner'
     | '/admin'
     | '/compose'
     | '/courses'
@@ -395,13 +357,12 @@ export interface FileRouteTypes {
     | '/api/auth'
     | '/api/compose-actions'
     | '/api/courses'
-    | '/api/export'
     | '/api/extract-video-audio'
     | '/api/health'
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
-    | '/api/render-bundles'
+    | '/api/render-jobs'
     | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
@@ -413,18 +374,15 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
-    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/public/sql'
-    | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
-    | '/api/public/bundles/$'
+    | '/api/public/render/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
-    | '/export-runner'
     | '/admin'
     | '/compose'
     | '/courses'
@@ -436,13 +394,12 @@ export interface FileRouteTypes {
     | '/api/auth'
     | '/api/compose-actions'
     | '/api/courses'
-    | '/api/export'
     | '/api/extract-video-audio'
     | '/api/health'
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
-    | '/api/render-bundles'
+    | '/api/render-jobs'
     | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
@@ -454,19 +411,16 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
-    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/public/sql'
-    | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
-    | '/api/public/bundles/$'
+    | '/api/public/render/$'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
-    | '/export-runner'
     | '/_authenticated/admin'
     | '/_authenticated/compose'
     | '/_authenticated/courses'
@@ -478,13 +432,12 @@ export interface FileRouteTypes {
     | '/api/auth'
     | '/api/compose-actions'
     | '/api/courses'
-    | '/api/export'
     | '/api/extract-video-audio'
     | '/api/health'
     | '/api/persist-asset'
     | '/api/projects'
     | '/api/recording2-voice-replace'
-    | '/api/render-bundles'
+    | '/api/render-jobs'
     | '/api/reviews'
     | '/api/spaces-cors'
     | '/api/sync'
@@ -496,31 +449,27 @@ export interface FileRouteTypes {
     | '/api/app-assets/$'
     | '/api/assets/$'
     | '/api/div-studio-updates/$'
-    | '/api/public/bundles'
     | '/api/public/runtime-info'
     | '/api/public/sql'
-    | '/api/render-agent-updates/$'
     | '/api/sync-feed/$'
     | '/api/public/assets/$'
-    | '/api/public/bundles/$'
+    | '/api/public/render/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ExportRunnerRoute: typeof ExportRunnerRoute
   ApiAdminRoute: typeof ApiAdminRoute
   ApiAuthRoute: typeof ApiAuthRoute
   ApiComposeActionsRoute: typeof ApiComposeActionsRoute
   ApiCoursesRoute: typeof ApiCoursesRoute
-  ApiExportRoute: typeof ApiExportRoute
   ApiExtractVideoAudioRoute: typeof ApiExtractVideoAudioRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiPersistAssetRoute: typeof ApiPersistAssetRoute
   ApiProjectsRoute: typeof ApiProjectsRoute
   ApiRecording2VoiceReplaceRoute: typeof ApiRecording2VoiceReplaceRoute
-  ApiRenderBundlesRoute: typeof ApiRenderBundlesRoute
+  ApiRenderJobsRoute: typeof ApiRenderJobsRoute
   ApiReviewsRoute: typeof ApiReviewsRoute
   ApiSpacesCorsRoute: typeof ApiSpacesCorsRoute
   ApiSyncRoute: typeof ApiSyncRoute
@@ -529,23 +478,15 @@ export interface RootRouteChildren {
   ApiAppAssetsSplatRoute: typeof ApiAppAssetsSplatRoute
   ApiAssetsSplatRoute: typeof ApiAssetsSplatRoute
   ApiDivStudioUpdatesSplatRoute: typeof ApiDivStudioUpdatesSplatRoute
-  ApiPublicBundlesRoute: typeof ApiPublicBundlesRouteWithChildren
   ApiPublicRuntimeInfoRoute: typeof ApiPublicRuntimeInfoRoute
   ApiPublicSqlRoute: typeof ApiPublicSqlRoute
-  ApiRenderAgentUpdatesSplatRoute: typeof ApiRenderAgentUpdatesSplatRoute
   ApiSyncFeedSplatRoute: typeof ApiSyncFeedSplatRoute
   ApiPublicAssetsSplatRoute: typeof ApiPublicAssetsSplatRoute
+  ApiPublicRenderSplatRoute: typeof ApiPublicRenderSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/export-runner': {
-      id: '/export-runner'
-      path: '/export-runner'
-      fullPath: '/export-runner'
-      preLoaderRoute: typeof ExportRunnerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -602,11 +543,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/render-bundles': {
-      id: '/api/render-bundles'
-      path: '/api/render-bundles'
-      fullPath: '/api/render-bundles'
-      preLoaderRoute: typeof ApiRenderBundlesRouteImport
+    '/api/render-jobs': {
+      id: '/api/render-jobs'
+      path: '/api/render-jobs'
+      fullPath: '/api/render-jobs'
+      preLoaderRoute: typeof ApiRenderJobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/recording2-voice-replace': {
@@ -642,13 +583,6 @@ declare module '@tanstack/react-router' {
       path: '/api/extract-video-audio'
       fullPath: '/api/extract-video-audio'
       preLoaderRoute: typeof ApiExtractVideoAudioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/export': {
-      id: '/api/export'
-      path: '/api/export'
-      fullPath: '/api/export'
-      preLoaderRoute: typeof ApiExportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/courses': {
@@ -735,13 +669,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSyncFeedSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/render-agent-updates/$': {
-      id: '/api/render-agent-updates/$'
-      path: '/api/render-agent-updates/$'
-      fullPath: '/api/render-agent-updates/$'
-      preLoaderRoute: typeof ApiRenderAgentUpdatesSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/sql': {
       id: '/api/public/sql'
       path: '/api/public/sql'
@@ -754,13 +681,6 @@ declare module '@tanstack/react-router' {
       path: '/api/public/runtime-info'
       fullPath: '/api/public/runtime-info'
       preLoaderRoute: typeof ApiPublicRuntimeInfoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/bundles': {
-      id: '/api/public/bundles'
-      path: '/api/public/bundles'
-      fullPath: '/api/public/bundles'
-      preLoaderRoute: typeof ApiPublicBundlesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/div-studio-updates/$': {
@@ -805,12 +725,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCourseIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/api/public/bundles/$': {
-      id: '/api/public/bundles/$'
-      path: '/$'
-      fullPath: '/api/public/bundles/$'
-      preLoaderRoute: typeof ApiPublicBundlesSplatRouteImport
-      parentRoute: typeof ApiPublicBundlesRoute
+    '/api/public/render/$': {
+      id: '/api/public/render/$'
+      path: '/api/public/render/$'
+      fullPath: '/api/public/render/$'
+      preLoaderRoute: typeof ApiPublicRenderSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/assets/$': {
       id: '/api/public/assets/$'
@@ -851,33 +771,20 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
-interface ApiPublicBundlesRouteChildren {
-  ApiPublicBundlesSplatRoute: typeof ApiPublicBundlesSplatRoute
-}
-
-const ApiPublicBundlesRouteChildren: ApiPublicBundlesRouteChildren = {
-  ApiPublicBundlesSplatRoute: ApiPublicBundlesSplatRoute,
-}
-
-const ApiPublicBundlesRouteWithChildren =
-  ApiPublicBundlesRoute._addFileChildren(ApiPublicBundlesRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  ExportRunnerRoute: ExportRunnerRoute,
   ApiAdminRoute: ApiAdminRoute,
   ApiAuthRoute: ApiAuthRoute,
   ApiComposeActionsRoute: ApiComposeActionsRoute,
   ApiCoursesRoute: ApiCoursesRoute,
-  ApiExportRoute: ApiExportRoute,
   ApiExtractVideoAudioRoute: ApiExtractVideoAudioRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiPersistAssetRoute: ApiPersistAssetRoute,
   ApiProjectsRoute: ApiProjectsRoute,
   ApiRecording2VoiceReplaceRoute: ApiRecording2VoiceReplaceRoute,
-  ApiRenderBundlesRoute: ApiRenderBundlesRoute,
+  ApiRenderJobsRoute: ApiRenderJobsRoute,
   ApiReviewsRoute: ApiReviewsRoute,
   ApiSpacesCorsRoute: ApiSpacesCorsRoute,
   ApiSyncRoute: ApiSyncRoute,
@@ -886,12 +793,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAppAssetsSplatRoute: ApiAppAssetsSplatRoute,
   ApiAssetsSplatRoute: ApiAssetsSplatRoute,
   ApiDivStudioUpdatesSplatRoute: ApiDivStudioUpdatesSplatRoute,
-  ApiPublicBundlesRoute: ApiPublicBundlesRouteWithChildren,
   ApiPublicRuntimeInfoRoute: ApiPublicRuntimeInfoRoute,
   ApiPublicSqlRoute: ApiPublicSqlRoute,
-  ApiRenderAgentUpdatesSplatRoute: ApiRenderAgentUpdatesSplatRoute,
   ApiSyncFeedSplatRoute: ApiSyncFeedSplatRoute,
   ApiPublicAssetsSplatRoute: ApiPublicAssetsSplatRoute,
+  ApiPublicRenderSplatRoute: ApiPublicRenderSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

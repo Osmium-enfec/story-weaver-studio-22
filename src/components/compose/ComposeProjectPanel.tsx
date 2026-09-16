@@ -19,14 +19,12 @@ import {
 } from "lucide-react";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import { apiPersistAsset } from "@/lib/compose-api";
-import { apiFreezeBundle } from "@/lib/render-bundles-api";
+import { apiQueueRender } from "@/lib/render-jobs-api";
 import { apiListReviews, apiSaveReview } from "@/lib/reviews-api";
 import { ReviewStageBadge } from "@/components/ReviewStageBadge";
 import { normalizeWorkflowStatus } from "@/lib/review-workflow";
 import { apiGetProject, apiSaveProject } from "@/lib/projects-api";
 
-import { startNativeExportJob } from "@/lib/native-export-client";
-import type { ExportQuality } from "@/lib/ffmpeg-stitcher";
 import {
   getProjectParts,
   partThumb,
@@ -147,15 +145,6 @@ export function ComposeProjectPanel({
       document.body.style.overflow = prevOverflow;
     };
   }, [fullPagePreview]);
-  const [startingExportId, setStartingExportId] = useState<string | null>(null);
-  const [exportRunner, setExportRunner] = useState<"server" | "agent">(() => {
-    try {
-      const v = localStorage.getItem("explainer.exportRunner");
-      return v === "agent" ? "agent" : "server";
-    } catch {
-      return "server";
-    }
-  });
   const [renamingSceneId, setRenamingSceneId] = useState<string | null>(null);
   const [bgmEnabled, setBgmEnabled] = useState(DEFAULT_PART_BGM.enabled !== false);
   const [bgmVolume, setBgmVolume] = useState(DEFAULT_PART_BGM.volume);
@@ -627,12 +616,12 @@ export function ComposeProjectPanel({
     setReadyBusy(true);
     setReadyMsg(null);
     try {
-      const { bundle } = await apiFreezeBundle(projectId, selectedPartId);
+      const { job } = await apiQueueRender(projectId, selectedPartId);
       setReadyMsg({
         ok: true,
-        text: `Frozen for HD render — ${bundle.sceneCount} scenes, ${Math.round(
-          bundle.durationMs / 1000,
-        )}s. It is now in the render queue.`,
+        text: `Sent to HD render — ${job.sceneCount} scenes, ${Math.round(
+          job.durationMs / 1000,
+        )}s. Track it on the HD renders page.`,
       });
     } catch (e) {
       setReadyMsg({
@@ -745,31 +734,6 @@ export function ComposeProjectPanel({
     }
   }
 
-  async function handleDownloadPart(part: ProjectPart, quality: ExportQuality) {
-    const key = `${part.id}-${quality}`;
-    setStartingExportId(key);
-    try {
-      const safe = part.title.replace(/[^\w\s-]/g, "").trim() || "part";
-      const filename = `${safe}-${quality === "hd" ? "1080p" : "720p"}.mp4`;
-      const { jobId, runner } = await startNativeExportJob({
-        scenes: part.scenes,
-        masterAudioUrl: part.masterAudioUrl,
-        quality,
-        background: previewBackground,
-        bgm: part.bgm ?? partBgmConfig,
-        projectId,
-        filename,
-        runner: exportRunner,
-      });
-      void navigate({ to: "/export", search: { jobId, runner } });
-
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Export failed to start";
-      alert(msg);
-    } finally {
-      setStartingExportId(null);
-    }
-  }
 
   async function deletePart(part: ProjectPart) {
     if (
@@ -843,49 +807,6 @@ export function ComposeProjectPanel({
                   </span>
                 </div>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <select
-                    value={exportRunner}
-                    onChange={(e) => {
-                      const next = e.target.value === "agent" ? "agent" : "server";
-                      setExportRunner(next);
-                      try {
-                        localStorage.setItem("explainer.exportRunner", next);
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
-                    className="h-7 max-w-[11rem] rounded border bg-background px-1 text-[10px]"
-                    title="Where to encode"
-                  >
-                    <option value="server">Studio Mac</option>
-                    <option value="agent">This Mac (Agent)</option>
-                  </select>
-                  <button
-                    type="button"
-                    disabled={startingExportId === `${selectedPart.id}-preview`}
-                    onClick={() => handleDownloadPart(selectedPart, "preview")}
-                    className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent disabled:opacity-50"
-                  >
-                    {startingExportId === `${selectedPart.id}-preview` ? (
-                      <Loader2 size={10} className="animate-spin" />
-                    ) : (
-                      <Download size={10} />
-                    )}
-                    720p
-                  </button>
-                  <button
-                    type="button"
-                    disabled={startingExportId === `${selectedPart.id}-hd`}
-                    onClick={() => handleDownloadPart(selectedPart, "hd")}
-                    className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-accent disabled:opacity-50"
-                  >
-                    {startingExportId === `${selectedPart.id}-hd` ? (
-                      <Loader2 size={10} className="animate-spin" />
-                    ) : (
-                      <Download size={10} />
-                    )}
-                    HD
-                  </button>
                   <button
                     type="button"
                     disabled={saving || deletingPartId === selectedPart.id}
@@ -1046,21 +967,21 @@ export function ComposeProjectPanel({
             </div>
           )}
 
-          {isAdmin && partSaved && workflowStatus === "reviewed" && (
+          {(isAdmin || iAmReviewer) && partSaved && workflowStatus === "reviewed" && (
             <div className="space-y-1">
               <button
                 type="button"
                 onClick={handleReadyForHd}
                 disabled={readyBusy || savingPart || saving}
                 className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-emerald-600/40 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-500/15 disabled:opacity-50"
-                title="Freeze this saved part as an HD render job for the render Mac"
+                title="Send this reviewed part to the HD render queue"
               >
                 {readyBusy ? (
                   <Loader2 size={14} className="animate-spin" />
                 ) : (
                   <CloudUpload size={14} />
                 )}
-                Ready for HD
+                Send to HD render
               </button>
               {readyMsg && (
                 <p

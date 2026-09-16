@@ -114,7 +114,7 @@ export function NavBar() {
                 search={{}}
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
               >
-                <Film size={14} /> Export
+                <Film size={14} /> HD renders
               </Link>
               )}
               {isAdmin && !reviewOnly && (

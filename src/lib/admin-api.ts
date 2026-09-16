@@ -51,16 +51,17 @@ export interface AdminOverview {
     updated_at: string;
   }>;
   exports: Array<{
-    jobId: string;
+    id: string;
     status: string;
     stage: string;
     progress: number;
-    error?: string;
-    filename: string;
-    quality: string;
-    createdAt: number;
-    userId: string;
-    userEmail: string;
+    error?: string | null;
+    episodeTitle: string;
+    partTitle: string;
+    machine: string | null;
+    createdAt: string;
+    requestedByUserId: string;
+    requestedByEmail: string;
   }>;
 }
 
