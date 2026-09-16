@@ -19,14 +19,12 @@ import {
 } from "lucide-react";
 import { VideoPlayer, type Scene } from "@/components/VideoPlayer";
 import { apiPersistAsset } from "@/lib/compose-api";
-import { apiFreezeBundle } from "@/lib/render-bundles-api";
+import { apiQueueRender } from "@/lib/render-jobs-api";
 import { apiListReviews, apiSaveReview } from "@/lib/reviews-api";
 import { ReviewStageBadge } from "@/components/ReviewStageBadge";
 import { normalizeWorkflowStatus } from "@/lib/review-workflow";
 import { apiGetProject, apiSaveProject } from "@/lib/projects-api";
 
-import { startNativeExportJob } from "@/lib/native-export-client";
-import type { ExportQuality } from "@/lib/ffmpeg-stitcher";
 import {
   getProjectParts,
   partThumb,
@@ -147,15 +145,6 @@ export function ComposeProjectPanel({
       document.body.style.overflow = prevOverflow;
     };
   }, [fullPagePreview]);
-  const [startingExportId, setStartingExportId] = useState<string | null>(null);
-  const [exportRunner, setExportRunner] = useState<"server" | "agent">(() => {
-    try {
-      const v = localStorage.getItem("explainer.exportRunner");
-      return v === "agent" ? "agent" : "server";
-    } catch {
-      return "server";
-    }
-  });
   const [renamingSceneId, setRenamingSceneId] = useState<string | null>(null);
   const [bgmEnabled, setBgmEnabled] = useState(DEFAULT_PART_BGM.enabled !== false);
   const [bgmVolume, setBgmVolume] = useState(DEFAULT_PART_BGM.volume);
@@ -627,12 +616,12 @@ export function ComposeProjectPanel({
     setReadyBusy(true);
     setReadyMsg(null);
     try {
-      const { bundle } = await apiFreezeBundle(projectId, selectedPartId);
+      const { job } = await apiQueueRender(projectId, selectedPartId);
       setReadyMsg({
         ok: true,
-        text: `Frozen for HD render — ${bundle.sceneCount} scenes, ${Math.round(
-          bundle.durationMs / 1000,
-        )}s. It is now in the render queue.`,
+        text: `Sent to HD render — ${job.sceneCount} scenes, ${Math.round(
+          job.durationMs / 1000,
+        )}s. Track it on the HD renders page.`,
       });
     } catch (e) {
       setReadyMsg({
