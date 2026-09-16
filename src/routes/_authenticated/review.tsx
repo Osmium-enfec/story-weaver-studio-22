@@ -23,7 +23,12 @@ import {
   apiReviewGrants,
   type PartReview,
 } from "@/lib/reviews-api";
-import { ReviewStageBadge } from "@/components/ReviewStageBadge";
+import {
+  normalizeWorkflowStatus,
+  workflowClasses,
+  workflowLabel,
+  type WorkflowStatus,
+} from "@/lib/review-workflow";
 import { getStoredSession } from "@/lib/auth-client";
 import { isAdminEmail } from "@/lib/admin";
 import {
@@ -116,6 +121,10 @@ function statusChipClass(
   if (v === "in progress") return "bg-blue-200 text-blue-900";
   return "bg-muted text-muted-foreground";
 }
+
+const STAGE_OPTIONS: Array<{ value: WorkflowStatus; label: string }> = (
+  ["", "ready_for_review", "reviewed", "redo"] as WorkflowStatus[]
+).map((value) => ({ value, label: workflowLabel(value) }));
 
 const POLL_MS = 10_000;
 
@@ -261,7 +270,7 @@ function ReviewPage() {
     );
   }
 
-  function can(row: Row, field: ReviewField): boolean {
+  function can(row: Row, field: ReviewField, nextWorkflowStatus?: string): boolean {
     return canEditReviewField(
       field,
       { email: myEmail, isAdmin, grantedFields },
@@ -269,6 +278,7 @@ function ReviewPage() {
         composerEmail: row.part.assigned_user_email,
         reviewAssigneeEmail: reviewFor(row).assignee_email || null,
         reviewerEmail: row.part.reviewer_user_email ?? null,
+        nextWorkflowStatus: nextWorkflowStatus ?? null,
       },
     );
   }
@@ -578,8 +588,18 @@ function ReviewPage() {
                     issueRound === 2 ? r.issues_found_2 : r.issues_found;
                   const canIssues = can(row, issueField);
                   const canAssign = can(row, "assignee_email");
+                  const stage = normalizeWorkflowStatus(r.workflow_status);
+                  const stageOptions = STAGE_OPTIONS.filter(
+                    (o) => o.value === stage || can(row, "workflow_status", o.value),
+                  );
+                  const canStage = stageOptions.length > 1;
                   return (
-                    <tr key={key} className="border-b align-top">
+                    <tr
+                      key={key}
+                      className={`border-b align-top ${
+                        stage === "redo" ? "bg-red-100/70" : ""
+                      }`}
+                    >
                       {row.index === 0 && (
                         <td
                           rowSpan={row.count}
@@ -600,17 +620,47 @@ function ReviewPage() {
                           />
                         )}
                       </td>
-                      <td className="border-r px-3 py-2">
-                        <ReviewStageBadge
-                          status={r.workflow_status}
-                          by={r.workflow_by_email}
-                          at={r.workflow_at}
-                        />
-                        {!r.workflow_status && (
-                          <span className="text-[10px] text-muted-foreground">
-                            —
-                          </span>
-                        )}
+                      <td className="border-r px-3 py-1.5">
+                        <select
+                          value={stage}
+                          disabled={!canStage || busy}
+                          title={
+                            [
+                              r.workflow_by_email
+                                ? `By ${r.workflow_by_email}`
+                                : null,
+                              r.workflow_at
+                                ? new Date(r.workflow_at).toLocaleString()
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || undefined
+                          }
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (next !== stage) {
+                              void save(row, {
+                                workflow_status: next,
+                              } as Partial<PartReview>);
+                            }
+                          }}
+                          className={`h-8 w-full min-w-[9rem] rounded-md border px-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-70 ${workflowClasses(
+                            stage,
+                          )}`}
+                        >
+                          {STAGE_OPTIONS.map((o) => (
+                            <option
+                              key={o.value || "none"}
+                              value={o.value}
+                              disabled={
+                                o.value !== stage &&
+                                !stageOptions.some((s) => s.value === o.value)
+                              }
+                            >
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="border-r px-3 py-1.5">
                         <StatusCell
