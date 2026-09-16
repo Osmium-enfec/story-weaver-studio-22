@@ -144,7 +144,7 @@ export function buildBundlePayload(opts: {
       masterAudioUrl,
       scenes: rewrittenScenes,
       background: rewriteUrls(
-        (part as unknown as { background?: unknown }).background ?? null,
+        opts.background ?? (part as unknown as { background?: unknown }).background ?? null,
         baseUrl,
         ephemeral,
       ),
