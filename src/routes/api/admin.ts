@@ -15,7 +15,6 @@ import {
   localListAllCourses,
 } from "@/lib/local-courses-db";
 import { localListAssignments, localSavedSceneCountsByUser } from "@/lib/local-projects-db";
-import { listAllExportJobs } from "@/lib/native-export-jobs";
 
 const DeleteBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("deleteUser"), userId: z.string().uuid() }),
@@ -125,14 +124,10 @@ export const Route = createFileRoute("/api/admin")({
         }),
         );
 
-        // Disk scan only — no prune on admin poll (prune is per-user Export page).
-        const exports = listAllExportJobs().map((j) => ({
-          ...j,
-          userEmail: emailById.get(j.userId) ?? "(unknown user)",
-        }));
-
+        const { listRenderJobs, toJobItem } = await import("@/lib/render-jobs-db");
+        const exports = (await listRenderJobs({ limit: 200 })).map(toJobItem);
         const activeExports = exports.filter(
-          (e) => e.status === "running" || e.status === "queued",
+          (e) => e.status === "rendering" || e.status === "queued",
         );
 
         const sceneCountsByUser = await localSavedSceneCountsByUser();
@@ -152,7 +147,9 @@ export const Route = createFileRoute("/api/admin")({
               (a: { assignedUserId: string }) => a.assignedUserId === u.id,
             ).length,
             savedSceneCount: sceneCountsByUser.get(u.id) ?? 0,
-            exportJobsRunning: activeExports.filter((e) => e.userId === u.id).length,
+            exportJobsRunning: activeExports.filter(
+              (e) => e.requestedByUserId === u.id,
+            ).length,
           })),
         );
 
