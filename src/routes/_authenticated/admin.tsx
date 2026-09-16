@@ -184,6 +184,9 @@ function AdminPage() {
           title: a.partTitle ?? "Part",
           status: a.workflowStatus ?? "",
         });
+      } else if (Array.isArray(a.partStatuses)) {
+        // Whole episode handed to this user: use every part's review stage.
+        ep.episodeStatuses = a.partStatuses.map((s: string) => s ?? "");
       }
       map.set(a.assignedUserId, list);
     }
