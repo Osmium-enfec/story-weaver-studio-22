@@ -28,8 +28,6 @@ import {
   type QuestionDisplayPhase,
 } from "@/lib/question-scene-layout";
 import type { CompositionElement } from "@/lib/explainer.functions";
-import { startNativeExportJob } from "@/lib/native-export-client";
-import type { ExportQuality } from "@/lib/ffmpeg-stitcher";
 import {
   backgroundToCss,
   CARD_PADDING_FRAC,
@@ -1358,15 +1356,6 @@ export function VideoPlayer({
   const introAudioRef = useRef<HTMLAudioElement>(null);
   const markAudioPlayedRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [exportStarting, setExportStarting] = useState<ExportQuality | null>(null);
-  const [exportRunner, setExportRunner] = useState<"server" | "agent">(() => {
-    try {
-      const v = localStorage.getItem("explainer.exportRunner");
-      return v === "agent" ? "agent" : "server";
-    } catch {
-      return "server";
-    }
-  });
   const [transparentMap, setTransparentMap] = useState<Map<string, string>>(new Map());
   const navigate = useNavigate();
 
@@ -1570,31 +1559,6 @@ export function VideoPlayer({
   }, [scenes, masterMode]);
 
   const scene = scenes[index];
-
-  async function handleExport(quality: ExportQuality) {
-    if (exportStarting) return;
-    setExportStarting(quality);
-    try {
-      const label = quality === "hd" ? "1080p30" : "720p30";
-      const { jobId, runner } = await startNativeExportJob({
-        scenes,
-        masterAudioUrl,
-        quality,
-        background,
-        bgm: bgm ?? undefined,
-        projectId,
-        filename: `explainer-${label}-${Date.now()}.mp4`,
-        runner: exportRunner,
-      });
-      void navigate({ to: "/export", search: { jobId, runner } });
-
-    } catch (e) {
-      console.error("Export failed", e);
-      alert("Export failed: " + (e as Error).message);
-    } finally {
-      setExportStarting(null);
-    }
-  }
 
   useEffect(() => () => {
     clearPerSceneTransitionTimers();
@@ -2321,53 +2285,6 @@ export function VideoPlayer({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
-        <span className="mr-1 text-xs font-medium text-muted-foreground">Export:</span>
-        <select
-          value={exportRunner}
-          onChange={(e) => {
-            const next = e.target.value === "agent" ? "agent" : "server";
-            setExportRunner(next);
-            try {
-              localStorage.setItem("explainer.exportRunner", next);
-            } catch {
-              /* ignore */
-            }
-          }}
-          className="h-8 rounded-md border bg-background px-2 text-xs"
-          title="Where to encode the MP4"
-        >
-          <option value="server">Studio Mac</option>
-          <option value="agent">This Mac · Render Agent</option>
-        </select>
-        <button
-          onClick={() => handleExport("preview")}
-          disabled={!!exportStarting}
-          className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {exportStarting === "preview" ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : (
-            <Download size={12} />
-          )}
-          720p 30fps
-        </button>
-        <button
-          onClick={() => handleExport("hd")}
-          disabled={!!exportStarting}
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {exportStarting === "hd" ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : (
-            <Download size={12} />
-          )}
-          HD 1080p 30fps
-        </button>
-        <span className="text-[11px] text-muted-foreground">
-          Opens the Export page for progress
-        </span>
-      </div>
     </div>
   );
 }
