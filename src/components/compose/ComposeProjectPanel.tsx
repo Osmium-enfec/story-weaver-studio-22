@@ -34,7 +34,7 @@ import {
 } from "@/lib/project-parts";
 import { stitchProjectScenes } from "@/lib/stitch-project-scenes";
 import { healScenesForExport } from "@/lib/compose-scene";
-import { DEFAULT_BACKGROUND } from "@/lib/scene-background";
+import { DEFAULT_BACKGROUND, type SceneBackground } from "@/lib/scene-background";
 import {
   DEFAULT_PART_BGM,
   resolvePartBgm,
@@ -72,6 +72,8 @@ import {
 
 interface ComposeProjectPanelProps {
   projectId?: string;
+  /** Course-themed background used by the stitched part preview. */
+  previewBackground?: SceneBackground;
   project?: ProjectRecord | null;
   partTitle: string;
   onPartTitleChange: (v: string) => void;
@@ -99,6 +101,7 @@ interface ComposeProjectPanelProps {
 
 export function ComposeProjectPanel({
   projectId,
+  previewBackground = DEFAULT_BACKGROUND,
   project,
   partTitle,
   partScript,
@@ -1104,7 +1107,7 @@ export function ComposeProjectPanel({
                 <div className="overflow-hidden rounded-md border">
                   <VideoPlayer
                     scenes={previewScenes}
-                    background={DEFAULT_BACKGROUND}
+                    background={previewBackground}
                     bgm={previewBgm}
                     projectId={projectId}
                   />
@@ -1391,7 +1394,7 @@ export function ComposeProjectPanel({
               <div className="w-full max-w-6xl overflow-hidden rounded-lg border bg-card shadow-lg">
                 <VideoPlayer
                   scenes={previewScenes}
-                  background={DEFAULT_BACKGROUND}
+                  background={previewBackground}
                   bgm={previewBgm}
                   projectId={projectId}
                 />

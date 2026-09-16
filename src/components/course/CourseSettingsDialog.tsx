@@ -57,8 +57,30 @@ function VideoField({
   busy: boolean;
 }) {
   const inputId = `course-media-${label.replace(/\s+/g, "-").toLowerCase()}`;
+  const [dragOver, setDragOver] = useState(false);
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (busy) return;
+    const file = Array.from(e.dataTransfer.files).find((f) =>
+      f.type.startsWith("video/"),
+    );
+    if (file) onPick(file);
+  }
+
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!busy) setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+      className={`rounded-lg border bg-card p-3 transition ${
+        dragOver ? "border-primary ring-2 ring-primary/30" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-medium">{label}</div>
@@ -111,8 +133,9 @@ function VideoField({
             controls
           />
         ) : (
-          <div className="flex aspect-video items-center justify-center text-xs text-muted-foreground">
-            Using the built-in default
+          <div className="flex aspect-video flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
+            <span>Using the built-in default</span>
+            <span>Drag &amp; drop a video here to replace it</span>
           </div>
         )}
       </div>
