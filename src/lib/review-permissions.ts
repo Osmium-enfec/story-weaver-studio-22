@@ -11,6 +11,7 @@ export type ReviewField =
   | "recording_status"
   | "review_status"
   | "issues_found"
+  | "issues_found_2"
   | "assignee_email"
   | "correction_status"
   | "review_doc"
@@ -24,6 +25,7 @@ export const REVIEW_FIELDS: ReviewField[] = [
   "recording_status",
   "review_status",
   "issues_found",
+  "issues_found_2",
   "assignee_email",
   "correction_status",
   "review_doc",
@@ -86,6 +88,9 @@ export function canEditReviewField(
     case "issues_found":
       if (me.length > 0 && me === norm(row.reviewerEmail)) return true;
       return granted ? false : isReviewerEmail(me);
+    case "issues_found_2":
+      // Round-2 review is course-wide and only via an explicit admin grant.
+      return false;
     case "review_status":
     case "assignee_email":
     case "review_doc":

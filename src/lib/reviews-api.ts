@@ -8,6 +8,7 @@ export type PartReview = {
   recording_status: string;
   review_status: string;
   issues_found: string;
+  issues_found_2: string;
   correction_status: string;
   assignee_email: string;
   review_doc_url: string;
@@ -31,6 +32,7 @@ export type PartReviewPatch = {
   recording_status?: string;
   review_status?: string;
   issues_found?: string;
+  issues_found_2?: string;
   correction_status?: string;
   assignee_email?: string;
   review_doc_url?: string;
