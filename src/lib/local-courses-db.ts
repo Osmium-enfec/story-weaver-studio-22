@@ -4,6 +4,10 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { usePostgres } from "@/lib/runtime-backends";
+import {
+  normalizeCourseSettings,
+  type CourseSettings,
+} from "@/lib/course-settings";
 
 /**
  * Courses share the same SQLite file as projects (episodes).
@@ -15,6 +19,7 @@ export interface LocalCourseRow {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
+  settings: CourseSettings;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +29,7 @@ export interface LocalCourseListItem {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
+  settings: CourseSettings;
   created_at: string;
   updated_at: string;
   episode_count: number;
@@ -59,6 +65,11 @@ function getDb(): Database.Database {
     /* column exists */
   }
   try {
+    db.exec(`ALTER TABLE courses ADD COLUMN settings TEXT`);
+  } catch {
+    /* column exists */
+  }
+  try {
     db.exec(
       `CREATE INDEX IF NOT EXISTS projects_user_course_idx ON projects (user_id, course_id)`,
     );
@@ -75,6 +86,7 @@ function rowToCourse(row: Record<string, unknown>): LocalCourseRow {
     title: String(row.title),
     description: row.description != null ? String(row.description) : null,
     thumbnail_url: row.thumbnail_url != null ? String(row.thumbnail_url) : null,
+    settings: normalizeCourseSettings(row.settings),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -87,6 +99,7 @@ function sqliteSaveCourse(
     title: string;
     description?: string | null;
     thumbnail_url?: string | null;
+    settings?: CourseSettings | null;
   },
   opts?: { asAdmin?: boolean },
 ): string {
@@ -109,21 +122,23 @@ function sqliteSaveCourse(
   if (existing) {
     conn
       .prepare(
-        `UPDATE courses SET title = ?, description = ?, thumbnail_url = ?, updated_at = ?
+        `UPDATE courses SET title = ?, description = ?, thumbnail_url = ?,
+           settings = COALESCE(?, settings), updated_at = ?
          WHERE id = ?`,
       )
       .run(
         data.title,
         data.description ?? null,
         data.thumbnail_url ?? null,
+        data.settings ? JSON.stringify(data.settings) : null,
         now,
         id,
       );
   } else {
     conn
       .prepare(
-        `INSERT INTO courses (id, user_id, title, description, thumbnail_url, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO courses (id, user_id, title, description, thumbnail_url, settings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -131,6 +146,7 @@ function sqliteSaveCourse(
         data.title,
         data.description ?? null,
         data.thumbnail_url ?? null,
+        data.settings ? JSON.stringify(data.settings) : null,
         now,
         now,
       );
@@ -172,7 +188,7 @@ async function sqliteListCourses(
   // Shared catalog: all courses are visible to every signed-in user.
   const rows = conn
     .prepare(
-      `SELECT id, title, description, thumbnail_url, created_at, updated_at, user_id
+      `SELECT id, title, description, thumbnail_url, settings, created_at, updated_at, user_id
        FROM courses ORDER BY updated_at DESC`,
     )
     .all() as Record<string, unknown>[];
@@ -188,6 +204,7 @@ async function sqliteListCourses(
       title: String(row.title),
       description: row.description != null ? String(row.description) : null,
       thumbnail_url: row.thumbnail_url != null ? String(row.thumbnail_url) : null,
+      settings: normalizeCourseSettings(row.settings),
       created_at: String(row.created_at),
       updated_at: String(row.updated_at),
       episode_count: Number(countRow?.n ?? 0),
@@ -209,7 +226,7 @@ function sqliteListAllCourses(): LocalCourseAdminItem[] {
   const conn = getDb();
   const rows = conn
     .prepare(
-      `SELECT id, user_id, title, description, thumbnail_url, created_at, updated_at
+      `SELECT id, user_id, title, description, thumbnail_url, settings, created_at, updated_at
        FROM courses ORDER BY updated_at DESC`,
     )
     .all() as Record<string, unknown>[];
@@ -224,6 +241,7 @@ function sqliteListAllCourses(): LocalCourseAdminItem[] {
       title: String(row.title),
       description: row.description != null ? String(row.description) : null,
       thumbnail_url: row.thumbnail_url != null ? String(row.thumbnail_url) : null,
+      settings: normalizeCourseSettings(row.settings),
       created_at: String(row.created_at),
       updated_at: String(row.updated_at),
       episode_count: Number(countRow?.n ?? 0),

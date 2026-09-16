@@ -3,6 +3,7 @@ import {
   LOOP_VIDEO_BACKGROUND,
   type SceneBackground,
 } from "@/lib/scene-background";
+import { getActiveCourseMedia } from "@/lib/course-media";
 
 export type ComposeBackgroundPreset = "video-loop" | "plain-white";
 
@@ -32,5 +33,11 @@ export function presetFromBackground(bg: SceneBackground): ComposeBackgroundPres
 }
 
 export function backgroundFromPreset(id: ComposeBackgroundPreset): SceneBackground {
-  return COMPOSE_BACKGROUND_PRESETS.find((p) => p.id === id)?.background ?? DEFAULT_BACKGROUND;
+  const base =
+    COMPOSE_BACKGROUND_PRESETS.find((p) => p.id === id)?.background ?? DEFAULT_BACKGROUND;
+  if (base.kind === "video") {
+    const { bgLoopUrl } = getActiveCourseMedia();
+    if (bgLoopUrl) return { kind: "video", url: bgLoopUrl };
+  }
+  return base;
 }

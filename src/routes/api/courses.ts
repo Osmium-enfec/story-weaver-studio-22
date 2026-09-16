@@ -9,6 +9,7 @@ import {
 } from "@/lib/local-courses-db";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import { isAdminUser } from "@/lib/admin";
+import { normalizeCourseSettings } from "@/lib/course-settings";
 
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("list") }),
@@ -19,6 +20,7 @@ const Body = z.discriminatedUnion("action", [
     title: z.string().min(1).max(200),
     description: z.string().max(2000).nullable().optional(),
     thumbnail_url: z.string().optional(),
+    settings: z.unknown().optional(),
   }),
 ]);
 
@@ -76,6 +78,10 @@ export const Route = createFileRoute("/api/courses")({
             title: data.title,
             description: data.description,
             thumbnail_url: data.thumbnail_url,
+            settings:
+              data.settings !== undefined
+                ? normalizeCourseSettings(data.settings)
+                : null,
           }, { asAdmin });
         } catch (e) {
           const msg = e instanceof Error ? e.message : "Save failed";

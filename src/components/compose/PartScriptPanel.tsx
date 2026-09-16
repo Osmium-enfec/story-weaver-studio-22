@@ -31,7 +31,7 @@ import {
 } from "@/lib/part-script";
 import { newCodeTypingBeatId } from "@/lib/code-scene-sfx";
 import { PartProgressStatus } from "@/components/compose/PartProgressStatus";
-import { COMMON_INTRO_VIDEO_URL, COMMON_OUTRO_VIDEO_URL } from "@/lib/common-intro-outro";
+import { commonBumperVideoUrl } from "@/lib/common-intro-outro";
 
 export interface PartScriptPanelProps {
   plan: PartScriptPlan;
@@ -511,9 +511,9 @@ export function PartScriptPanel({
                     <video
                       src={
                         scene.type === "outro"
-                          ? COMMON_OUTRO_VIDEO_URL
+                          ? commonBumperVideoUrl("Outro")
                           : scene.type === "intro"
-                            ? COMMON_INTRO_VIDEO_URL
+                            ? commonBumperVideoUrl("Intro")
                             : scene.mediaUrl!
                       }
                       className="max-h-40 w-full rounded-md border bg-black object-contain"
