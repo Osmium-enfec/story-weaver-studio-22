@@ -122,6 +122,10 @@ function statusChipClass(
   return "bg-muted text-muted-foreground";
 }
 
+const STAGE_OPTIONS: Array<{ value: WorkflowStatus; label: string }> = (
+  ["", "ready_for_review", "reviewed", "redo"] as WorkflowStatus[]
+).map((value) => ({ value, label: workflowLabel(value) }));
+
 const POLL_MS = 10_000;
 
 type Row = {
