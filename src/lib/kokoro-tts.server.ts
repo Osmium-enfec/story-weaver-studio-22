@@ -34,7 +34,7 @@ const KOKORO_VOICE: KokoroVoiceId = KOKORO_VOICES.includes(
   (process.env.KOKORO_VOICE?.trim() || "") as KokoroVoiceId,
 )
   ? (process.env.KOKORO_VOICE!.trim() as KokoroVoiceId)
-  : "am_michael";
+  : "af_heart";
 const KOKORO_SPEED = Number(process.env.KOKORO_SPEED || "1") || 1;
 /** Stay under Kokoro's ~510-phoneme window (~24s). */
 const KOKORO_CHUNK_CHARS = 280;
