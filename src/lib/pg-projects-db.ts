@@ -723,6 +723,14 @@ export async function pgListAssignments(): Promise<LocalAssignmentItem[]> {
   const [episodes, parts] = await Promise.all([
     pgQuery<Record<string, unknown>>(
       `SELECT id, title, course_id, assigned_user_id, assigned_user_email,
+              CASE WHEN jsonb_typeof(parts) = 'array'
+                   THEN jsonb_array_length(parts) ELSE 0 END AS part_count,
+              CASE WHEN jsonb_typeof(parts) = 'array'
+                   THEN (SELECT COALESCE(
+                           jsonb_agg(x->>'id') FILTER (WHERE x->>'id' IS NOT NULL),
+                           '[]'::jsonb)
+                         FROM jsonb_array_elements(parts) x)
+                   ELSE '[]'::jsonb END AS part_ids,
               updated_at::text AS updated_at
          FROM projects
         WHERE assigned_user_id IS NOT NULL
