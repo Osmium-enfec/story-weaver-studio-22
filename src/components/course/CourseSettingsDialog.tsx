@@ -133,8 +133,9 @@ function VideoField({
             controls
           />
         ) : (
-          <div className="flex aspect-video items-center justify-center text-xs text-muted-foreground">
-            Using the built-in default
+          <div className="flex aspect-video flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
+            <span>Using the built-in default</span>
+            <span>Drag &amp; drop a video here to replace it</span>
           </div>
         )}
       </div>
