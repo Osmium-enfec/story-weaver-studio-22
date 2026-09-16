@@ -46,6 +46,8 @@ export interface AdminOverview {
     sceneCount?: number;
     /** '' | 'ready_for_review' | 'reviewed' | 'redo' (parts only). */
     workflowStatus?: string;
+    /** Review stage of every part in the episode (episode assignments only). */
+    partStatuses?: string[];
     updated_at: string;
   }>;
   exports: Array<{
