@@ -85,8 +85,7 @@ export async function pgUpsertReview(
     `INSERT INTO part_reviews (
        project_id, part_id, course_id, script_status, recording_status,
        review_status, issues_found,
-  COALESCE(issues_found_2,'') AS issues_found_2,
-  correction_status, assignee_email,
+       issues_found_2, correction_status, assignee_email,
        review_doc_url, review_doc_name, script_doc_url, script_doc_name,
        rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
        progress_status, updated_by_email, updated_at
