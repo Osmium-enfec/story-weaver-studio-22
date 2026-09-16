@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth-client";
 import { Sparkles, LogOut, FolderOpen, Film, Shield, Upload, Loader2, ClipboardCheck } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin";
+import { useReviewOnly } from "@/hooks/useReviewOnly";
 
 export function NavBar() {
   const [email, setEmail] = useState<string | null>(null);
@@ -17,6 +18,7 @@ export function NavBar() {
   const [pushBusy, setPushBusy] = useState(false);
   const [pushHint, setPushHint] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { reviewOnly } = useReviewOnly();
   useEffect(() => {
     function sync() {
       const session = getStoredSession();
@@ -70,14 +72,14 @@ export function NavBar() {
   return (
     <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-40">
       <div className="flex w-full items-center justify-between px-4 py-3 xl:px-8">
-        <Link to="/courses" className="flex items-center gap-2 font-semibold">
+        <Link to={reviewOnly ? "/review" : "/courses"} className="flex items-center gap-2 font-semibold">
           <Sparkles size={18} className="text-primary" />
           <span>Div Studio</span>
         </Link>
         <div className="flex items-center gap-3 text-sm">
           {loaded && email ? (
             <>
-              {isAdmin && (
+              {isAdmin && !reviewOnly && (
                 <div className="relative inline-flex flex-col items-end">
                   <button
                     type="button"
@@ -106,6 +108,7 @@ export function NavBar() {
               >
                 <ClipboardCheck size={14} /> Review
               </Link>
+              {!reviewOnly && (
               <Link
                 to="/export"
                 search={{}}
@@ -113,7 +116,8 @@ export function NavBar() {
               >
                 <Film size={14} /> Export
               </Link>
-              {isAdmin && (
+              )}
+              {isAdmin && !reviewOnly && (
                 <Link
                   to="/admin"
                   className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
@@ -121,12 +125,14 @@ export function NavBar() {
                   <Shield size={14} /> Admin
                 </Link>
               )}
+              {!reviewOnly && (
               <Link
                 to="/courses"
                 className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-accent"
               >
                 <FolderOpen size={14} /> My Courses
               </Link>
+              )}
               <span className="text-xs text-muted-foreground hidden sm:inline">{email}</span>
               <button
                 onClick={signOut}
