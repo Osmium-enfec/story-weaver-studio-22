@@ -17,6 +17,7 @@ export interface PartReviewRow {
   recording_status: string;
   review_status: string;
   issues_found: string;
+  issues_found_2: string;
   correction_status: string;
   assignee_email: string;
   review_doc_url: string;
@@ -42,6 +43,7 @@ export interface PartReviewInput {
   recording_status?: string;
   review_status?: string;
   issues_found?: string;
+  issues_found_2?: string;
   correction_status?: string;
   assignee_email?: string;
   review_doc_url?: string;
@@ -71,6 +73,7 @@ function getDb(): Database.Database {
       recording_status TEXT NOT NULL DEFAULT '',
       review_status TEXT NOT NULL DEFAULT '',
       issues_found TEXT NOT NULL DEFAULT '',
+      issues_found_2 TEXT NOT NULL DEFAULT '',
       correction_status TEXT NOT NULL DEFAULT '',
       assignee_email TEXT NOT NULL DEFAULT '',
       review_doc_url TEXT NOT NULL DEFAULT '',
@@ -90,6 +93,7 @@ function getDb(): Database.Database {
       ON part_reviews (course_id);
   `);
   for (const col of [
+    "issues_found_2",
     "review_doc_url",
     "review_doc_name",
     "script_doc_url",
@@ -125,6 +129,7 @@ export function rowToPartReview(row: Record<string, unknown>): PartReviewRow {
     recording_status: String(row.recording_status ?? ""),
     review_status: String(row.review_status ?? ""),
     issues_found: String(row.issues_found ?? ""),
+    issues_found_2: String(row.issues_found_2 ?? ""),
     correction_status: String(row.correction_status ?? ""),
     assignee_email: String(row.assignee_email ?? ""),
     review_doc_url: String(row.review_doc_url ?? ""),
@@ -162,6 +167,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
         recording_status: "",
         review_status: "",
         issues_found: "",
+        issues_found_2: "",
         correction_status: "",
         assignee_email: "",
         review_doc_url: "",
@@ -177,6 +183,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
     recording_status: input.recording_status ?? base.recording_status,
     review_status: input.review_status ?? base.review_status,
     issues_found: input.issues_found ?? base.issues_found,
+    issues_found_2: input.issues_found_2 ?? base.issues_found_2,
     correction_status: input.correction_status ?? base.correction_status,
     assignee_email: input.assignee_email ?? base.assignee_email,
     review_doc_url: input.review_doc_url ?? base.review_doc_url,
@@ -191,17 +198,18 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
     .prepare(
       `INSERT INTO part_reviews (
          project_id, part_id, course_id, script_status, recording_status,
-         review_status, issues_found, correction_status, assignee_email,
+         review_status, issues_found, issues_found_2, correction_status, assignee_email,
          review_doc_url, review_doc_name, script_doc_url, script_doc_name,
          rendered_uploaded, workflow_status, workflow_by_email, workflow_at,
          progress_status, updated_by_email, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT (project_id, part_id) DO UPDATE SET
          course_id = excluded.course_id,
          script_status = excluded.script_status,
          recording_status = excluded.recording_status,
          review_status = excluded.review_status,
          issues_found = excluded.issues_found,
+         issues_found_2 = excluded.issues_found_2,
          correction_status = excluded.correction_status,
          assignee_email = excluded.assignee_email,
          review_doc_url = excluded.review_doc_url,
@@ -224,6 +232,7 @@ function sqliteUpsertReview(input: PartReviewInput): PartReviewRow {
       merged.recording_status,
       merged.review_status,
       merged.issues_found,
+      merged.issues_found_2,
       merged.correction_status,
       merged.assignee_email,
       merged.review_doc_url,
