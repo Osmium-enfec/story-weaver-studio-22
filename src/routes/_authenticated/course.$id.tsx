@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { apiGetCourse } from "@/lib/courses-api";
 import {
   apiAssignEpisodeReviewer,
+  apiAssignEpisodeUser,
   apiGetProject,
   apiListProjects,
   apiSaveProject,
