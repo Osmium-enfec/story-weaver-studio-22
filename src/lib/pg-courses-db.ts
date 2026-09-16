@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pgQuery } from "@/lib/pg";
+import { normalizeCourseSettings, type CourseSettings } from "@/lib/course-settings";
 import type {
   LocalCourseAdminItem,
   LocalCourseListItem,
@@ -13,13 +14,14 @@ function rowToCourse(row: Record<string, unknown>): LocalCourseRow {
     title: String(row.title),
     description: row.description != null ? String(row.description) : null,
     thumbnail_url: row.thumbnail_url != null ? String(row.thumbnail_url) : null,
+    settings: normalizeCourseSettings(row.settings),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
 }
 
 const COURSE_SELECT = `
-  id, user_id, title, description, thumbnail_url,
+  id, user_id, title, description, thumbnail_url, settings,
   created_at::text AS created_at, updated_at::text AS updated_at
 `;
 
@@ -30,6 +32,7 @@ export async function pgSaveCourse(
     title: string;
     description?: string | null;
     thumbnail_url?: string | null;
+    settings?: CourseSettings | null;
   },
   opts?: { asAdmin?: boolean },
 ): Promise<string> {
@@ -53,26 +56,28 @@ export async function pgSaveCourse(
   if (existing) {
     await pgQuery(
       `UPDATE courses SET title = $1, description = $2, thumbnail_url = $3,
-         updated_at = $4::timestamptz
-       WHERE id = $5`,
+         settings = COALESCE($4::jsonb, settings), updated_at = $5::timestamptz
+       WHERE id = $6`,
       [
         data.title,
         data.description ?? null,
         data.thumbnail_url ?? null,
+        data.settings ? JSON.stringify(data.settings) : null,
         now,
         id,
       ],
     );
   } else {
     await pgQuery(
-      `INSERT INTO courses (id, user_id, title, description, thumbnail_url, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7::timestamptz)`,
+      `INSERT INTO courses (id, user_id, title, description, thumbnail_url, settings, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::timestamptz, $8::timestamptz)`,
       [
         id,
         userId,
         data.title,
         data.description ?? null,
         data.thumbnail_url ?? null,
+        data.settings ? JSON.stringify(data.settings) : null,
         now,
         now,
       ],
@@ -118,7 +123,7 @@ export async function pgListCourses(
   void opts;
   // Shared catalog: all courses are visible to every signed-in user.
   const allRes = await pgQuery<Record<string, unknown>>(
-    `SELECT id, title, description, thumbnail_url,
+    `SELECT id, title, description, thumbnail_url, settings,
             created_at::text AS created_at, updated_at::text AS updated_at, user_id
      FROM courses ORDER BY updated_at DESC`,
   );
@@ -136,6 +141,7 @@ export async function pgListCourses(
         description: row.description != null ? String(row.description) : null,
         thumbnail_url:
           row.thumbnail_url != null ? String(row.thumbnail_url) : null,
+        settings: normalizeCourseSettings(row.settings),
         created_at: String(row.created_at),
         updated_at: String(row.updated_at),
         episode_count: Number(countRes.rows[0]?.n ?? 0),
@@ -147,7 +153,7 @@ export async function pgListCourses(
 /** Admin: every course, newest first. */
 export async function pgListAllCourses(): Promise<LocalCourseAdminItem[]> {
   const res = await pgQuery<Record<string, unknown>>(
-    `SELECT id, user_id, title, description, thumbnail_url,
+    `SELECT id, user_id, title, description, thumbnail_url, settings,
             created_at::text AS created_at, updated_at::text AS updated_at
      FROM courses ORDER BY updated_at DESC`,
   );
@@ -165,6 +171,7 @@ export async function pgListAllCourses(): Promise<LocalCourseAdminItem[]> {
         description: row.description != null ? String(row.description) : null,
         thumbnail_url:
           row.thumbnail_url != null ? String(row.thumbnail_url) : null,
+        settings: normalizeCourseSettings(row.settings),
         created_at: String(row.created_at),
         updated_at: String(row.updated_at),
         episode_count: Number(countRes.rows[0]?.n ?? 0),

@@ -96,7 +96,15 @@ interface Migration {
 }
 
 /** Applied in order, once each, recorded in `schema_migrations`. */
-const MIGRATIONS: Migration[] = [{ name: "001_init", sql: SQL_001_INIT }];
+const SQL_002_COURSE_SETTINGS = `
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS settings JSONB;
+`;
+
+/** Applied in order, once each, recorded in `schema_migrations`. */
+const MIGRATIONS: Migration[] = [
+  { name: "001_init", sql: SQL_001_INIT },
+  { name: "002_course_settings", sql: SQL_002_COURSE_SETTINGS },
+];
 
 /** Fixed key so replicas serialize schema work instead of racing on DDL. */
 const MIGRATION_LOCK_KEY = 4819233015;
