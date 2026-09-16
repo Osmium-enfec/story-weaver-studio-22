@@ -1,10 +1,24 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { apiListCourses, apiSaveCourse } from "@/lib/courses-api";
+import {
+  apiListCourses,
+  apiSaveCourse,
+  apiSaveCourseSettings,
+  type CourseListItem,
+} from "@/lib/courses-api";
+import { CourseSettingsDialog } from "@/components/course/CourseSettingsDialog";
 import { apiListProjects } from "@/lib/projects-api";
 import { NavBar } from "@/components/NavBar";
-import { BookOpen, ChevronLeft, ChevronRight, Loader2, Play, Plus } from "lucide-react";
+import {
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Play,
+  Plus,
+  Settings,
+} from "lucide-react";
 import { getStoredSession } from "@/lib/auth-client";
 import { isAdminEmail } from "@/lib/admin";
 
@@ -74,6 +88,7 @@ function CoursesPage() {
   const [newTitle, setNewTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [coursesPage, setCoursesPage] = useState(1);
+  const [settingsCourse, setSettingsCourse] = useState<CourseListItem | null>(null);
   const [episodesPage, setEpisodesPage] = useState(1);
 
   const { data: courses, isLoading: coursesLoading } = useQuery({
@@ -198,14 +213,37 @@ function CoursesPage() {
                 <>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {pagedCourses.map((c) => (
-                      <button
+                      <div
                         key={c.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         onClick={() =>
                           router.navigate({ to: "/course/$id", params: { id: c.id } })
                         }
-                        className="rounded-lg border bg-card overflow-hidden text-left hover:border-primary/40"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            void router.navigate({
+                              to: "/course/$id",
+                              params: { id: c.id },
+                            });
+                          }
+                        }}
+                        className="relative rounded-lg border bg-card overflow-hidden text-left hover:border-primary/40 cursor-pointer"
                       >
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            title="Course settings"
+                            aria-label="Course settings"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSettingsCourse(c);
+                            }}
+                            className="absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background/90 text-muted-foreground backdrop-blur hover:bg-accent hover:text-foreground"
+                          >
+                            <Settings size={15} />
+                          </button>
+                        ) : null}
                         <div className="aspect-video bg-muted flex items-center justify-center overflow-hidden">
                           {c.thumbnail_url ? (
                             <img
@@ -224,7 +262,7 @@ function CoursesPage() {
                             {new Date(c.updated_at).toLocaleDateString()}
                           </div>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                   <PaginationBar
@@ -308,6 +346,28 @@ function CoursesPage() {
           </>
         )}
       </div>
+
+      {settingsCourse ? (
+        <CourseSettingsDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setSettingsCourse(null);
+          }}
+          course={settingsCourse}
+          onSave={async (settings) => {
+            await apiSaveCourseSettings(
+              {
+                id: settingsCourse.id,
+                title: settingsCourse.title,
+                description: settingsCourse.description,
+              },
+              settings,
+            );
+            await qc.invalidateQueries({ queryKey: ["courses"] });
+            await qc.invalidateQueries({ queryKey: ["course", settingsCourse.id] });
+          }}
+        />
+      ) : null}
     </div>
   );
 }
