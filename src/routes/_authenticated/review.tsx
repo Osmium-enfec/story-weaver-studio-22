@@ -84,6 +84,7 @@ function emptyReview(
     recording_status: "",
     review_status: "",
     issues_found: "",
+    issues_found_2: "",
     correction_status: "",
     assignee_email: "",
     review_doc_url: "",
@@ -140,6 +141,7 @@ function ReviewPage() {
   const tableRef = useRef<HTMLDivElement | null>(null);
   const [onlyMyReviews, setOnlyMyReviews] = useState(false);
   const [page, setPage] = useState(1);
+  const [issueRound, setIssueRound] = useState<1 | 2>(1);
 
   const session = typeof window !== "undefined" ? getStoredSession() : null;
   const myEmail = session?.user.email ?? "";
@@ -399,7 +401,10 @@ function ReviewPage() {
     kind,
   }: {
     row: Row;
-    field: Exclude<ReviewField, "review_doc" | "script_doc">;
+    field: Exclude<
+      ReviewField,
+      "review_doc" | "script_doc" | "issues_found" | "issues_found_2"
+    >;
     options: string[];
     kind: "progress" | "review" | "correction" | "rendered";
   }) {
@@ -483,7 +488,8 @@ function ReviewPage() {
           <Lock size={11} />
           Script &amp; recording: the part's assigned editor. Script file: the
           assigned editor or reviewer. Composing status
-          &amp; issues: the reviewer. Correction status: the assigned person.
+          &amp; issues (Review 1): the reviewer. Issues (Review 2): course-wide
+          access granted by an admin. Correction status: the assigned person.
           Rendered &amp; uploaded: admin only. Admins can edit everything.
         </p>
 
@@ -517,7 +523,25 @@ function ReviewPage() {
                   Composing Status
                 </th>
                 <th className="min-w-[280px] border-r px-3 py-2 font-medium">
-                  Issues Found
+                  <div className="flex items-center gap-2">
+                    <span>Issues Found</span>
+                    <div className="inline-flex overflow-hidden rounded-md border">
+                      {([1, 2] as const).map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setIssueRound(n)}
+                          className={`px-2 py-0.5 text-[10px] font-medium ${
+                            issueRound === n
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background hover:bg-accent"
+                          }`}
+                        >
+                          Review {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </th>
                 <th className="w-44 border-r px-3 py-2 font-medium">
                   Document
@@ -548,7 +572,11 @@ function ReviewPage() {
                   const r = reviewFor(row);
                   const key = `${row.episode.id}:${row.part.id}`;
                   const busy = savingKey === key;
-                  const canIssues = can(row, "issues_found");
+                  const issueField: ReviewField =
+                    issueRound === 2 ? "issues_found_2" : "issues_found";
+                  const issueValue =
+                    issueRound === 2 ? r.issues_found_2 : r.issues_found;
+                  const canIssues = can(row, issueField);
                   const canAssign = can(row, "assignee_email");
                   return (
                     <tr key={key} className="border-b align-top">
@@ -616,12 +644,12 @@ function ReviewPage() {
                       </td>
                       <td className="border-r px-3 py-1.5">
                         <textarea
-                          defaultValue={r.issues_found}
-                          key={`if-${key}-${r.updated_at}`}
+                          defaultValue={issueValue}
+                          key={`if-${key}-${issueRound}-${r.updated_at}`}
                           disabled={!canIssues}
                           placeholder={
                             canIssues
-                              ? "Shift+Enter for a new issue line…"
+                              ? `Review ${issueRound}: Shift+Enter for a new issue line…`
                               : "No issues found"
                           }
                           rows={2}
@@ -632,8 +660,10 @@ function ReviewPage() {
                             }
                           }}
                           onBlur={(e) => {
-                            if (e.target.value !== r.issues_found) {
-                              void save(row, { issues_found: e.target.value });
+                            if (e.target.value !== issueValue) {
+                              void save(row, {
+                                [issueField]: e.target.value,
+                              } as Partial<PartReview>);
                             }
                           }}
                           className="w-full min-w-0 resize-y rounded-md border bg-background px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-60"
