@@ -1,10 +1,12 @@
 import { getStoredSessionToken } from "@/lib/auth-client";
+import type { CourseSettings } from "@/lib/course-settings";
 
 export type CourseListItem = {
   id: string;
   title: string;
   description: string | null;
   thumbnail_url: string | null;
+  settings: CourseSettings;
   created_at: string;
   updated_at: string;
   episode_count: number;
@@ -16,6 +18,7 @@ export type CourseRecord = {
   title: string;
   description: string | null;
   thumbnail_url: string | null;
+  settings: CourseSettings;
   created_at: string;
   updated_at: string;
 };
@@ -50,6 +53,20 @@ export function apiSaveCourse(data: {
   title: string;
   description?: string | null;
   thumbnail_url?: string;
+  settings?: CourseSettings;
 }): Promise<{ id: string; store: "sqlite" }> {
   return coursesFetch({ action: "save", ...data });
+}
+
+/** Update only the course theme (background, bumpers, voice). */
+export async function apiSaveCourseSettings(
+  course: { id: string; title: string; description?: string | null },
+  settings: CourseSettings,
+): Promise<void> {
+  await apiSaveCourse({
+    id: course.id,
+    title: course.title,
+    description: course.description ?? null,
+    settings,
+  });
 }
