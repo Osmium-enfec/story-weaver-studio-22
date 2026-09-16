@@ -315,6 +315,30 @@ function CourseDetailPage() {
                         <WorkingOnLabel partEmails={ep.part_assignee_emails} />
                         <AssignUserSelect
                           valueUserId={
+                            ep.parts_summary?.find((p) => p.assigned_user_id)
+                              ?.assigned_user_id ??
+                            ep.assigned_user_id ??
+                            null
+                          }
+                          valueEmail={
+                            ep.parts_summary?.find((p) => p.assigned_user_email)
+                              ?.assigned_user_email ??
+                            ep.assigned_user_email ??
+                            null
+                          }
+                          label="Assign full episode to"
+                          onAssign={async (userId) => {
+                            await apiAssignEpisodeUser(ep.id, userId);
+                            await qc.invalidateQueries({
+                              queryKey: ["projects", "course", id],
+                            });
+                            await qc.invalidateQueries({
+                              queryKey: ["project", ep.id],
+                            });
+                          }}
+                        />
+                        <AssignUserSelect
+                          valueUserId={
                             ep.parts_summary?.find((p) => p.reviewer_user_id)
                               ?.reviewer_user_id ?? null
                           }
