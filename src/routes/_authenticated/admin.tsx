@@ -502,6 +502,8 @@ type AssignedEpisode = {
   episodeTitle: string;
   courseId: string | null;
   parts: AssignedPart[];
+  /** Review stage of every part, when the whole episode is assigned. */
+  episodeStatuses?: string[];
 };
 
 /** Extract the episode number from titles like "Episode 12" / "Ep 12 — Intro". */
