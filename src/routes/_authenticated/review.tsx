@@ -579,8 +579,18 @@ function ReviewPage() {
                     issueRound === 2 ? r.issues_found_2 : r.issues_found;
                   const canIssues = can(row, issueField);
                   const canAssign = can(row, "assignee_email");
+                  const stage = normalizeWorkflowStatus(r.workflow_status);
+                  const stageOptions = STAGE_OPTIONS.filter(
+                    (o) => o.value === stage || can(row, "workflow_status", o.value),
+                  );
+                  const canStage = stageOptions.length > 1;
                   return (
-                    <tr key={key} className="border-b align-top">
+                    <tr
+                      key={key}
+                      className={`border-b align-top ${
+                        stage === "redo" ? "bg-red-100/70" : ""
+                      }`}
+                    >
                       {row.index === 0 && (
                         <td
                           rowSpan={row.count}
