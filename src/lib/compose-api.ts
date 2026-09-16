@@ -19,7 +19,10 @@ async function composeFetch<T>(body: Record<string, unknown>): Promise<T> {
   return data;
 }
 
-export async function apiGenerateTts(text: string): Promise<{ audioUrl: string }> {
+export async function apiGenerateTts(
+  text: string,
+  courseId?: string | null,
+): Promise<{ audioUrl: string }> {
   const token = getStoredSessionToken();
   if (!token) throw new Error("Sign in required");
 
@@ -29,7 +32,7 @@ export async function apiGenerateTts(text: string): Promise<{ audioUrl: string }
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, courseId: courseId ?? null }),
   });
   const data = (await res.json()) as { audioUrl?: string; error?: string };
   if (!res.ok) throw new Error(data.error ?? "TTS failed");

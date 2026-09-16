@@ -81,13 +81,32 @@ function spawnKokoroServer() {
   child.unref();
 }
 
+function isLocalKokoro(): boolean {
+  try {
+    const host = new URL(KOKORO_URL).hostname;
+    return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 async function ensureKokoroServer(): Promise<void> {
   if (await kokoroHealth()) return;
+  // Remote/sidecar Kokoro (self-hosted server): wait for it, never spawn.
+  if (!isLocalKokoro()) {
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2000));
+      if (await kokoroHealth()) return;
+    }
+    throw new Error(`Kokoro TTS server at ${KOKORO_URL} is not responding.`);
+  }
   if (!existsSync(path.join(KOKORO_ROOT, "package.json"))) {
     throw new Error(
       `Kokoro server not found at ${KOKORO_ROOT}. Clone/install kokoro-server there first.`,
     );
   }
+
   if (!starting) {
     starting = (async () => {
       spawnKokoroServer();

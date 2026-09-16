@@ -1,0 +1,11 @@
+{
+  "name": "divstudio-kokoro-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "kokoro-js": "^1.2.1"
+  }
+}

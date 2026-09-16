@@ -218,7 +218,7 @@ export function PartScriptPanel({
     setTtsError(null);
     setTtsSceneId(scene.id);
     try {
-      const tts = await apiGenerateTts(text);
+      const tts = await apiGenerateTts(text, courseId);
       const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
       updateScene(scene.id, { audioUrl: tts.audioUrl, durationMs });
     } catch (e: unknown) {

@@ -14,6 +14,9 @@ services:
       ENFEC_SCRATCH_ROOT: /var/lib/divstudio/scratch
       PLAYWRIGHT_BROWSERS_PATH: /opt/playwright
       FFMPEG_PATH: /usr/bin/ffmpeg
+      # Kokoro "Heart" narration (Zero Code course) runs in the sidecar below.
+      KOKORO_TTS_URL: http://kokoro:3333
+      KOKORO_VOICE: af_heart
       # Override host DNS (127.0.1.1) so Playwright can reach nginx on the gateway.
       # Bumpers are host-served; EXPORT_BASE_URL must stay the public https origin.
     extra_hosts:
@@ -21,9 +24,23 @@ services:
     volumes:
       - divstudio_data:/var/lib/divstudio/data
       - divstudio_scratch:/var/lib/divstudio/scratch
+    depends_on:
+      - kokoro
+    restart: unless-stopped
+
+  kokoro:
+    build: ./deploy/kokoro
+    environment:
+      PORT: "3333"
+      HF_HOME: /var/lib/kokoro/hf
+      KOKORO_DTYPE: q8
+    volumes:
+      - kokoro_models:/var/lib/kokoro/hf
     restart: unless-stopped
 
 volumes:
   divstudio_data:
   divstudio_scratch:
+  kokoro_models:
+
 
