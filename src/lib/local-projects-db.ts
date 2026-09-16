@@ -581,6 +581,43 @@ function sqliteAssignPart(
   return { ...project, parts, updated_at: now };
 }
 
+function sqliteAssignEpisodeAssignee(
+  episodeId: string,
+  assignee: { userId: string; email: string } | null,
+): LocalProjectRow {
+  const conn = getDb();
+  const row = conn
+    .prepare("SELECT * FROM projects WHERE id = ?")
+    .get(episodeId) as Record<string, unknown> | undefined;
+  if (!row) throw new Error("Episode not found.");
+  const project = rowToProject(row);
+  const now = new Date().toISOString();
+  const parts = getProjectParts(project).map((p) => ({
+    ...p,
+    assignedUserId: assignee?.userId ?? null,
+    assignedUserEmail: assignee?.email ?? null,
+    updated_at: now,
+  }));
+  conn
+    .prepare(
+      `UPDATE projects SET parts = ?, assigned_user_id = ?, assigned_user_email = ?, updated_at = ? WHERE id = ?`,
+    )
+    .run(
+      JSON.stringify(parts),
+      assignee?.userId ?? null,
+      assignee?.email ?? null,
+      now,
+      episodeId,
+    );
+  return {
+    ...project,
+    parts,
+    assigned_user_id: assignee?.userId ?? null,
+    assigned_user_email: assignee?.email ?? null,
+    updated_at: now,
+  } as LocalProjectRow;
+}
+
 function sqliteAssignEpisodeReviewer(
   episodeId: string,
   reviewer: { userId: string; email: string } | null,
@@ -973,6 +1010,17 @@ export async function localAssignPart(...args: any[]): Promise<any> {
     return pgAssignPart(...(args as [any, any, any]));
   }
   return sqliteAssignPart(...(args as [any, any, any]));
+}
+
+export async function localAssignEpisodeAssignee(
+  episodeId: string,
+  assignee: { userId: string; email: string } | null,
+): Promise<any> {
+  if (usePostgres()) {
+    const { pgAssignEpisodeAssignee } = await import("@/lib/pg-projects-db");
+    return pgAssignEpisodeAssignee(episodeId, assignee);
+  }
+  return sqliteAssignEpisodeAssignee(episodeId, assignee);
 }
 
 export async function localAssignEpisodeReviewer(
