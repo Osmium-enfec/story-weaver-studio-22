@@ -718,6 +718,19 @@ export async function pgSavedSceneCountsByUser(): Promise<Map<string, number>> {
   return byUser;
 }
 
+function parsePartIds(raw: unknown): string[] {
+  const value = typeof raw === "string" ? safeJson(raw) : raw;
+  return Array.isArray(value) ? value.map((v) => String(v)) : [];
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return [];
+  }
+}
+
 /** Admin: episode + part handoffs currently assigned to a collaborator. */
 export async function pgListAssignments(): Promise<LocalAssignmentItem[]> {
   const [episodes, parts] = await Promise.all([
