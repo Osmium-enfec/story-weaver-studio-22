@@ -35,15 +35,28 @@ async function generateTtsMp3(
     appendEllipsisCue?: boolean;
   },
 ): Promise<Buffer> {
-  const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) throw new Error("ELEVENLABS_API_KEY missing");
-
   const text = normalizeNarrationText(rawText);
   if (!text) throw new Error("Narration text is empty after trimming whitespace.");
 
   const spoken = opts.appendEllipsisCue
     ? text.replace(/[.!?…]*\s*$/, "") + " ... "
     : text;
+
+  // Primary: local Kokoro TTS (Heart voice). Falls back to ElevenLabs only
+  // when the Kokoro server is not running (e.g. cloud deployment).
+  try {
+    return await generateKokoroMp3Buffer(spoken, "af_heart");
+  } catch (kokoroErr) {
+    console.warn("Kokoro TTS unavailable, falling back to ElevenLabs:", kokoroErr);
+  }
+
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) {
+    throw new TtsError(
+      "Kokoro TTS server is not running, and no ElevenLabs fallback key is configured.",
+      503,
+    );
+  }
 
   let res: Response | null = null;
   let lastErr = "";
