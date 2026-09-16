@@ -2256,7 +2256,9 @@ function ComposePage() {
     void handleLoadPartForEdit(part, { skipConfirm: true });
   }, [projectId, project, partFromSearch, hydratedProjectId, accessibleParts]);
 
-  function handleEditScene(scene: Scene, _index: number) {
+  function handleEditScene(rawScene: Scene, _index: number) {
+    // Intro/Outro scenes always open with the course's current bumper.
+    const scene = healCommonBumperScene(rawScene);
     const mode = sceneSourceMode(scene);
     switchSourceMode(mode);
     if (mode === "code") {
