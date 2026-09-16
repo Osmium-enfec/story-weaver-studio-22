@@ -1194,64 +1194,12 @@ export const segmentUploadedImage = createServerFn({ method: "POST" })
   });
 
 
-// ---------- TTS (ElevenLabs v3, Liam voice) ----------
+// ---------- TTS (Kokoro Heart voice, ElevenLabs fallback) ----------
 const TtsInput = z.object({ text: z.string().min(1).max(4000) });
 
 export const generateNarration = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => TtsInput.parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.ELEVENLABS_API_KEY;
-    if (!key) throw new Error("ELEVENLABS_API_KEY missing");
-
-    let res: Response | null = null;
-    let lastErr = "";
-    for (let attempt = 0; attempt < 6; attempt++) {
-      res = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_VOICE_ID}?output_format=mp3_44100_128`,
-        {
-          method: "POST",
-          headers: {
-            "xi-api-key": key,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            text: data.text.replace(/[.!?…]*\s*$/, "") + " ... ",
-            model_id: ELEVEN_MODEL,
-            voice_settings: {
-              stability: 0.5,
-              similarity_boost: 0.75,
-              style: 0.5,
-              use_speaker_boost: true,
-            },
-          }),
-        },
-      );
-      if (res.ok) break;
-      if (res.status !== 429 && res.status < 500) {
-        lastErr = await res.text();
-        try {
-          const j = JSON.parse(lastErr) as { detail?: { code?: string; type?: string } };
-          if (
-            j?.detail?.code === "payment_issue" ||
-            (res.status === 401 && j?.detail?.type === "payment_required")
-          ) {
-            throw new Error(
-              "ElevenLabs billing issue — complete your invoice at elevenlabs.io to resume narration.",
-            );
-          }
-        } catch (parseErr) {
-          if (parseErr instanceof Error && parseErr.message.includes("ElevenLabs billing")) {
-            throw parseErr;
-          }
-        }
-        throw new Error(`TTS failed: ${res.status} ${lastErr.slice(0, 240)}`);
-      }
-      lastErr = await res.text();
-      const delay = Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 400;
-      await new Promise((r) => setTimeout(r, delay));
-    }
-    if (!res || !res.ok) throw new Error(`TTS failed: ${res?.status ?? "?"} ${lastErr}`);
-    const buf = await res.arrayBuffer();
-    const b64 = Buffer.from(buf).toString("base64");
-    return { audioUrl: `data:audio/mpeg;base64,${b64}` };
+    const { generateTtsAudioUrl } = await import("@/lib/tts.server");
+    return generateTtsAudioUrl(data.text);
   });
