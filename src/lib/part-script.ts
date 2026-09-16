@@ -6,6 +6,8 @@ import type { Scene } from "@/components/VideoPlayer";
 import {
   COMMON_INTRO_DURATION_MS,
   COMMON_INTRO_VIDEO_URL,
+  commonBumperVideoUrl,
+  commonBumperDurationMs,
   COMMON_OUTRO_DURATION_MS,
   COMMON_OUTRO_VIDEO_URL,
   isCommonIntroOutroMediaUrl,
@@ -258,12 +260,12 @@ export function emptyPartScriptScene(
   };
   if (type === "image") base.imageUrl = null;
   if (type === "intro") {
-    base.mediaUrl = COMMON_INTRO_VIDEO_URL;
-    base.mediaDurationMs = COMMON_INTRO_DURATION_MS;
+    base.mediaUrl = commonBumperVideoUrl("Intro");
+    base.mediaDurationMs = commonBumperDurationMs("Intro");
   }
   if (type === "outro") {
-    base.mediaUrl = COMMON_OUTRO_VIDEO_URL;
-    base.mediaDurationMs = COMMON_OUTRO_DURATION_MS;
+    base.mediaUrl = commonBumperVideoUrl("Outro");
+    base.mediaDurationMs = commonBumperDurationMs("Outro");
   }
   if (type === "recording2" || type === "clip") {
     base.mediaUrl = null;
@@ -504,12 +506,12 @@ export function normalizePartScriptScene(raw: unknown): PartScriptScene | null {
   else if (s.mediaUrl === null) scene.mediaUrl = null;
   if (typeof s.mediaDurationMs === "number") scene.mediaDurationMs = s.mediaDurationMs;
   if (scene.type === "intro" && !scene.mediaUrl) {
-    scene.mediaUrl = COMMON_INTRO_VIDEO_URL;
-    scene.mediaDurationMs = COMMON_INTRO_DURATION_MS;
+    scene.mediaUrl = commonBumperVideoUrl("Intro");
+    scene.mediaDurationMs = commonBumperDurationMs("Intro");
   }
   if (scene.type === "outro" && !scene.mediaUrl) {
-    scene.mediaUrl = COMMON_OUTRO_VIDEO_URL;
-    scene.mediaDurationMs = COMMON_OUTRO_DURATION_MS;
+    scene.mediaUrl = commonBumperVideoUrl("Outro");
+    scene.mediaDurationMs = commonBumperDurationMs("Outro");
   }
   if (typeof s.questionPaste === "string") scene.questionPaste = s.questionPaste;
   if (typeof s.codingPaste === "string") scene.codingPaste = s.codingPaste;
