@@ -3932,6 +3932,7 @@ function ComposePage() {
           <div className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto">
             <ComposeProjectPanel
               projectId={projectId}
+              previewBackground={sceneBackground}
               project={project ?? undefined}
               partTitle={partTitle}
               onPartTitleChange={setPartTitle}
@@ -3955,6 +3956,7 @@ function ComposePage() {
       <div className="border-t px-4 py-4 lg:hidden">
         <ComposeProjectPanel
           projectId={projectId}
+          previewBackground={sceneBackground}
           project={project ?? undefined}
           partTitle={partTitle}
           onPartTitleChange={setPartTitle}
