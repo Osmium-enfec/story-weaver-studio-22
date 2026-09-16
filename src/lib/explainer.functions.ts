@@ -8,8 +8,6 @@ import {
 } from "@/lib/course-visual-style";
 import { replicateFetch, requireReplicateKey } from "@/lib/replicate-client";
 
-const ELEVEN_VOICE_ID = "TX3LPaxmHKxFdv7VOQHJ"; // Liam
-const ELEVEN_MODEL = "eleven_v3";
 
 // ---------- Types shared with client ----------
 export type SceneKind = "image" | "code";
