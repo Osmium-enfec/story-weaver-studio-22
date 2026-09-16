@@ -261,7 +261,7 @@ function ReviewPage() {
     );
   }
 
-  function can(row: Row, field: ReviewField): boolean {
+  function can(row: Row, field: ReviewField, nextWorkflowStatus?: string): boolean {
     return canEditReviewField(
       field,
       { email: myEmail, isAdmin, grantedFields },
@@ -269,6 +269,7 @@ function ReviewPage() {
         composerEmail: row.part.assigned_user_email,
         reviewAssigneeEmail: reviewFor(row).assignee_email || null,
         reviewerEmail: row.part.reviewer_user_email ?? null,
+        nextWorkflowStatus: nextWorkflowStatus ?? null,
       },
     );
   }
