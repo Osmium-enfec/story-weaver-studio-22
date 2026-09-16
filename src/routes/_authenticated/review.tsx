@@ -611,17 +611,47 @@ function ReviewPage() {
                           />
                         )}
                       </td>
-                      <td className="border-r px-3 py-2">
-                        <ReviewStageBadge
-                          status={r.workflow_status}
-                          by={r.workflow_by_email}
-                          at={r.workflow_at}
-                        />
-                        {!r.workflow_status && (
-                          <span className="text-[10px] text-muted-foreground">
-                            —
-                          </span>
-                        )}
+                      <td className="border-r px-3 py-1.5">
+                        <select
+                          value={stage}
+                          disabled={!canStage || busy}
+                          title={
+                            [
+                              r.workflow_by_email
+                                ? `By ${r.workflow_by_email}`
+                                : null,
+                              r.workflow_at
+                                ? new Date(r.workflow_at).toLocaleString()
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || undefined
+                          }
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (next !== stage) {
+                              void save(row, {
+                                workflow_status: next,
+                              } as Partial<PartReview>);
+                            }
+                          }}
+                          className={`h-8 w-full min-w-[9rem] rounded-md border px-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-70 ${workflowClasses(
+                            stage,
+                          )}`}
+                        >
+                          {STAGE_OPTIONS.map((o) => (
+                            <option
+                              key={o.value || "none"}
+                              value={o.value}
+                              disabled={
+                                o.value !== stage &&
+                                !stageOptions.some((s) => s.value === o.value)
+                              }
+                            >
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="border-r px-3 py-1.5">
                         <StatusCell
