@@ -1348,26 +1348,6 @@ function ComposePage() {
         thumbnail_url: scene.backgroundUrl ?? previewUrl ?? fresh.record.thumbnail_url ?? undefined,
       });
 
-      // Audio editors produce temporary blob URLs. Once saved, keep the durable
-      // URL in the form and release the old blob so repeated edits cannot grow
-      // the tab's memory indefinitely.
-      const temporaryAudioUrl = scene.audioUrl?.startsWith("blob:") ? scene.audioUrl : null;
-      if (temporaryAudioUrl && durableScene.audioUrl !== temporaryAudioUrl) {
-        acceptNextDurableAutosaveKeyRef.current = true;
-        if (isCode || isCodeTypingTemplate) {
-          setCodeDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
-        } else if (isQuestion) {
-          setQuestionDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
-        } else if (isTemplate) {
-          setTemplateDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
-        } else if (isRecording) {
-          setRecordingDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
-        } else {
-          setDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
-        }
-        window.setTimeout(() => URL.revokeObjectURL(temporaryAudioUrl), 0);
-      }
-
       rememberLastProject(projectId);
       setSelectedPartId(activePartId);
       setPartScriptPlan(nextPlan);
@@ -3629,6 +3609,26 @@ function ComposePage() {
           parts: nextParts,
           thumbnail_url: thumbnail ?? fresh.record.thumbnail_url ?? undefined,
       });
+
+      // Audio editors produce temporary blob URLs. Once saved, keep the durable
+      // URL in the form and release the old blob so repeated edits cannot grow
+      // the tab's memory indefinitely.
+      const temporaryAudioUrl = scene.audioUrl?.startsWith("blob:") ? scene.audioUrl : null;
+      if (temporaryAudioUrl && durableScene.audioUrl !== temporaryAudioUrl) {
+        acceptNextDurableAutosaveKeyRef.current = true;
+        if (isCode || isCodeTypingTemplate) {
+          setCodeDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isQuestion) {
+          setQuestionDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isTemplate) {
+          setTemplateDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isRecording) {
+          setRecordingDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else {
+          setDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        }
+        window.setTimeout(() => URL.revokeObjectURL(temporaryAudioUrl), 0);
+      }
 
       rememberLastProject(projectId);
       lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
