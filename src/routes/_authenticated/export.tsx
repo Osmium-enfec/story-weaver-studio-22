@@ -56,9 +56,11 @@ const TABS: { id: TabId; label: string }[] = [
 const PAGE_SIZE = 10;
 
 function matchesTab(job: RenderJobItem, tab: TabId): boolean {
-  if (tab === "queued") return job.status === "queued" || job.status === "cancelled";
+  // "cancelled" jobs are never claimed by a render machine, so they belong with
+  // the finished work, not in the waiting list.
+  if (tab === "queued") return job.status === "queued";
   if (tab === "progress") return job.status === "rendering";
-  return job.status === "done" || job.status === "failed";
+  return job.status === "done" || job.status === "failed" || job.status === "cancelled";
 }
 
 function fmtDuration(ms: number): string {
