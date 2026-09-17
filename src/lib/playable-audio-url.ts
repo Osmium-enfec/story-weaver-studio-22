@@ -37,7 +37,11 @@ export async function toPlayableAudioUrl(
 
   if (projectId) {
     const file = new File([blob], `narration-${Date.now()}.${ext}`, { type: mime });
-    return apiPersistAssetFile({ file, projectId, ext });
+    try {
+      return await apiPersistAssetFile({ file, projectId, ext });
+    } finally {
+      if (audioUrl.startsWith("blob:")) URL.revokeObjectURL(audioUrl);
+    }
   }
 
   return URL.createObjectURL(blob);

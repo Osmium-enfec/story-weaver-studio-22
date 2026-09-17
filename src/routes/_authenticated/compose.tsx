@@ -1041,7 +1041,8 @@ function ComposePage() {
     setShowPreview(false);
     try {
       const tts = await apiGenerateTts(script, project?.course_id ?? null);
-      const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const title =
         q.title.trim() ||
         (q.kind === "coding"
@@ -1052,7 +1053,7 @@ function ComposePage() {
         ...d,
         script,
         title,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
         ready: true,
       }));
@@ -1191,7 +1192,8 @@ function ComposePage() {
     setShowPreview(false);
     try {
       const tts = await apiGenerateTts(script, project?.course_id ?? null);
-      const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const title =
         draft.title ??
         (script
@@ -1206,7 +1208,7 @@ function ComposePage() {
         ...d,
         script,
         title,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
       }));
     } catch (e: unknown) {
@@ -1388,7 +1390,8 @@ function ComposePage() {
           ? countdownNarrationText(script, templateDraft.countdownSec)
           : script;
       const tts = await apiGenerateTts(ttsText, project?.course_id ?? null);
-      const audioMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const audioMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const durationMs =
         templateDraft.templateKind === "countdown"
           ? templateCountdownDurationMs(templateDraft.countdownSec)
@@ -1396,7 +1399,7 @@ function ComposePage() {
       setTemplateDraft((d) => ({
         ...d,
         script: ttsText,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
         ready: true,
       }));
@@ -1434,7 +1437,8 @@ function ComposePage() {
     setShowPreview(false);
     try {
       const tts = await apiGenerateTts(script, project?.course_id ?? null);
-      const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const first = beats[0];
       setCodeDraft((d) => ({
         ...d,
@@ -1446,7 +1450,7 @@ function ComposePage() {
         codeRunDelayMs: first?.runDelayMs ?? d.codeRunDelayMs,
         codeOutputHoldMs: first?.outputHoldMs ?? d.codeOutputHoldMs,
         typingSpeedCps: d.typingSpeedCps ?? DEFAULT_CODE_TYPING_CPS,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
         ready: true,
       }));
@@ -3607,7 +3611,10 @@ function ComposePage() {
 
       rememberLastProject(projectId);
       lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
-      lastComposeAutosaveKeyRef.current = savingKey;
+      lastComposeAutosaveKeyRef.current =
+        editingSceneId == null && savingKey.startsWith("new|")
+          ? `${durableScene.id}|${savingKey.slice(4)}`
+          : savingKey;
 
       // Soft-update stitch list in cache (no invalidate → no remount).
       qc.setQueryData(projectQueryKey, (prev: unknown) => {
