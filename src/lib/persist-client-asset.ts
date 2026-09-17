@@ -280,7 +280,7 @@ export async function persistSceneAssetsForSave(
     audioUrl,
     ...(mediaUrl != null ? { mediaUrl } : {}),
     ...(backgroundUrl != null ? { backgroundUrl } : {}),
-    ...(scene.compositeThumbUrl ? { compositeThumbUrl } : {}),
+    ...(compositeThumbUrl != null ? { compositeThumbUrl } : {}),
     ...(questionMarkAudioUrl != null ? { questionMarkAudioUrl } : {}),
     ...(questionIntroAudioUrl != null ? { questionIntroAudioUrl } : {}),
     ...(elements != null ? { elements } : {}),

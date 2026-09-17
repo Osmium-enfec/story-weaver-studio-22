@@ -150,16 +150,12 @@ export function writeComposeWorkingDraft(
   if (!projectId || typeof sessionStorage === "undefined") return;
   const payload: ComposeWorkingDraft = { ...draft, updatedAt: Date.now() };
   try {
-    sessionStorage.setItem(storageKey(projectId), JSON.stringify(payload));
+    // Never stringify inline media into sessionStorage. JSON.stringify first
+    // creates another full in-memory copy; with long WAV narration and several
+    // image layers that temporary copy can exhaust a Chrome renderer.
+    sessionStorage.setItem(storageKey(projectId), JSON.stringify(stripInlineData(payload)));
   } catch (e) {
-    // Quota: retry without any inline data: URLs (uploads, crops, previews).
-    // Uploaded images are persisted as /api/assets URLs, so this keeps the
-    // rest of the draft (script, steps, question, timings) recoverable.
-    try {
-      sessionStorage.setItem(storageKey(projectId), JSON.stringify(stripInlineData(payload)));
-    } catch {
-      console.warn("[compose-working-draft] sessionStorage full or blocked", e);
-    }
+    console.warn("[compose-working-draft] sessionStorage full or blocked", e);
   }
 }
 

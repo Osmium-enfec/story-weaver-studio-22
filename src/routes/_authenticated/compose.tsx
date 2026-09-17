@@ -289,6 +289,7 @@ function ComposePage() {
   /** Mirrors `composeAutosaveKey` so save handlers can read it without deps. */
   const composeAutosaveKeyRef = useRef<string>("");
   const composeAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const acceptNextDurableAutosaveKeyRef = useRef(false);
   const [composeAutosaveStatus, setComposeAutosaveStatus] = useState<
     "idle" | "pending" | "saving" | "saved" | "error"
   >("idle");
@@ -727,7 +728,12 @@ function ComposePage() {
     let json = "";
     try {
       // `id` can be a freshly generated timestamp for unsaved scenes — ignore it.
-      json = JSON.stringify({ ...previewScene, id: "" });
+      // Represent inline media by a compact signature instead of copying its
+      // entire base64 payload into a second giant string on every edit.
+      json = JSON.stringify({ ...previewScene, id: "" }, (_key, value: unknown) => {
+        if (typeof value !== "string" || !value.startsWith("data:")) return value;
+        return `[inline:${value.slice(0, 40)}:${value.length}:${value.slice(-24)}]`;
+      });
     } catch {
       return "";
     }
@@ -1036,7 +1042,8 @@ function ComposePage() {
     setShowPreview(false);
     try {
       const tts = await apiGenerateTts(script, project?.course_id ?? null);
-      const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const title =
         q.title.trim() ||
         (q.kind === "coding"
@@ -1047,7 +1054,7 @@ function ComposePage() {
         ...d,
         script,
         title,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
         ready: true,
       }));
@@ -1186,7 +1193,8 @@ function ComposePage() {
     setShowPreview(false);
     try {
       const tts = await apiGenerateTts(script, project?.course_id ?? null);
-      const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const title =
         draft.title ??
         (script
@@ -1201,7 +1209,7 @@ function ComposePage() {
         ...d,
         script,
         title,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
       }));
     } catch (e: unknown) {
@@ -1383,7 +1391,8 @@ function ComposePage() {
           ? countdownNarrationText(script, templateDraft.countdownSec)
           : script;
       const tts = await apiGenerateTts(ttsText, project?.course_id ?? null);
-      const audioMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const audioMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const durationMs =
         templateDraft.templateKind === "countdown"
           ? templateCountdownDurationMs(templateDraft.countdownSec)
@@ -1391,7 +1400,7 @@ function ComposePage() {
       setTemplateDraft((d) => ({
         ...d,
         script: ttsText,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
         ready: true,
       }));
@@ -1429,7 +1438,8 @@ function ComposePage() {
     setShowPreview(false);
     try {
       const tts = await apiGenerateTts(script, project?.course_id ?? null);
-      const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       const first = beats[0];
       setCodeDraft((d) => ({
         ...d,
@@ -1441,7 +1451,7 @@ function ComposePage() {
         codeRunDelayMs: first?.runDelayMs ?? d.codeRunDelayMs,
         codeOutputHoldMs: first?.outputHoldMs ?? d.codeOutputHoldMs,
         typingSpeedCps: d.typingSpeedCps ?? DEFAULT_CODE_TYPING_CPS,
-        audioUrl: tts.audioUrl,
+        audioUrl,
         durationMs,
         ready: true,
       }));
@@ -3600,9 +3610,32 @@ function ComposePage() {
           thumbnail_url: thumbnail ?? fresh.record.thumbnail_url ?? undefined,
       });
 
+      // Audio editors produce temporary blob URLs. Once saved, keep the durable
+      // URL in the form and release the old blob so repeated edits cannot grow
+      // the tab's memory indefinitely.
+      const temporaryAudioUrl = scene.audioUrl?.startsWith("blob:") ? scene.audioUrl : null;
+      if (temporaryAudioUrl && durableScene.audioUrl !== temporaryAudioUrl) {
+        acceptNextDurableAutosaveKeyRef.current = true;
+        if (isCode || isCodeTypingTemplate) {
+          setCodeDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isQuestion) {
+          setQuestionDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isTemplate) {
+          setTemplateDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isRecording) {
+          setRecordingDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else {
+          setDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        }
+        window.setTimeout(() => URL.revokeObjectURL(temporaryAudioUrl), 0);
+      }
+
       rememberLastProject(projectId);
       lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
-      lastComposeAutosaveKeyRef.current = savingKey;
+      lastComposeAutosaveKeyRef.current =
+        editingSceneId == null && savingKey.startsWith("new|")
+          ? `${durableScene.id}|${savingKey.slice(4)}`
+          : savingKey;
 
       // Soft-update stitch list in cache (no invalidate → no remount).
       qc.setQueryData(projectQueryKey, (prev: unknown) => {
@@ -3640,6 +3673,11 @@ function ComposePage() {
   // Persist to this Mac in the background — never clears or remounts the compose form.
   useEffect(() => {
     if (!composeSceneSaveReady || !composeAutosaveKey) return;
+    if (acceptNextDurableAutosaveKeyRef.current) {
+      acceptNextDurableAutosaveKeyRef.current = false;
+      lastComposeAutosaveKeyRef.current = composeAutosaveKey;
+      return;
+    }
     if (composeAutosaveKey === lastComposeAutosaveKeyRef.current) return;
     if (saving) return;
 
