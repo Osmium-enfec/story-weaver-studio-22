@@ -1345,55 +1345,6 @@ function ComposePage() {
         thumbnail_url: scene.backgroundUrl ?? previewUrl ?? fresh.record.thumbnail_url ?? undefined,
       });
 
-      // Replace temporary browser media with the durable URLs just saved. This
-      // releases large inline audio from editor state and prevents every later
-      // timeline adjustment from uploading the same narration again.
-      if (isCode || isCodeTypingTemplate) {
-        setCodeDraft((current) => ({
-          ...current,
-          audioUrl:
-            current.audioUrl === scene.audioUrl ? (durableScene.audioUrl ?? current.audioUrl) : current.audioUrl,
-        }));
-      } else if (isQuestion) {
-        setQuestionDraft((current) => ({
-          ...current,
-          audioUrl:
-            current.audioUrl === scene.audioUrl ? (durableScene.audioUrl ?? current.audioUrl) : current.audioUrl,
-          markAudioUrl:
-            current.markAudioUrl === scene.questionMarkAudioUrl
-              ? (durableScene.questionMarkAudioUrl ?? current.markAudioUrl)
-              : current.markAudioUrl,
-          introAudioUrl:
-            current.introAudioUrl === scene.questionIntroAudioUrl
-              ? (durableScene.questionIntroAudioUrl ?? current.introAudioUrl)
-              : current.introAudioUrl,
-        }));
-      } else if (isTemplate) {
-        setTemplateDraft((current) => ({
-          ...current,
-          audioUrl:
-            current.audioUrl === scene.audioUrl ? (durableScene.audioUrl ?? current.audioUrl) : current.audioUrl,
-        }));
-      } else if (isRecording) {
-        setRecordingDraft((current) => ({
-          ...current,
-          audioUrl:
-            current.audioUrl === scene.audioUrl ? (durableScene.audioUrl ?? current.audioUrl) : current.audioUrl,
-          mediaUrl:
-            current.mediaUrl === scene.mediaUrl ? (durableScene.mediaUrl ?? current.mediaUrl) : current.mediaUrl,
-        }));
-      } else {
-        setDraft((current) => ({
-          ...current,
-          audioUrl:
-            current.audioUrl === scene.audioUrl ? (durableScene.audioUrl ?? current.audioUrl) : current.audioUrl,
-          compositeUrl:
-            current.compositeUrl === scene.compositeThumbUrl
-              ? (durableScene.compositeThumbUrl ?? current.compositeUrl)
-              : current.compositeUrl,
-        }));
-      }
-
       rememberLastProject(projectId);
       setSelectedPartId(activePartId);
       setPartScriptPlan(nextPlan);
