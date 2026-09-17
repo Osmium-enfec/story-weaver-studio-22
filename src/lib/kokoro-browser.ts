@@ -20,30 +20,19 @@ type KokoroInstance = {
 
 let loading: Promise<KokoroInstance> | null = null;
 
-const hasWebGPU = () =>
-  typeof navigator !== "undefined" &&
-  "gpu" in navigator &&
-  Boolean((navigator as unknown as { gpu?: unknown }).gpu);
-
-/** Loads (and caches) the on-device model. WebGPU when available, else WASM. */
+/**
+ * Loads the quantized on-device model. Keep this on WASM even when WebGPU is
+ * available: the fp32 WebGPU model uses several times more memory and can make
+ * Chrome terminate a busy compose tab on otherwise capable Apple-silicon Macs.
+ */
 export async function loadKokoro(): Promise<KokoroInstance> {
   if (loading) return loading;
   loading = (async () => {
     const { KokoroTTS } = await import("kokoro-js");
-    const webgpu = hasWebGPU();
-    try {
-      return (await KokoroTTS.from_pretrained(MODEL_ID, {
-        dtype: webgpu ? "fp32" : "q8",
-        device: webgpu ? "webgpu" : "wasm",
-      })) as unknown as KokoroInstance;
-    } catch (error) {
-      if (!webgpu) throw error;
-      // Some GPUs/drivers reject the shader pipeline — fall back to CPU.
-      return (await KokoroTTS.from_pretrained(MODEL_ID, {
-        dtype: "q8",
-        device: "wasm",
-      })) as unknown as KokoroInstance;
-    }
+    return (await KokoroTTS.from_pretrained(MODEL_ID, {
+      dtype: "q8",
+      device: "wasm",
+    })) as unknown as KokoroInstance;
   })();
   try {
     return await loading;
@@ -52,14 +41,6 @@ export async function loadKokoro(): Promise<KokoroInstance> {
     throw error;
   }
 }
-
-const blobToDataUrl = (blob: Blob): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Could not read audio"));
-    reader.readAsDataURL(blob);
-  });
 
 /**
  * Kokoro-82M silently truncates around ~510 phonemes (~25s of speech), so long
@@ -171,7 +152,11 @@ function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-/** Synthesizes narration on-device and returns it as a `data:audio/wav` URL. */
+/**
+ * Synthesizes narration on-device. A blob URL avoids keeping a second, 33%
+ * larger base64 copy of long narration in React state and session storage.
+ * Compose persists this temporary URL to project storage during auto-save.
+ */
 export async function synthesizeKokoroDataUrl(
   text: string,
   voice: string = KOKORO_DEFAULT_VOICE,
@@ -183,5 +168,5 @@ export async function synthesizeKokoroDataUrl(
   for (const chunk of chunks) {
     blobs.push(await generateBlob(tts, chunk, voice));
   }
-  return blobToDataUrl(await concatWavBlobs(blobs));
+  return URL.createObjectURL(await concatWavBlobs(blobs));
 }
