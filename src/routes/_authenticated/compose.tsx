@@ -289,6 +289,7 @@ function ComposePage() {
   /** Mirrors `composeAutosaveKey` so save handlers can read it without deps. */
   const composeAutosaveKeyRef = useRef<string>("");
   const composeAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const acceptNextDurableAutosaveKeyRef = useRef(false);
   const [composeAutosaveStatus, setComposeAutosaveStatus] = useState<
     "idle" | "pending" | "saving" | "saved" | "error"
   >("idle");
@@ -1346,6 +1347,26 @@ function ComposePage() {
         parts: nextParts,
         thumbnail_url: scene.backgroundUrl ?? previewUrl ?? fresh.record.thumbnail_url ?? undefined,
       });
+
+      // Audio editors produce temporary blob URLs. Once saved, keep the durable
+      // URL in the form and release the old blob so repeated edits cannot grow
+      // the tab's memory indefinitely.
+      const temporaryAudioUrl = scene.audioUrl?.startsWith("blob:") ? scene.audioUrl : null;
+      if (temporaryAudioUrl && durableScene.audioUrl !== temporaryAudioUrl) {
+        acceptNextDurableAutosaveKeyRef.current = true;
+        if (isCode || isCodeTypingTemplate) {
+          setCodeDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isQuestion) {
+          setQuestionDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isTemplate) {
+          setTemplateDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else if (isRecording) {
+          setRecordingDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        } else {
+          setDraft((current) => ({ ...current, audioUrl: durableScene.audioUrl ?? current.audioUrl }));
+        }
+        window.setTimeout(() => URL.revokeObjectURL(temporaryAudioUrl), 0);
+      }
 
       rememberLastProject(projectId);
       setSelectedPartId(activePartId);
@@ -3652,6 +3673,11 @@ function ComposePage() {
   // Persist to this Mac in the background — never clears or remounts the compose form.
   useEffect(() => {
     if (!composeSceneSaveReady || !composeAutosaveKey) return;
+    if (acceptNextDurableAutosaveKeyRef.current) {
+      acceptNextDurableAutosaveKeyRef.current = false;
+      lastComposeAutosaveKeyRef.current = composeAutosaveKey;
+      return;
+    }
     if (composeAutosaveKey === lastComposeAutosaveKeyRef.current) return;
     if (saving) return;
 
