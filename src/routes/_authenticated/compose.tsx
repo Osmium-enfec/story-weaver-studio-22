@@ -286,6 +286,8 @@ function ComposePage() {
   const scriptAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scriptAutosaveSeqRef = useRef(0);
   const lastComposeAutosaveKeyRef = useRef<string>("");
+  /** Mirrors `composeAutosaveKey` so save handlers can read it without deps. */
+  const composeAutosaveKeyRef = useRef<string>("");
   const composeAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [composeAutosaveStatus, setComposeAutosaveStatus] = useState<
     "idle" | "pending" | "saving" | "saved" | "error"
@@ -718,26 +720,26 @@ function ComposePage() {
     recordingStatus.saveReady,
   ]);
 
+  // Full-content fingerprint: any edit (timeline placements, layer timings,
+  // crops, text…) changes it, so fixing an existing scene really autosaves.
   const composeAutosaveKey = useMemo(() => {
     if (!composeSceneSaveReady || !previewScene) return "";
-    return [
-      editingSceneId ?? "new",
-      sourceMode,
-      previewScene.kind ?? "",
-      previewScene.audioUrl ?? "",
-      previewScene.mediaUrl ?? "",
-      previewScene.backgroundUrl ?? "",
-      (previewScene.narrationText ?? "").slice(0, 120),
-      String(previewScene.elements?.length ?? 0),
-      String(previewScene.durationMs ?? 0),
-      String(previewScene.codeTypingCps ?? ""),
-      String(previewScene.codeFontSize ?? ""),
-      String(previewScene.codeRunDelayMs ?? ""),
-      String(previewScene.codeOutputHoldMs ?? ""),
-      previewScene.subtitle ?? "",
-      JSON.stringify(previewScene.codeTypingBeats ?? []),
-    ].join("|");
+    let json = "";
+    try {
+      json = JSON.stringify(previewScene);
+    } catch {
+      return "";
+    }
+    let hash = 5381;
+    for (let i = 0; i < json.length; i++) {
+      hash = ((hash * 33) ^ json.charCodeAt(i)) >>> 0;
+    }
+    return [editingSceneId ?? "new", sourceMode, json.length, hash.toString(36)].join("|");
   }, [composeSceneSaveReady, previewScene, editingSceneId, sourceMode]);
+
+  useEffect(() => {
+    composeAutosaveKeyRef.current = composeAutosaveKey;
+  }, [composeAutosaveKey]);
 
   function countdownNarrationText(text: string, countdownSec: number): string {
     const cleaned = text.trim().replace(/[.!?…\s]+$/g, "");
