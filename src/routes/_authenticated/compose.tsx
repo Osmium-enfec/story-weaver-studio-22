@@ -286,6 +286,8 @@ function ComposePage() {
   const scriptAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scriptAutosaveSeqRef = useRef(0);
   const lastComposeAutosaveKeyRef = useRef<string>("");
+  /** Mirrors `composeAutosaveKey` so save handlers can read it without deps. */
+  const composeAutosaveKeyRef = useRef<string>("");
   const composeAutosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [composeAutosaveStatus, setComposeAutosaveStatus] = useState<
     "idle" | "pending" | "saving" | "saved" | "error"
@@ -718,26 +720,27 @@ function ComposePage() {
     recordingStatus.saveReady,
   ]);
 
+  // Full-content fingerprint: any edit (timeline placements, layer timings,
+  // crops, text…) changes it, so fixing an existing scene really autosaves.
   const composeAutosaveKey = useMemo(() => {
     if (!composeSceneSaveReady || !previewScene) return "";
-    return [
-      editingSceneId ?? "new",
-      sourceMode,
-      previewScene.kind ?? "",
-      previewScene.audioUrl ?? "",
-      previewScene.mediaUrl ?? "",
-      previewScene.backgroundUrl ?? "",
-      (previewScene.narrationText ?? "").slice(0, 120),
-      String(previewScene.elements?.length ?? 0),
-      String(previewScene.durationMs ?? 0),
-      String(previewScene.codeTypingCps ?? ""),
-      String(previewScene.codeFontSize ?? ""),
-      String(previewScene.codeRunDelayMs ?? ""),
-      String(previewScene.codeOutputHoldMs ?? ""),
-      previewScene.subtitle ?? "",
-      JSON.stringify(previewScene.codeTypingBeats ?? []),
-    ].join("|");
+    let json = "";
+    try {
+      // `id` can be a freshly generated timestamp for unsaved scenes — ignore it.
+      json = JSON.stringify({ ...previewScene, id: "" });
+    } catch {
+      return "";
+    }
+    let hash = 5381;
+    for (let i = 0; i < json.length; i++) {
+      hash = ((hash * 33) ^ json.charCodeAt(i)) >>> 0;
+    }
+    return [editingSceneId ?? "new", sourceMode, json.length, hash.toString(36)].join("|");
   }, [composeSceneSaveReady, previewScene, editingSceneId, sourceMode]);
+
+  useEffect(() => {
+    composeAutosaveKeyRef.current = composeAutosaveKey;
+  }, [composeAutosaveKey]);
 
   function countdownNarrationText(text: string, countdownSec: number): string {
     const cleaned = text.trim().replace(/[.!?…\s]+$/g, "");
@@ -3514,6 +3517,9 @@ function ComposePage() {
       setSaving(true);
       setError(null);
     }
+    // Snapshot the fingerprint of what we are about to save. Edits made while
+    // the save runs keep a different key, so they still trigger a later save.
+    const savingKey = composeAutosaveKeyRef.current;
     try {
       const durableScene = await persistSceneAssetsForSave(scene, projectId, (input) =>
         apiPersistAsset(input),
@@ -3596,17 +3602,7 @@ function ComposePage() {
 
       rememberLastProject(projectId);
       lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
-      lastComposeAutosaveKeyRef.current = [
-        durableScene.id,
-        sourceMode,
-        durableScene.kind ?? "",
-        durableScene.audioUrl ?? "",
-        durableScene.mediaUrl ?? "",
-        durableScene.backgroundUrl ?? "",
-        (durableScene.narrationText ?? "").slice(0, 120),
-        String(durableScene.elements?.length ?? 0),
-        String(durableScene.durationMs ?? 0),
-      ].join("|");
+      lastComposeAutosaveKeyRef.current = savingKey;
 
       // Soft-update stitch list in cache (no invalidate → no remount).
       qc.setQueryData(projectQueryKey, (prev: unknown) => {
