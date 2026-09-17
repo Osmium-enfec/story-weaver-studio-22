@@ -726,7 +726,8 @@ function ComposePage() {
     if (!composeSceneSaveReady || !previewScene) return "";
     let json = "";
     try {
-      json = JSON.stringify(previewScene);
+      // `id` can be a freshly generated timestamp for unsaved scenes — ignore it.
+      json = JSON.stringify({ ...previewScene, id: "" });
     } catch {
       return "";
     }
