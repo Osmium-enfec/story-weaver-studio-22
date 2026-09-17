@@ -3516,6 +3516,9 @@ function ComposePage() {
       setSaving(true);
       setError(null);
     }
+    // Snapshot the fingerprint of what we are about to save. Edits made while
+    // the save runs keep a different key, so they still trigger a later save.
+    const savingKey = composeAutosaveKeyRef.current;
     try {
       const durableScene = await persistSceneAssetsForSave(scene, projectId, (input) =>
         apiPersistAsset(input),
@@ -3598,17 +3601,7 @@ function ComposePage() {
 
       rememberLastProject(projectId);
       lastSavedScriptKeyRef.current = JSON.stringify(nextPlan.scenes);
-      lastComposeAutosaveKeyRef.current = [
-        durableScene.id,
-        sourceMode,
-        durableScene.kind ?? "",
-        durableScene.audioUrl ?? "",
-        durableScene.mediaUrl ?? "",
-        durableScene.backgroundUrl ?? "",
-        (durableScene.narrationText ?? "").slice(0, 120),
-        String(durableScene.elements?.length ?? 0),
-        String(durableScene.durationMs ?? 0),
-      ].join("|");
+      lastComposeAutosaveKeyRef.current = savingKey;
 
       // Soft-update stitch list in cache (no invalidate → no remount).
       qc.setQueryData(projectQueryKey, (prev: unknown) => {
