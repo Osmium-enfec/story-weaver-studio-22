@@ -88,11 +88,16 @@ export const Route = createFileRoute("/api/public/render/$")({
           } catch {
             body = {};
           }
-          const job = await updateRenderJob(id, {
-            status: "failed",
-            stage: "failed",
-            error: (body.error ?? "Render failed").slice(0, 2000),
-          });
+          const message = (body.error ?? "Render failed").slice(0, 2000);
+          // "Another job is ahead in the queue" means the machine skipped this
+          // one on purpose — it belongs back in the queue, not in failures.
+          const skipped = /ahead in the queue/i.test(message);
+          const job = await updateRenderJob(
+            id,
+            skipped
+              ? { status: "queued", stage: "queued", progress: 0, machine: null, error: null }
+              : { status: "failed", stage: "failed", error: message },
+          );
           if (!job) return json({ error: "Render job not found" }, 404);
           return Response.json({ ok: true });
         }

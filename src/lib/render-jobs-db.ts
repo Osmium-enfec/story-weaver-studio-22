@@ -219,20 +219,44 @@ async function ensurePgTable(): Promise<void> {
       for (const stmt of PG_DDL.split(";").map((s) => s.trim()).filter(Boolean)) {
         await pgQuery(stmt);
       }
-      // One-time carry-over of parts frozen with the old "Ready for HD" flow.
+      // Carry-over of parts frozen with the old "Ready for HD" flow. It must run
+      // exactly once for the whole install — otherwise every fresh server
+      // process resurrects jobs the user deleted.
       await pgQuery(
-        `INSERT INTO render_jobs
-           (id, project_id, part_id, episode_title, part_title,
-            requested_by_user_id, requested_by_email, duration_ms, scene_count,
-            status, created_at, output_url, payload)
-         SELECT b.id, b.project_id, b.part_id, b.episode_title, b.part_title,
-                b.owner_user_id, b.owner_email, b.duration_ms, b.scene_count,
-                CASE WHEN b.status = 'done' THEN 'done'
-                     WHEN b.status = 'failed' THEN 'failed'
-                     ELSE 'queued' END,
-                b.ready_at, b.output_url, b.payload
-         FROM render_bundles b
-         WHERE NOT EXISTS (SELECT 1 FROM render_jobs j WHERE j.id = b.id)`,
+        `CREATE TABLE IF NOT EXISTS render_jobs_migrations (key TEXT PRIMARY KEY, done_at TIMESTAMPTZ NOT NULL DEFAULT now())`,
+      );
+      const flag = await pgQuery(
+        `INSERT INTO render_jobs_migrations (key) VALUES ('bundles_carryover')
+         ON CONFLICT (key) DO NOTHING RETURNING key`,
+      );
+      // Only an install that never had a queue needs the carry-over; running it
+      // on an existing queue would bring deleted jobs back.
+      const existing = await pgQuery(`SELECT 1 FROM render_jobs LIMIT 1`).catch(
+        () => ({ rows: [1] }) as { rows: unknown[] },
+      );
+      if (flag.rows.length > 0 && existing.rows.length === 0) {
+        await pgQuery(
+          `INSERT INTO render_jobs
+             (id, project_id, part_id, episode_title, part_title,
+              requested_by_user_id, requested_by_email, duration_ms, scene_count,
+              status, created_at, output_url, payload)
+           SELECT b.id, b.project_id, b.part_id, b.episode_title, b.part_title,
+                  b.owner_user_id, b.owner_email, b.duration_ms, b.scene_count,
+                  CASE WHEN b.status = 'done' THEN 'done'
+                       WHEN b.status = 'failed' THEN 'failed'
+                       ELSE 'queued' END,
+                  b.ready_at, b.output_url, b.payload
+           FROM render_bundles b
+           WHERE NOT EXISTS (SELECT 1 FROM render_jobs j WHERE j.id = b.id)`,
+        ).catch(() => undefined);
+      }
+      // Older jobs were stored without a course, so the course filter hid them.
+      await pgQuery(
+        `UPDATE render_jobs j SET course_id = p.course_id
+           FROM projects p
+          WHERE j.project_id = p.id
+            AND j.course_id IS NULL
+            AND p.course_id IS NOT NULL`,
       ).catch(() => undefined);
     })().catch((err) => {
       pgReady = null;
@@ -390,8 +414,14 @@ export async function listRenderJobs(opts?: {
     where.push(`status = ${ph()}`);
   }
   if (opts?.courseId) {
+    // Older jobs never stored a course, so fall back to the episode's course.
     params.push(opts.courseId);
-    where.push(`course_id = ${ph()}`);
+    const a = ph();
+    params.push(opts.courseId);
+    const b = ph();
+    where.push(
+      `(course_id = ${a} OR (course_id IS NULL AND project_id IN (SELECT id FROM projects WHERE course_id = ${b})))`,
+    );
   }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
@@ -457,6 +487,8 @@ export async function heartbeatRenderJob(
   const current = await getRenderJob(id);
   if (!current) return null;
   if (current.status === "cancelled") return current;
+  // A finished render stays finished — late heartbeats must not reopen it.
+  if (current.status === "done") return current;
   const now = new Date().toISOString();
   const progress = Math.max(0, Math.min(1, patch.progress ?? current.progress));
   const stage = patch.stage ?? current.stage;
@@ -493,6 +525,11 @@ export async function updateRenderJob(
 ): Promise<RenderJobRow | null> {
   const current = await getRenderJob(id);
   if (!current) return null;
+  // The uploaded video wins: a late "failed" report from the render machine
+  // must not overwrite a job that already delivered its MP4.
+  if (current.status === "done" && current.output_url && patch.status === "failed") {
+    return current;
+  }
   const status = patch.status ?? current.status;
   const progress = patch.progress ?? current.progress;
   const stage = patch.stage ?? current.stage;
@@ -526,6 +563,10 @@ export async function deleteRenderJob(id: string): Promise<void> {
   if (usePostgres()) {
     await ensurePgTable();
     await pgQuery(`DELETE FROM render_jobs WHERE id = $1`, [id]);
+    // Legacy "Ready for HD" rows would otherwise be carried over again.
+    await pgQuery(`DELETE FROM render_bundles WHERE id = $1`, [id]).catch(
+      () => undefined,
+    );
     return;
   }
   getDb().prepare(`DELETE FROM render_jobs WHERE id = ?`).run(id);

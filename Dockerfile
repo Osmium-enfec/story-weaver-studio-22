@@ -32,7 +32,12 @@ ENV NODE_ENV=production
 
 RUN npm run build \
     && npm prune --omit=dev \
-    && npm cache clean --force
+    && npm cache clean --force \
+    # Several GB of binaries the server never loads: the Node ONNX runtime
+    # (Kokoro runs in the browser and in the separate kokoro service) and the
+    # bundled Playwright browsers (rendering happens on the render machines).
+    && rm -rf node_modules/onnxruntime-node node_modules/playwright \
+       node_modules/playwright-core node_modules/@playwright node_modules/.cache
 
 FROM node:22-bookworm-slim AS runner
 
@@ -46,12 +51,11 @@ ENV ENFEC_SCRATCH_ROOT=/var/lib/divstudio/scratch
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 ENV FFMPEG_PATH=/usr/bin/ffmpeg
 
-# ffmpeg for audio/video materialization; Playwright Chromium for server-side export jobs.
+# ffmpeg for audio/video materialization. No browser engine: HD rendering runs
+# on the render machines, not on this server.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && npm i -g playwright@1.61.1 --silent \
-    && npx playwright install --with-deps chromium
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/.output ./.output
 COPY --from=build /app/package.json ./package.json
