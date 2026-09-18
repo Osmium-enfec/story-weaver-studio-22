@@ -1,3 +1,4 @@
+import { upgradeDefaultVoiceUrls } from "@/lib/default-voice-assets";
 import path from "node:path";
 import { hostProjectsDbPath } from "@/lib/host-storage";
 import Database from "better-sqlite3";
@@ -138,6 +139,9 @@ function rowToProject(row: Record<string, unknown>): LocalProjectRow {
   } catch {
     parts = [];
   }
+  const courseId = row.course_id != null ? String(row.course_id) : null;
+  scenes = upgradeDefaultVoiceUrls(scenes, courseId);
+  parts = upgradeDefaultVoiceUrls(parts, courseId);
   return {
     id: String(row.id),
     user_id: String(row.user_id),
