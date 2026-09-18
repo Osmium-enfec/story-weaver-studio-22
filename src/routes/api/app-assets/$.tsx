@@ -16,10 +16,8 @@ async function resolveRelPath(rel: string): Promise<string | null> {
   const filename = parts[2] ?? "";
   const slug = slugForDefaultFilename(filename);
   if (!courseId || !slug) return null;
-  const { ensureDefaultVoiceAsset } = await import("@/lib/default-voice-assets.server");
   const { ensureDefaultVoiceAssetFile } = await import("@/lib/default-voice-assets.server");
   const { resolveVoiceEngineForCourse } = await import("@/lib/course-voice.server");
-  void ensureDefaultVoiceAsset;
   const engine = await resolveVoiceEngineForCourse(courseId);
   const { filename: file } = await ensureDefaultVoiceAssetFile(slug, engine);
   return file;
