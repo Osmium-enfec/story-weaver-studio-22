@@ -88,6 +88,24 @@ export const Route = createFileRoute("/api/courses")({
           const status = msg.includes("Not allowed") ? 403 : 500;
           return jsonError(msg, status);
         }
+        // Voice may have changed: drop the cached engine and pre-generate the
+        // built-in clips (question intro/mark, coding intro/mark, template
+        // cards) in the new voice so existing scenes switch with no regeneration.
+        if (data.settings !== undefined) {
+          try {
+            const { clearCourseVoiceCache, resolveVoiceEngineForCourse } = await import(
+              "@/lib/course-voice.server"
+            );
+            clearCourseVoiceCache(id);
+            const engine = await resolveVoiceEngineForCourse(id);
+            const { ensureAllDefaultVoiceAssets } = await import(
+              "@/lib/default-voice-assets.server"
+            );
+            void ensureAllDefaultVoiceAssets(engine).catch(() => {});
+          } catch (err) {
+            console.warn("Could not warm default narration clips:", err);
+          }
+        }
         return jsonResponse({ id, store: "sqlite" as const });
       },
     },

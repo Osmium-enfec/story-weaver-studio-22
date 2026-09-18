@@ -5,6 +5,12 @@ import { resolveCourseVoiceEngine } from "@/lib/course-settings";
 const cache = new Map<string, { engine: VoiceEngine; at: number }>();
 const TTL_MS = 5 * 60_000;
 
+export function clearCourseVoiceCache(courseId?: string | null) {
+  const id = (courseId ?? "").trim();
+  if (id) cache.delete(id);
+  else cache.clear();
+}
+
 export async function resolveVoiceEngineForCourse(
   courseId?: string | null,
 ): Promise<VoiceEngine> {
