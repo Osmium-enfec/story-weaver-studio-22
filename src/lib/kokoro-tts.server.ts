@@ -179,7 +179,7 @@ function splitKokoroText(text: string): string[] {
 async function requestKokoroMp3(text: string, voice: KokoroVoiceId): Promise<Buffer> {
   const res = await fetch(`${KOKORO_URL}/v1/tts/file`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: kokoroHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       text,
       voice,
