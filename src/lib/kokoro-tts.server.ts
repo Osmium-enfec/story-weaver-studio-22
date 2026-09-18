@@ -36,6 +36,15 @@ const KOKORO_VOICE: KokoroVoiceId = KOKORO_VOICES.includes(
   ? (process.env.KOKORO_VOICE!.trim() as KokoroVoiceId)
   : "af_heart";
 const KOKORO_SPEED = Number(process.env.KOKORO_SPEED || "1") || 1;
+/** Shared secret required by the public Kokoro endpoint (nginx checks it). */
+const KOKORO_TOKEN = process.env.KOKORO_TTS_TOKEN?.trim() || "";
+
+function kokoroHeaders(extra?: Record<string, string>): Record<string, string> {
+  return {
+    ...(extra ?? {}),
+    ...(KOKORO_TOKEN ? { "x-kokoro-key": KOKORO_TOKEN } : {}),
+  };
+}
 /** Stay under Kokoro's ~510-phoneme window (~24s). */
 const KOKORO_CHUNK_CHARS = 280;
 
