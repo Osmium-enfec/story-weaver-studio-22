@@ -10,6 +10,7 @@ import { ComposeImageUpload } from "@/components/compose/ComposeImageUpload";
 import { ComposeVideoUpload } from "@/components/compose/ComposeVideoUpload";
 import { apiGenerateTts } from "@/lib/compose-api";
 import { probeAudioDurationMs } from "@/lib/audio-duration";
+import { toPlayableAudioUrl } from "@/lib/playable-audio-url";
 import { CODING_PROBLEM_TEMPLATE } from "@/lib/parse-coding-problem";
 import {
   createLinkedScriptAndComposeScene,
@@ -219,8 +220,11 @@ export function PartScriptPanel({
     setTtsSceneId(scene.id);
     try {
       const tts = await apiGenerateTts(text, courseId);
-      const durationMs = (await probeAudioDurationMs(tts.audioUrl)) ?? 8000;
-      updateScene(scene.id, { audioUrl: tts.audioUrl, durationMs });
+      // Browser-Kokoro returns a temporary blob: URL that dies on refresh —
+      // persist it to project storage before storing it in the plan.
+      const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
+      const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
+      updateScene(scene.id, { audioUrl, durationMs });
     } catch (e: unknown) {
       setTtsError(e instanceof Error ? e.message : "TTS failed");
     } finally {
