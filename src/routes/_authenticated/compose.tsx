@@ -638,8 +638,8 @@ function ComposePage() {
       try {
         const res =
           questionDraft.kind === "coding"
-            ? await apiEnsureCodingMarkDefaultTts()
-            : await apiEnsureMarkDefaultTts();
+            ? await apiEnsureCodingMarkDefaultTts(courseId)
+            : await apiEnsureMarkDefaultTts(courseId);
         if (cancelled) return;
         setQuestionDraft((d) => ({
           ...d,
@@ -677,8 +677,8 @@ function ComposePage() {
       try {
         const res =
           questionDraft.kind === "coding"
-            ? await apiEnsureCodingIntroDefaultTts()
-            : await apiEnsureIntroDefaultTts();
+            ? await apiEnsureCodingIntroDefaultTts(courseId)
+            : await apiEnsureIntroDefaultTts(courseId);
         if (cancelled) return;
         const probed = await probeAudioDurationMs(res.audioUrl);
         setQuestionDraft((d) => ({
@@ -840,8 +840,8 @@ function ComposePage() {
     try {
       const isCoding = questionDraft.kind === "coding";
       const res = isCoding
-        ? await apiEnsureCodingIntroDefaultTts()
-        : await apiEnsureIntroDefaultTts();
+        ? await apiEnsureCodingIntroDefaultTts(courseId)
+        : await apiEnsureIntroDefaultTts(courseId);
       const probed = await probeAudioDurationMs(res.audioUrl);
       setQuestionDraft((d) => ({
         ...d,
@@ -870,8 +870,8 @@ function ComposePage() {
     try {
       const res =
         questionDraft.kind === "coding"
-          ? await apiGenerateCodingIntroTts(text)
-          : await apiGenerateIntroTts(text);
+          ? await apiGenerateCodingIntroTts(text, courseId)
+          : await apiGenerateIntroTts(text, courseId);
       const probed = await probeAudioDurationMs(res.audioUrl);
       setQuestionDraft((d) => ({
         ...d,
@@ -912,8 +912,8 @@ function ComposePage() {
     try {
       const isCoding = questionDraft.kind === "coding";
       const res = isCoding
-        ? await apiEnsureCodingMarkDefaultTts()
-        : await apiEnsureMarkDefaultTts();
+        ? await apiEnsureCodingMarkDefaultTts(courseId)
+        : await apiEnsureMarkDefaultTts(courseId);
       const probed = await probeAudioDurationMs(res.audioUrl);
       setQuestionDraft((d) => ({
         ...d,
@@ -944,8 +944,8 @@ function ComposePage() {
     try {
       const res =
         questionDraft.kind === "coding"
-          ? await apiGenerateCodingMarkTts(text)
-          : await apiGenerateMarkTts(text);
+          ? await apiGenerateCodingMarkTts(text, courseId)
+          : await apiGenerateMarkTts(text, courseId);
       const probed = await probeAudioDurationMs(res.audioUrl);
       setQuestionDraft((d) => ({
         ...d,
@@ -1304,7 +1304,7 @@ function ComposePage() {
     setError(null);
     setLoadingFixedPresetId(presetId);
     try {
-      const res = await apiEnsureFixedTemplateTts(presetId);
+      const res = await apiEnsureFixedTemplateTts(presetId, courseId);
       const durationMs = (await probeAudioDurationMs(res.audioUrl)) ?? 3000;
       const previewUrl = await renderTemplatePreviewDataUrl({
         type: "text",
@@ -2882,11 +2882,11 @@ function ComposePage() {
 
       try {
         const intro = isCoding
-          ? await apiEnsureCodingIntroDefaultTts()
-          : await apiEnsureIntroDefaultTts();
+          ? await apiEnsureCodingIntroDefaultTts(courseId)
+          : await apiEnsureIntroDefaultTts(courseId);
         const mark = isCoding
-          ? await apiEnsureCodingMarkDefaultTts()
-          : await apiEnsureMarkDefaultTts();
+          ? await apiEnsureCodingMarkDefaultTts(courseId)
+          : await apiEnsureMarkDefaultTts(courseId);
         const introMs = (await probeAudioDurationMs(intro.audioUrl)) ?? 0;
         const markMs = (await probeAudioDurationMs(mark.audioUrl)) ?? 0;
         next = {

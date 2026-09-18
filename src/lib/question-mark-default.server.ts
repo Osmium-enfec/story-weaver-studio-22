@@ -1,54 +1,26 @@
-import { assetExists, putAsset } from "@/lib/object-storage";
-import {
-  QUESTION_MARK_SCREEN_TEXT_DEFAULT,
-  isDefaultMarkText,
-} from "@/lib/question-scene-layout";
+import { QUESTION_MARK_SCREEN_TEXT_DEFAULT, isDefaultMarkText } from "@/lib/question-scene-layout";
+import { ensureDefaultVoiceAsset } from "@/lib/default-voice-assets.server";
+import { legacyDefaultAudioUrl } from "@/lib/default-voice-assets";
 import { generateTtsMp3Buffer } from "@/lib/tts.server";
 
-const DEFAULT_FILENAME = "question-mark-default.mp3";
-
 export function defaultMarkTtsUrl(): string {
-  return `/api/app-assets/${DEFAULT_FILENAME}`;
+  return legacyDefaultAudioUrl("question-mark");
 }
 
-async function synthesizeMp3(rawText: string): Promise<Buffer> {
-  return generateTtsMp3Buffer(rawText);
+export async function ensureDefaultMarkTts(courseId?: string | null) {
+  const r = await ensureDefaultVoiceAsset("question-mark", courseId);
+  return { audioUrl: r.audioUrl, text: r.text, cached: r.cached };
 }
 
-async function writeDefaultFile(buf: Buffer): Promise<string> {
-  await putAsset({
-    kind: "app",
-    relPath: DEFAULT_FILENAME,
-    body: buf,
-    contentType: "audio/mpeg",
-  });
-  return defaultMarkTtsUrl();
-}
-
-export async function ensureDefaultMarkTts() {
-  const url = defaultMarkTtsUrl();
-  if ((await assetExists("app", DEFAULT_FILENAME))) {
-    return { audioUrl: url, text: QUESTION_MARK_SCREEN_TEXT_DEFAULT, cached: true };
-  }
-  const buf = await synthesizeMp3(QUESTION_MARK_SCREEN_TEXT_DEFAULT);
-  await writeDefaultFile(buf);
-  return { audioUrl: url, text: QUESTION_MARK_SCREEN_TEXT_DEFAULT, cached: false };
-}
-
-export async function generateMarkTts(text: string) {
+export async function generateMarkTts(text: string, courseId?: string | null) {
   const trimmed = text.trim();
-  if (isDefaultMarkText(trimmed) && (await assetExists("app", DEFAULT_FILENAME))) {
-    return { audioUrl: defaultMarkTtsUrl(), text: QUESTION_MARK_SCREEN_TEXT_DEFAULT, cached: true };
-  }
-  if (isDefaultMarkText(trimmed)) {
-    const buf = await synthesizeMp3(QUESTION_MARK_SCREEN_TEXT_DEFAULT);
-    const url = await writeDefaultFile(buf);
-    return { audioUrl: url, text: QUESTION_MARK_SCREEN_TEXT_DEFAULT, cached: false };
-  }
-  const buf = await synthesizeMp3(trimmed);
+  if (isDefaultMarkText(trimmed)) return ensureDefaultMarkTts(courseId);
+  const buf = await generateTtsMp3Buffer(trimmed, { courseId });
   return {
     audioUrl: `data:audio/mpeg;base64,${buf.toString("base64")}`,
     text: trimmed,
     cached: false,
   };
 }
+
+export { QUESTION_MARK_SCREEN_TEXT_DEFAULT };

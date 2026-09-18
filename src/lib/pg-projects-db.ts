@@ -1,3 +1,4 @@
+import { upgradeDefaultVoiceUrls } from "@/lib/default-voice-assets";
 import { randomUUID } from "node:crypto";
 import {
   getProjectParts,
@@ -40,14 +41,15 @@ function jsonForDb(value: unknown): string {
 }
 
 function rowToProject(row: Record<string, unknown>): LocalProjectRow {
+  const courseId = row.course_id != null ? String(row.course_id) : null;
   return {
     id: String(row.id),
     user_id: String(row.user_id),
     title: String(row.title),
     script: row.script != null ? String(row.script) : null,
     audio_mode: String(row.audio_mode ?? "tts"),
-    scenes: parseJsonColumn(row.scenes),
-    parts: parseJsonColumn(row.parts),
+    scenes: upgradeDefaultVoiceUrls(parseJsonColumn(row.scenes), courseId),
+    parts: upgradeDefaultVoiceUrls(parseJsonColumn(row.parts), courseId),
     thumbnail_url: row.thumbnail_url != null ? String(row.thumbnail_url) : null,
     course_id: row.course_id != null ? String(row.course_id) : null,
     assigned_user_id:

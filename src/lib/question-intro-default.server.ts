@@ -1,54 +1,26 @@
-import { assetExists, putAsset } from "@/lib/object-storage";
-import {
-  QUESTION_INTRO_SCREEN_TEXT_DEFAULT,
-  isDefaultIntroText,
-} from "@/lib/question-scene-layout";
+import { QUESTION_INTRO_SCREEN_TEXT_DEFAULT, isDefaultIntroText } from "@/lib/question-scene-layout";
+import { ensureDefaultVoiceAsset } from "@/lib/default-voice-assets.server";
+import { legacyDefaultAudioUrl } from "@/lib/default-voice-assets";
 import { generateTtsMp3Buffer } from "@/lib/tts.server";
 
-const DEFAULT_FILENAME = "question-intro-default.mp3";
-
 export function defaultIntroTtsUrl(): string {
-  return `/api/app-assets/${DEFAULT_FILENAME}`;
+  return legacyDefaultAudioUrl("question-intro");
 }
 
-async function synthesizeMp3(rawText: string): Promise<Buffer> {
-  return generateTtsMp3Buffer(rawText);
+export async function ensureDefaultIntroTts(courseId?: string | null) {
+  const r = await ensureDefaultVoiceAsset("question-intro", courseId);
+  return { audioUrl: r.audioUrl, text: r.text, cached: r.cached };
 }
 
-async function writeDefaultFile(buf: Buffer): Promise<string> {
-  await putAsset({
-    kind: "app",
-    relPath: DEFAULT_FILENAME,
-    body: buf,
-    contentType: "audio/mpeg",
-  });
-  return defaultIntroTtsUrl();
-}
-
-export async function ensureDefaultIntroTts() {
-  const url = defaultIntroTtsUrl();
-  if ((await assetExists("app", DEFAULT_FILENAME))) {
-    return { audioUrl: url, text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: true };
-  }
-  const buf = await synthesizeMp3(QUESTION_INTRO_SCREEN_TEXT_DEFAULT);
-  await writeDefaultFile(buf);
-  return { audioUrl: url, text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: false };
-}
-
-export async function generateIntroTts(text: string) {
+export async function generateIntroTts(text: string, courseId?: string | null) {
   const trimmed = text.trim();
-  if (isDefaultIntroText(trimmed) && (await assetExists("app", DEFAULT_FILENAME))) {
-    return { audioUrl: defaultIntroTtsUrl(), text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: true };
-  }
-  if (isDefaultIntroText(trimmed)) {
-    const buf = await synthesizeMp3(QUESTION_INTRO_SCREEN_TEXT_DEFAULT);
-    const url = await writeDefaultFile(buf);
-    return { audioUrl: url, text: QUESTION_INTRO_SCREEN_TEXT_DEFAULT, cached: false };
-  }
-  const buf = await synthesizeMp3(trimmed);
+  if (isDefaultIntroText(trimmed)) return ensureDefaultIntroTts(courseId);
+  const buf = await generateTtsMp3Buffer(trimmed, { courseId });
   return {
     audioUrl: `data:audio/mpeg;base64,${buf.toString("base64")}`,
     text: trimmed,
     cached: false,
   };
 }
+
+export { QUESTION_INTRO_SCREEN_TEXT_DEFAULT };
