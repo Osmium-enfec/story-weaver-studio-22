@@ -271,5 +271,9 @@ export async function generateKokoroMp3Buffer(
   for (const chunk of chunks) {
     buffers.push(await requestKokoroMp3(chunk, chosen));
   }
-  return concatKokoroMp3s(buffers);
+  try {
+    return await concatKokoroMp3s(buffers);
+  } catch {
+    return Buffer.concat(buffers);
+  }
 }
