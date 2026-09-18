@@ -58,44 +58,45 @@ export function apiParseQuestion(
 /** Shape returned by the mark/intro TTS actions on /api/compose-actions. */
 export type TtsResult = { audioUrl: string; text: string; cached: boolean };
 
-export function apiEnsureMarkDefaultTts(): Promise<TtsResult> {
-  return composeFetch({ action: "ensure-mark-default" });
+export function apiEnsureMarkDefaultTts(courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "ensure-mark-default", courseId: courseId ?? undefined });
 }
 
-export function apiGenerateMarkTts(text: string): Promise<TtsResult> {
-  return composeFetch({ action: "generate-mark-tts", text });
+export function apiGenerateMarkTts(text: string, courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "generate-mark-tts", text, courseId: courseId ?? undefined });
 }
 
-export function apiEnsureIntroDefaultTts(): Promise<TtsResult> {
-  return composeFetch({ action: "ensure-intro-default" });
+export function apiEnsureIntroDefaultTts(courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "ensure-intro-default", courseId: courseId ?? undefined });
 }
 
-export function apiGenerateIntroTts(text: string): Promise<TtsResult> {
-  return composeFetch({ action: "generate-intro-tts", text });
+export function apiGenerateIntroTts(text: string, courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "generate-intro-tts", text, courseId: courseId ?? undefined });
 }
 
-export function apiEnsureCodingMarkDefaultTts(): Promise<TtsResult> {
-  return composeFetch({ action: "ensure-coding-mark-default" });
+export function apiEnsureCodingMarkDefaultTts(courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "ensure-coding-mark-default", courseId: courseId ?? undefined });
 }
 
-export function apiGenerateCodingMarkTts(text: string): Promise<TtsResult> {
-  return composeFetch({ action: "generate-coding-mark-tts", text });
+export function apiGenerateCodingMarkTts(text: string, courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "generate-coding-mark-tts", text, courseId: courseId ?? undefined });
 }
 
-export function apiEnsureCodingIntroDefaultTts(): Promise<TtsResult> {
-  return composeFetch({ action: "ensure-coding-intro-default" });
+export function apiEnsureCodingIntroDefaultTts(courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "ensure-coding-intro-default", courseId: courseId ?? undefined });
 }
 
-export function apiGenerateCodingIntroTts(text: string): Promise<TtsResult> {
-  return composeFetch({ action: "generate-coding-intro-tts", text });
+export function apiGenerateCodingIntroTts(text: string, courseId?: string | null): Promise<TtsResult> {
+  return composeFetch({ action: "generate-coding-intro-tts", text, courseId: courseId ?? undefined });
 }
 
 export type FixedTemplateTtsResult = TtsResult & { presetId: string };
 
 export function apiEnsureFixedTemplateTts(
   preset: "try-question" | "try-coding",
+  courseId?: string | null,
 ): Promise<FixedTemplateTtsResult> {
-  return composeFetch({ action: "ensure-fixed-template-tts", preset });
+  return composeFetch({ action: "ensure-fixed-template-tts", preset, courseId: courseId ?? undefined });
 }
 
 export async function apiPersistAsset(input: {
