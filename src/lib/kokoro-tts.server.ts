@@ -199,9 +199,20 @@ async function requestKokoroMp3(text: string, voice: KokoroVoiceId): Promise<Buf
 
 async function concatKokoroMp3s(parts: Buffer[]): Promise<Buffer> {
   if (parts.length === 1) return parts[0]!;
-  const ffmpegBin = await resolveFfmpegBin();
+  // Hosted (edge) runtimes have no ffmpeg binary and no real filesystem;
+  // MP3 frames concatenate cleanly, so fall back to a byte-level join there.
+  let ffmpegBin: string;
+  try {
+    ffmpegBin = await resolveFfmpegBin();
+  } catch {
+    return Buffer.concat(parts);
+  }
   const dir = path.join(scratchRoot(), "kokoro-concat", randomUUID());
-  mkdirSync(dir, { recursive: true });
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    return Buffer.concat(parts);
+  }
   try {
     const files = parts.map((buf, i) => {
       const file = path.join(dir, `${String(i).padStart(3, "0")}.mp3`);
