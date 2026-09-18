@@ -36,6 +36,15 @@ const KOKORO_VOICE: KokoroVoiceId = KOKORO_VOICES.includes(
   ? (process.env.KOKORO_VOICE!.trim() as KokoroVoiceId)
   : "af_heart";
 const KOKORO_SPEED = Number(process.env.KOKORO_SPEED || "1") || 1;
+/** Shared secret required by the public Kokoro endpoint (nginx checks it). */
+const KOKORO_TOKEN = process.env.KOKORO_TTS_TOKEN?.trim() || "";
+
+function kokoroHeaders(extra?: Record<string, string>): Record<string, string> {
+  return {
+    ...(extra ?? {}),
+    ...(KOKORO_TOKEN ? { "x-kokoro-key": KOKORO_TOKEN } : {}),
+  };
+}
 /** Stay under Kokoro's ~510-phoneme window (~24s). */
 const KOKORO_CHUNK_CHARS = 280;
 
@@ -52,7 +61,8 @@ function stripEmotionTags(text: string): string {
 async function kokoroHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${KOKORO_URL}/health`, {
-      signal: AbortSignal.timeout(1500),
+      headers: kokoroHeaders(),
+      signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return false;
     const j = (await res.json()) as { ok?: boolean };
@@ -169,7 +179,7 @@ function splitKokoroText(text: string): string[] {
 async function requestKokoroMp3(text: string, voice: KokoroVoiceId): Promise<Buffer> {
   const res = await fetch(`${KOKORO_URL}/v1/tts/file`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: kokoroHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       text,
       voice,
@@ -189,9 +199,20 @@ async function requestKokoroMp3(text: string, voice: KokoroVoiceId): Promise<Buf
 
 async function concatKokoroMp3s(parts: Buffer[]): Promise<Buffer> {
   if (parts.length === 1) return parts[0]!;
-  const ffmpegBin = await resolveFfmpegBin();
+  // Hosted (edge) runtimes have no ffmpeg binary and no real filesystem;
+  // MP3 frames concatenate cleanly, so fall back to a byte-level join there.
+  let ffmpegBin: string;
+  try {
+    ffmpegBin = await resolveFfmpegBin();
+  } catch {
+    return Buffer.concat(parts);
+  }
   const dir = path.join(scratchRoot(), "kokoro-concat", randomUUID());
-  mkdirSync(dir, { recursive: true });
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch {
+    return Buffer.concat(parts);
+  }
   try {
     const files = parts.map((buf, i) => {
       const file = path.join(dir, `${String(i).padStart(3, "0")}.mp3`);
@@ -250,5 +271,9 @@ export async function generateKokoroMp3Buffer(
   for (const chunk of chunks) {
     buffers.push(await requestKokoroMp3(chunk, chosen));
   }
-  return concatKokoroMp3s(buffers);
+  try {
+    return await concatKokoroMp3s(buffers);
+  } catch {
+    return Buffer.concat(buffers);
+  }
 }
