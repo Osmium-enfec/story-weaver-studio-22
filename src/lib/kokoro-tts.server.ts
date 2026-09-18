@@ -61,7 +61,8 @@ function stripEmotionTags(text: string): string {
 async function kokoroHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${KOKORO_URL}/health`, {
-      signal: AbortSignal.timeout(1500),
+      headers: kokoroHeaders(),
+      signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return false;
     const j = (await res.json()) as { ok?: boolean };
