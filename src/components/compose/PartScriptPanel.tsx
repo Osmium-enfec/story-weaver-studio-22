@@ -220,8 +220,8 @@ export function PartScriptPanel({
     setTtsSceneId(scene.id);
     try {
       const tts = await apiGenerateTts(text, courseId);
-      // Browser-Kokoro returns a temporary blob: URL that dies on refresh —
-      // persist it to project storage before storing it in the plan.
+      // Persist the generated audio to project storage so the plan never holds
+      // a temporary URL that dies on refresh.
       const audioUrl = await toPlayableAudioUrl(tts.audioUrl, projectId);
       const durationMs = (await probeAudioDurationMs(audioUrl)) ?? 8000;
       updateScene(scene.id, { audioUrl, durationMs });

@@ -20,34 +20,11 @@ async function composeFetch<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 /**
- * Kokoro courses (Zero Code) narrate on-device in the browser, so they work on
- * every deployment without a Kokoro server. Other courses use ElevenLabs on
- * the server as before.
+ * All narration is generated on the server (/api/tts). Kokoro courses (Zero
+ * Code) used to synthesize on-device, but the in-browser model exhausted
+ * Chrome's memory on long parts and crashed the tab, so the server decides the
+ * engine from the course settings instead.
  */
-const courseEngineCache = new Map<string, "elevenlabs" | "kokoro">();
-
-async function resolveCourseEngine(
-  courseId?: string | null,
-): Promise<"elevenlabs" | "kokoro"> {
-  if (!courseId) return "elevenlabs";
-  const cached = courseEngineCache.get(courseId);
-  if (cached) return cached;
-  try {
-    const { apiListCourses } = await import("@/lib/courses-api");
-    const { resolveCourseVoiceEngine } = await import("@/lib/course-settings");
-    const courses = await apiListCourses();
-    for (const course of courses) {
-      courseEngineCache.set(
-        course.id,
-        resolveCourseVoiceEngine(course.settings, course.title),
-      );
-    }
-    return courseEngineCache.get(courseId) ?? "elevenlabs";
-  } catch {
-    return "elevenlabs";
-  }
-}
-
 export async function apiGenerateTts(
   text: string,
   courseId?: string | null,
@@ -55,22 +32,7 @@ export async function apiGenerateTts(
   const token = getStoredSessionToken();
   if (!token) throw new Error("Sign in required");
 
-  if ((await resolveCourseEngine(courseId)) === "kokoro") {
-    try {
-      const [{ synthesizeKokoroDataUrl }, { normalizeNarrationText }] = await Promise.all([
-        import("@/lib/kokoro-browser"),
-        import("@/lib/narration-text"),
-      ]);
-      const clean = normalizeNarrationText(text);
-      if (!clean) throw new Error("Narration text is empty after trimming whitespace.");
-      const spoken = clean.replace(/[.!?…]*\s*$/, "") + " ... ";
-      return { audioUrl: await synthesizeKokoroDataUrl(spoken) };
-    } catch (error) {
-      // On-device voice unavailable (old browser, blocked download): fall back
-      // to the server voice rather than failing the whole generation.
-      console.warn("Browser Kokoro unavailable, using server voice:", error);
-    }
-  }
+
 
   const res = await fetch("/api/tts", {
     method: "POST",
