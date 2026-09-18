@@ -3,18 +3,21 @@ import { z } from "zod";
 import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import { parseQuestionTextServer } from "@/lib/question-parse.server";
 
+const courseId = z.string().trim().min(1).max(200).nullish();
+
 const Body = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("ensure-mark-default") }),
-  z.object({ action: z.literal("generate-mark-tts"), text: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("ensure-intro-default") }),
-  z.object({ action: z.literal("generate-intro-tts"), text: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("ensure-coding-mark-default") }),
-  z.object({ action: z.literal("generate-coding-mark-tts"), text: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("ensure-coding-intro-default") }),
-  z.object({ action: z.literal("generate-coding-intro-tts"), text: z.string().min(1).max(500) }),
+  z.object({ action: z.literal("ensure-mark-default"), courseId }),
+  z.object({ action: z.literal("generate-mark-tts"), text: z.string().min(1).max(500), courseId }),
+  z.object({ action: z.literal("ensure-intro-default"), courseId }),
+  z.object({ action: z.literal("generate-intro-tts"), text: z.string().min(1).max(500), courseId }),
+  z.object({ action: z.literal("ensure-coding-mark-default"), courseId }),
+  z.object({ action: z.literal("generate-coding-mark-tts"), text: z.string().min(1).max(500), courseId }),
+  z.object({ action: z.literal("ensure-coding-intro-default"), courseId }),
+  z.object({ action: z.literal("generate-coding-intro-tts"), text: z.string().min(1).max(500), courseId }),
   z.object({
     action: z.literal("ensure-fixed-template-tts"),
     preset: z.enum(["try-question", "try-coding"]),
+    courseId,
   }),
   z.object({
     action: z.literal("parse-question"),
@@ -49,39 +52,39 @@ export const Route = createFileRoute("/api/compose-actions")({
         try {
           if (data.action === "ensure-mark-default") {
             const { ensureDefaultMarkTts } = await import("@/lib/question-mark-default.server");
-            return jsonResponse(await ensureDefaultMarkTts());
+            return jsonResponse(await ensureDefaultMarkTts(data.courseId));
           }
           if (data.action === "generate-mark-tts") {
             const { generateMarkTts } = await import("@/lib/question-mark-default.server");
-            return jsonResponse(await generateMarkTts(data.text));
+            return jsonResponse(await generateMarkTts(data.text, data.courseId));
           }
           if (data.action === "ensure-intro-default") {
             const { ensureDefaultIntroTts } = await import("@/lib/question-intro-default.server");
-            return jsonResponse(await ensureDefaultIntroTts());
+            return jsonResponse(await ensureDefaultIntroTts(data.courseId));
           }
           if (data.action === "generate-intro-tts") {
             const { generateIntroTts } = await import("@/lib/question-intro-default.server");
-            return jsonResponse(await generateIntroTts(data.text));
+            return jsonResponse(await generateIntroTts(data.text, data.courseId));
           }
           if (data.action === "ensure-coding-mark-default") {
             const { ensureDefaultCodingMarkTts } = await import("@/lib/coding-mark-default.server");
-            return jsonResponse(await ensureDefaultCodingMarkTts());
+            return jsonResponse(await ensureDefaultCodingMarkTts(data.courseId));
           }
           if (data.action === "generate-coding-mark-tts") {
             const { generateCodingMarkTts } = await import("@/lib/coding-mark-default.server");
-            return jsonResponse(await generateCodingMarkTts(data.text));
+            return jsonResponse(await generateCodingMarkTts(data.text, data.courseId));
           }
           if (data.action === "ensure-coding-intro-default") {
             const { ensureDefaultCodingIntroTts } = await import("@/lib/coding-intro-default.server");
-            return jsonResponse(await ensureDefaultCodingIntroTts());
+            return jsonResponse(await ensureDefaultCodingIntroTts(data.courseId));
           }
           if (data.action === "generate-coding-intro-tts") {
             const { generateCodingIntroTts } = await import("@/lib/coding-intro-default.server");
-            return jsonResponse(await generateCodingIntroTts(data.text));
+            return jsonResponse(await generateCodingIntroTts(data.text, data.courseId));
           }
           if (data.action === "ensure-fixed-template-tts") {
             const { ensureFixedTemplateTts } = await import("@/lib/template-fixed-default.server");
-            return jsonResponse(await ensureFixedTemplateTts(data.preset));
+            return jsonResponse(await ensureFixedTemplateTts(data.preset, data.courseId));
           }
           return jsonResponse(await parseQuestionTextServer(data.text, data.kind));
         } catch (e) {
