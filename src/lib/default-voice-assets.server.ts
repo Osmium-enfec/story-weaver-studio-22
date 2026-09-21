@@ -12,6 +12,7 @@ import {
   DEFAULT_VOICE_ASSET_SLUGS,
   engineAssetFilename,
   legacyDefaultAudioUrl,
+  slugForDefaultFilename,
   type DefaultVoiceAssetSlug,
 } from "@/lib/default-voice-assets";
 import { generateTtsMp3Buffer } from "@/lib/tts.server";
