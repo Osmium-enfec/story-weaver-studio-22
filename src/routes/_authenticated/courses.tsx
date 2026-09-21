@@ -200,11 +200,28 @@ function CoursesPage() {
           ) : null}
         </div>
 
-        {isLoading ? (
+        {coursesError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-sm">
+            <p className="font-medium">Couldn’t load your courses</p>
+            <p className="mt-1 text-muted-foreground">
+              {coursesError instanceof Error
+                ? coursesError.message
+                : "Something went wrong."}
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetchCourses()}
+              className="mt-3 inline-flex items-center rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+            >
+              Try again
+            </button>
+          </div>
+        ) : isLoading ? (
           <div className="flex justify-center py-16">
             <Loader2 className="animate-spin text-muted-foreground" />
           </div>
         ) : (
+
           <>
             <section className="mb-10">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
