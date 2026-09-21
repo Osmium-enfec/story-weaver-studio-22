@@ -34,8 +34,16 @@ services:
       PORT: "3333"
       HF_HOME: /var/lib/kokoro/hf
       KOKORO_DTYPE: q8
+      # One generation at a time; recycle the process when it grows or idles.
+      KOKORO_THREADS: "2"
+      KOKORO_MAX_RSS_MB: "1100"
+      KOKORO_IDLE_RECYCLE_MIN: "45"
+      KOKORO_CACHE_MAX_MB: "512"
     volumes:
       - kokoro_models:/var/lib/kokoro/hf
+    # Hard ceiling so the voice service can never starve the app container.
+    mem_limit: 1300m
+    memswap_limit: 2g
     restart: unless-stopped
 
 volumes:
