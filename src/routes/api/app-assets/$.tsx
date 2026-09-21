@@ -2,25 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import path from "node:path";
 import { contentTypeForExt } from "@/lib/asset-mime";
 import { readAsset } from "@/lib/object-storage";
-import { slugForDefaultFilename } from "@/lib/default-voice-assets";
 
 /**
  * Course-scoped built-in clip: /api/app-assets/course/<courseId>/<file>.mp3
  * Resolves the course's current voice at request time so changing the course
  * voice updates every existing scene without regenerating anything.
+ * Course-less legacy clip names resolve to the default voice.
  */
 async function resolveRelPath(rel: string): Promise<string | null> {
-  const parts = rel.split("/");
-  if (parts[0] !== "course") return rel;
-  const courseId = decodeURIComponent(parts[1] ?? "");
-  const filename = parts[2] ?? "";
-  const slug = slugForDefaultFilename(filename);
-  if (!courseId || !slug) return null;
-  const { ensureDefaultVoiceAssetFile } = await import("@/lib/default-voice-assets.server");
-  const { resolveVoiceEngineForCourse } = await import("@/lib/course-voice.server");
-  const engine = await resolveVoiceEngineForCourse(courseId);
-  const { filename: file } = await ensureDefaultVoiceAssetFile(slug, engine);
-  return file;
+  const { resolveAppAssetRelPath } = await import("@/lib/default-voice-assets.server");
+  return resolveAppAssetRelPath(rel);
 }
 
 export const Route = createFileRoute("/api/app-assets/$")({
