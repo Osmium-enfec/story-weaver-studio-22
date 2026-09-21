@@ -410,9 +410,13 @@ export async function pgGetProjectById(id: string): Promise<LocalProjectRow | nu
 }
 
 
-/** Natural episode order: "Episode 2" before "Episode 10". */
+/**
+ * Natural episode order: "Episode 2" before "Episode 10".
+ * Uses only the FIRST number in the title, so later numbers in the name
+ * ("Episode 4 - GPT Basics + Plan App #1") don't distort the order.
+ */
 const NATURAL_ORDER = `
-  NULLIF(regexp_replace(title, '\\D', '', 'g'), '')::numeric NULLS LAST,
+  substring(title from '[0-9]+')::numeric NULLS LAST,
   title ASC`;
 
 function pageClause(opts?: { limit?: number; offset?: number }): string {
