@@ -27,6 +27,19 @@ async function handle(request: Request, splat: string, method: "GET" | "HEAD") {
 
   const contentType = contentTypeForExt(path.extname(parsed.rel).slice(1));
 
+  // Built-in narration clips are stored per voice engine — translate
+  // course-scoped and legacy clip paths to the real stored filename.
+  if (parsed.kind === "app") {
+    try {
+      const { resolveAppAssetRelPath } = await import("@/lib/default-voice-assets.server");
+      const resolved = await resolveAppAssetRelPath(parsed.rel);
+      if (!resolved) return new Response("Not found", { status: 404 });
+      parsed.rel = resolved;
+    } catch {
+      return new Response("Default narration unavailable", { status: 503 });
+    }
+  }
+
   // Prefer a direct signed URL from object storage (no worker proxying).
   try {
     const signed = await signedAssetUrl(parsed.kind, parsed.rel);

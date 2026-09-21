@@ -12,6 +12,7 @@ import {
   DEFAULT_VOICE_ASSET_SLUGS,
   engineAssetFilename,
   legacyDefaultAudioUrl,
+  slugForDefaultFilename,
   type DefaultVoiceAssetSlug,
 } from "@/lib/default-voice-assets";
 import { generateTtsMp3Buffer } from "@/lib/tts.server";
@@ -74,6 +75,36 @@ export async function ensureDefaultVoiceAsset(
     cached,
     engine,
   };
+}
+
+/**
+ * Translate an `app` asset path into the real stored file.
+ *
+ * Handles both built-in clip forms:
+ *   course/<courseId>/question-intro-default.mp3 → question-intro-default-<engine>.mp3
+ *   question-intro-default.mp3                   → question-intro-default-<default engine>.mp3
+ *
+ * Any other path is returned unchanged. Returns null when the path looks like a
+ * built-in clip reference but cannot be resolved.
+ */
+export async function resolveAppAssetRelPath(rel: string): Promise<string | null> {
+  const parts = rel.split("/");
+  if (parts[0] === "course") {
+    const courseId = decodeURIComponent(parts[1] ?? "");
+    const slug = slugForDefaultFilename(parts[2] ?? "");
+    if (!courseId || !slug) return null;
+    const engine = await resolveEngine(courseId);
+    const { filename } = await ensureDefaultVoiceAssetFile(slug, engine);
+    return filename;
+  }
+  if (parts.length === 1) {
+    const slug = slugForDefaultFilename(parts[0]);
+    if (slug) {
+      const { filename } = await ensureDefaultVoiceAssetFile(slug, DEFAULT_VOICE_ENGINE);
+      return filename;
+    }
+  }
+  return rel;
 }
 
 /** Warm every built-in clip for one voice (called when a course voice changes). */
