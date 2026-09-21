@@ -91,10 +91,17 @@ function CoursesPage() {
   const [settingsCourse, setSettingsCourse] = useState<CourseListItem | null>(null);
   const [episodesPage, setEpisodesPage] = useState(1);
 
-  const { data: courses, isLoading: coursesLoading } = useQuery({
+  const {
+    data: courses,
+    isLoading: coursesLoading,
+    error: coursesError,
+    refetch: refetchCourses,
+  } = useQuery({
     queryKey: ["courses"],
     queryFn: () => apiListCourses(),
+    retry: 1,
   });
+
 
   // Only the rows this page shows (plus one probe row for "is there a next
   // page?") are fetched — the full unassigned list used to be pulled every time.
