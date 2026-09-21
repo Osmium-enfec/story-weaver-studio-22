@@ -12,12 +12,25 @@ export async function requireApiUser(request: Request): Promise<AuthUser> {
   if (!token) {
     throw jsonError("Unauthorized", 401);
   }
-  const user = await localValidateSession(token);
+  let user: AuthUser | null;
+  try {
+    user = await localValidateSession(token);
+  } catch (error) {
+    // A database outage must not look like a bad sign-in: 401 makes the UI
+    // spin / sign the user out instead of showing the real problem.
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("[auth] session lookup failed:", detail);
+    throw jsonError(
+      "The database is temporarily unavailable, so we could not verify your session. Please try again shortly.",
+      503,
+    );
+  }
   if (!user) {
     throw jsonError("Unauthorized", 401);
   }
   return user;
 }
+
 
 export async function requireApiAdmin(request: Request): Promise<AuthUser> {
   const user = await requireApiUser(request);
