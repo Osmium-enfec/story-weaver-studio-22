@@ -14,6 +14,48 @@ export interface AuthUser {
 
 const SESSION_DAYS = 30;
 
+/**
+ * Every authenticated API call validates its session token. Without a cache
+ * that is one database round-trip per request, so a slow/unreachable database
+ * (or an exhausted connection pool) blocks every signed-in user at once.
+ * Cache successful validations briefly; entries are dropped on logout and on
+ * account deletion, so revocation still takes effect within the TTL.
+ */
+const SESSION_CACHE_TTL_MS = Number(process.env.SESSION_CACHE_TTL_MS ?? 60_000);
+const SESSION_CACHE_MAX = 500;
+const sessionCache = new Map<string, { user: AuthUser; expires: number }>();
+
+function cachedSession(token: string): AuthUser | null {
+  const hit = sessionCache.get(token);
+  if (!hit) return null;
+  if (hit.expires < Date.now()) {
+    sessionCache.delete(token);
+    return null;
+  }
+  return hit.user;
+}
+
+function cacheSession(token: string, user: AuthUser | null): void {
+  // Only cache successful lookups: a brand-new token must never be served a
+  // stale "unknown" result.
+  if (!user) return;
+  if (sessionCache.size >= SESSION_CACHE_MAX) {
+    const oldest = sessionCache.keys().next().value;
+    if (oldest !== undefined) sessionCache.delete(oldest);
+  }
+  sessionCache.set(token, { user, expires: Date.now() + SESSION_CACHE_TTL_MS });
+}
+
+function dropCachedSession(token: string): void {
+  sessionCache.delete(token);
+}
+
+function dropCachedSessionsForUser(userId: string): void {
+  for (const [token, entry] of sessionCache) {
+    if (entry.user.id === userId) sessionCache.delete(token);
+  }
+}
+
 let db: Database.Database | null = null;
 
 function dbPath(): string {
@@ -216,14 +258,22 @@ export async function localLoginUser(
 }
 
 export async function localValidateSession(token: string): Promise<AuthUser | null> {
+  if (!token) return null;
+  const cached = cachedSession(token);
+  if (cached) return cached;
+  let user: AuthUser | null;
   if (usePostgres()) {
     const { pgValidateSession } = await import("@/lib/pg-auth-db");
-    return pgValidateSession(token);
+    user = await pgValidateSession(token);
+  } else {
+    user = sqliteValidateSession(token);
   }
-  return sqliteValidateSession(token);
+  cacheSession(token, user);
+  return user;
 }
 
 export async function localLogoutSession(token: string): Promise<void> {
+  dropCachedSession(token);
   if (usePostgres()) {
     const { pgLogoutSession } = await import("@/lib/pg-auth-db");
     await pgLogoutSession(token);
@@ -265,6 +315,7 @@ export async function localActiveSessionCount(userId: string): Promise<number> {
 }
 
 export async function localDeleteUser(userId: string, actorUserId: string): Promise<void> {
+  dropCachedSessionsForUser(userId);
   if (usePostgres()) {
     const { pgDeleteUser } = await import("@/lib/pg-auth-db");
     await pgDeleteUser(userId, actorUserId);
