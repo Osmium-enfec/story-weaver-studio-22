@@ -1,4 +1,5 @@
 import { DEFAULT_COURSE_SETTINGS, type CourseSettings } from "@/lib/course-settings";
+import type { TemplateTheme } from "@/lib/template-theme";
 
 /**
  * Media overrides for the course currently open in the editor.
@@ -14,6 +15,7 @@ export interface ActiveCourseMedia {
   introDurationMs: number | null;
   outroUrl: string | null;
   outroDurationMs: number | null;
+  templateTheme: TemplateTheme | null;
 }
 
 const EMPTY: ActiveCourseMedia = {
@@ -22,6 +24,7 @@ const EMPTY: ActiveCourseMedia = {
   introDurationMs: null,
   outroUrl: null,
   outroDurationMs: null,
+  templateTheme: null,
 };
 
 let active: ActiveCourseMedia = EMPTY;
@@ -36,6 +39,7 @@ export function setActiveCourseMedia(
     introDurationMs: s.introDurationMs,
     outroUrl: s.outroUrl,
     outroDurationMs: s.outroDurationMs,
+    templateTheme: s.templateTheme,
   };
 }
 
