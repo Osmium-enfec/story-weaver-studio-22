@@ -30,6 +30,9 @@ services:
 
   kokoro:
     build: ./deploy/kokoro
+    ports:
+      # Host nginx proxies /kokoro-api/ → 127.0.0.1:8093 (used by divstudio.lovable.app)
+      - "127.0.0.1:8093:3333"
     environment:
       PORT: "3333"
       HF_HOME: /var/lib/kokoro/hf
