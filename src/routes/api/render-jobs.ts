@@ -4,7 +4,7 @@ import { jsonError, jsonResponse, requireApiUser } from "@/lib/api-auth";
 import { isAdminUser } from "@/lib/admin";
 import { localGetProjectById } from "@/lib/local-projects-db";
 import { localGetCourseById } from "@/lib/local-courses-db";
-import { normalizeCourseSettings } from "@/lib/course-settings";
+import { normalizeCourseSettings, resolveCourseTemplateTheme } from "@/lib/course-settings";
 import { DEFAULT_BACKGROUND, type SceneBackground } from "@/lib/scene-background";
 import { getReview } from "@/lib/review-db";
 import { normalizeWorkflowStatus } from "@/lib/review-workflow";
@@ -149,11 +149,14 @@ async function handlePost(request: Request): Promise<Response> {
   }
 
   try {
+    const course = project.course_id ? await localGetCourseById(project.course_id) : null;
+    const courseSettings = normalizeCourseSettings(course?.settings);
     const built = buildBundlePayload({
       episodeTitle: String(project.title ?? "Episode"),
       part,
       baseUrl: bundleBaseUrl(request),
       background: await courseBackground(project.course_id ?? null),
+      templateTheme: resolveCourseTemplateTheme(courseSettings, course?.title),
     });
     const row = await createRenderJob({
       courseId: project.course_id ?? null,

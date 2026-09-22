@@ -1,5 +1,7 @@
 import type { VoiceEngine } from "@/lib/course-voice";
 import { voiceEngineForCourseName } from "@/lib/course-voice";
+import type { TemplateTheme } from "@/lib/template-theme";
+import { templateThemeForCourseName } from "@/lib/template-theme";
 
 export type CourseBackgroundPreset = "video-loop" | "plain-white";
 
@@ -19,6 +21,8 @@ export interface CourseSettings {
   outroDurationMs: number | null;
   /** null = derive from the course name (legacy behaviour). */
   voiceEngine: VoiceEngine | null;
+  /** null = derive from the course name (Zero Code defaults to blue). */
+  templateTheme: TemplateTheme | null;
 }
 
 export const DEFAULT_COURSE_SETTINGS: CourseSettings = {
@@ -29,6 +33,7 @@ export const DEFAULT_COURSE_SETTINGS: CourseSettings = {
   outroUrl: null,
   outroDurationMs: null,
   voiceEngine: null,
+  templateTheme: null,
 };
 
 function str(v: unknown): string | null {
@@ -62,7 +67,18 @@ export function normalizeCourseSettings(raw: unknown): CourseSettings {
       o.voiceEngine === "kokoro" || o.voiceEngine === "elevenlabs"
         ? o.voiceEngine
         : null,
+    templateTheme:
+      o.templateTheme === "blue" || o.templateTheme === "orange"
+        ? o.templateTheme
+        : null,
   };
+}
+
+export function resolveCourseTemplateTheme(
+  settings: CourseSettings | null | undefined,
+  courseTitle?: string | null,
+): TemplateTheme {
+  return settings?.templateTheme ?? templateThemeForCourseName(courseTitle);
 }
 
 /** Effective voice for a course (explicit setting wins over the name rule). */

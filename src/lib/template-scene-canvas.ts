@@ -1,6 +1,7 @@
 import { createExportCanvas } from "@/lib/export-runtime";
 import { canvasFont, ensureExcalifontLoaded } from "@/lib/scene-font";
 import { COMPOSITE_ASPECT } from "@/lib/course-visual-style";
+import { canvasTemplateGradient, templatePalette, type TemplateTheme } from "@/lib/template-theme";
 
 export type TemplateType = "text" | "countdown" | "typing";
 
@@ -19,6 +20,7 @@ export interface TemplateDrawOpts {
    * Static text templates ignore this.
    */
   progress?: number;
+  templateTheme?: TemplateTheme;
 }
 
 const W_REF = 1920;
@@ -137,10 +139,16 @@ export function drawTemplateFrame(
   ctx.save();
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, W, H);
+  const palette = templatePalette(opts.templateTheme);
+  ctx.fillStyle = canvasTemplateGradient(ctx, opts.templateTheme, W * 0.08, 0, W * 0.92, 0);
+  ctx.fillRect(W * 0.08, H * 0.08, W * 0.84, Math.max(3, H * 0.006));
 
   const scale = H / H_REF;
   const fontPx = Math.max(16, Math.round(opts.fontSize * scale));
-  const color = opts.color?.trim() || "#111111";
+  const color =
+    !opts.color?.trim() || opts.color.trim().toLowerCase() === "#111111"
+      ? palette.accent
+      : opts.color.trim();
   const padX = W * 0.08;
   const maxW = W - padX * 2;
 

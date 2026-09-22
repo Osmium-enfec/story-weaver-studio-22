@@ -59,6 +59,7 @@ function newId(): string {
 
 import type { ProjectRecord } from "@/lib/projects-api";
 import type { PartScriptPlan } from "@/lib/part-script";
+import type { TemplateTheme } from "@/lib/template-theme";
 import {
   composeIdFromScriptSceneId,
   isIncompleteComposeScene,
@@ -72,6 +73,7 @@ interface ComposeProjectPanelProps {
   projectId?: string;
   /** Course-themed background used by the stitched part preview. */
   previewBackground?: SceneBackground;
+  templateTheme?: TemplateTheme;
   project?: ProjectRecord | null;
   partTitle: string;
   onPartTitleChange: (v: string) => void;
@@ -100,6 +102,7 @@ interface ComposeProjectPanelProps {
 export function ComposeProjectPanel({
   projectId,
   previewBackground = DEFAULT_BACKGROUND,
+  templateTheme = "orange",
   project,
   partTitle,
   partScript,
@@ -1031,6 +1034,7 @@ export function ComposeProjectPanel({
                     background={previewBackground}
                     bgm={previewBgm}
                     projectId={projectId}
+                    templateTheme={templateTheme}
                   />
                 </div>
               )}
@@ -1318,6 +1322,7 @@ export function ComposeProjectPanel({
                   background={previewBackground}
                   bgm={previewBgm}
                   projectId={projectId}
+                  templateTheme={templateTheme}
                 />
               </div>
             </div>

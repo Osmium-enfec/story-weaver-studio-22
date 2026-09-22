@@ -12,10 +12,12 @@ import { apiPersistAssetFile } from "@/lib/compose-api";
 import {
   DEFAULT_COURSE_SETTINGS,
   VOICE_ENGINE_OPTIONS,
+  resolveCourseTemplateTheme,
   normalizeCourseSettings,
   type CourseSettings,
 } from "@/lib/course-settings";
 import { voiceEngineForCourseName } from "@/lib/course-voice";
+import { TEMPLATE_THEME_OPTIONS, templatePalette } from "@/lib/template-theme";
 
 type MediaField = "bgLoopUrl" | "introUrl" | "outroUrl";
 
@@ -172,6 +174,10 @@ export function CourseSettingsDialog({
     () => draft.voiceEngine ?? voiceEngineForCourseName(course.title),
     [draft.voiceEngine, course.title],
   );
+  const effectiveTemplateTheme = useMemo(
+    () => resolveCourseTemplateTheme(draft, course.title),
+    [draft, course.title],
+  );
 
   async function upload(field: MediaField, file: File) {
     setUploading(field);
@@ -272,6 +278,36 @@ export function CourseSettingsDialog({
               setDraft((d) => ({ ...d, outroUrl: null, outroDurationMs: null }))
             }
           />
+
+          <div className="rounded-lg border bg-card p-3">
+            <div className="text-sm font-medium">Template theme</div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {TEMPLATE_THEME_OPTIONS.map((opt) => {
+                const palette = templatePalette(opt.id);
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setDraft((d) => ({ ...d, templateTheme: opt.id }))}
+                    className={`flex min-w-0 flex-col items-start rounded-md border p-2.5 text-left ${
+                      effectiveTemplateTheme === opt.id
+                        ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                        : "hover:bg-accent"
+                    }`}
+                  >
+                    <span
+                      className="mb-2 h-2 w-full rounded-full"
+                      style={{ backgroundImage: palette.cssGradient }}
+                    />
+                    <span className="text-sm font-medium">{opt.label}</span>
+                    <span className="mt-0.5 text-xs text-muted-foreground">
+                      {opt.description}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           <div className="rounded-lg border bg-card p-3">
             <div className="text-sm font-medium">Default voice</div>

@@ -2,6 +2,7 @@ import type { Scene } from "@/components/VideoPlayer";
 import type { ExportQuality } from "@/lib/export-rasterize";
 import type { SceneBackground } from "@/lib/scene-background";
 import type { PartBgmConfig } from "@/lib/part-bgm";
+import type { TemplateTheme } from "@/lib/template-theme";
 
 /** Pre-extracted looping video-bg frames (native export; avoids headless black frames). */
 export interface ExportBackgroundFrames {
@@ -31,6 +32,7 @@ export interface ExportJobPayload {
   /** Screen-recording videos decoded to PNG stills for headless export. */
   recordingVideos?: ExportRecordingVideoFrames[];
   bgm?: PartBgmConfig | null;
+  templateTheme?: TemplateTheme;
   filename: string;
   /**
    * When set, the runner only rebuilds the audio track and remuxes onto a

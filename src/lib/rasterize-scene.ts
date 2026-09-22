@@ -36,6 +36,7 @@ import {
   questionTimelineAt,
   markCountdownSeconds,
 } from "./question-scene-layout";
+import type { TemplateTheme } from "./template-theme";
 import { recordingCameraAt, recordingCameraDrawRects } from "./recording-camera";
 import {
   drawRecordingBlurRegion,
@@ -65,6 +66,7 @@ export interface DrawOptions {
   markHoldElapsedMs?: number;
   /** Absolute speech-clock ms within the active scene (recording sync). */
   elapsedSpeechMs?: number;
+  templateTheme?: TemplateTheme;
 }
 
 /** Draw the shared outer background (video loop, gradient, or whiteboard). */
@@ -517,12 +519,13 @@ export function drawQuestionSceneFrame(
       secondsLeft,
       settings.countdownMs / 1000,
       settings.text,
+      opts.templateTheme,
     );
   } else if (opts.questionPhase === "intro" || opts.questionPhase === "intro-gap") {
     const intro = questionIntroSettingsFromScene(scene);
-    drawQuestionIntroScreen(ctx, boardX, boardY, boardW, boardH, intro.text);
+    drawQuestionIntroScreen(ctx, boardX, boardY, boardW, boardH, intro.text, opts.templateTheme);
   } else {
-    drawQuestionBoard(ctx, content, opts.questionPhase === "mark-gap" ? 1 : progress, boardX, boardY, boardW, boardH);
+    drawQuestionBoard(ctx, content, opts.questionPhase === "mark-gap" ? 1 : progress, boardX, boardY, boardW, boardH, opts.templateTheme);
   }
   ctx.restore();
 }
@@ -580,6 +583,7 @@ export function drawTemplateSceneFrame(
     countdownSec: scene.templateCountdownSec,
     elapsedMs,
     progress,
+    templateTheme: opts.templateTheme,
   });
   ctx.restore();
 }

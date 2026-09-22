@@ -14,6 +14,7 @@ import {
 } from "@/lib/code-scene-sfx";
 import { QuestionScene, MarkYourAnswersScreen, QuestionIntroScreen } from "./QuestionScene";
 import { TemplateScene } from "./TemplateScene";
+import type { TemplateTheme } from "@/lib/template-theme";
 import {
   sceneToQuestionContent,
   questionMarkSettingsFromScene,
@@ -615,6 +616,7 @@ function QuestionSceneStage({
   questionPhase = "question",
   markHoldElapsedMs = 0,
   contentOnly = false,
+  templateTheme = "orange",
 }: {
   scene: Scene;
   progress: number;
@@ -622,6 +624,7 @@ function QuestionSceneStage({
   questionPhase?: QuestionDisplayPhase;
   markHoldElapsedMs?: number;
   contentOnly?: boolean;
+  templateTheme?: TemplateTheme;
 }) {
   const content = sceneToQuestionContent(scene);
   const markSettings = questionMarkSettingsFromScene(scene);
@@ -657,11 +660,12 @@ function QuestionSceneStage({
               markSettings.countdownMs,
             )}
             holdSeconds={markSettings.countdownMs / 1000}
+            templateTheme={templateTheme}
           />
         ) : questionPhase === "intro" || questionPhase === "intro-gap" ? (
-          <QuestionIntroScreen embedded introText={introSettings.text} />
+          <QuestionIntroScreen embedded introText={introSettings.text} templateTheme={templateTheme} />
         ) : (
-          <QuestionScene content={content} progress={questionPhase === "mark-gap" ? 1 : progress} embedded />
+          <QuestionScene content={content} progress={questionPhase === "mark-gap" ? 1 : progress} embedded templateTheme={templateTheme} />
         )}
       </div>
   );
@@ -1172,12 +1176,14 @@ function TemplateSceneStage({
   elapsedSpeechMs,
   background,
   contentOnly = false,
+  templateTheme = "orange",
 }: {
   scene: Scene;
   progress: number;
   elapsedSpeechMs?: number;
   background: SceneBackground;
   contentOnly?: boolean;
+  templateTheme?: TemplateTheme;
 }) {
   const customBg = background.kind !== "whiteboard";
   const videoBg = background.kind === "video" ? background.url : null;
@@ -1193,7 +1199,7 @@ function TemplateSceneStage({
           boxShadow: customBg ? "0 10px 40px -12px rgba(0,0,0,0.25)" : "none",
         }}
       >
-        <TemplateScene scene={scene} progress={progress} elapsedMs={elapsedSpeechMs} />
+        <TemplateScene scene={scene} progress={progress} elapsedMs={elapsedSpeechMs} templateTheme={templateTheme} />
       </div>
   );
 
@@ -1233,6 +1239,7 @@ function SceneStage({
   questionPhase = "question",
   markHoldElapsedMs = 0,
   contentOnly = false,
+  templateTheme = "orange",
 }: {
   scene: Scene;
   progress: number;
@@ -1244,6 +1251,7 @@ function SceneStage({
   questionPhase?: QuestionDisplayPhase;
   markHoldElapsedMs?: number;
   contentOnly?: boolean;
+  templateTheme?: TemplateTheme;
 }) {
   if (scene.kind === "question") {
     return (
@@ -1254,6 +1262,7 @@ function SceneStage({
         questionPhase={questionPhase}
         markHoldElapsedMs={markHoldElapsedMs}
         contentOnly={contentOnly}
+        templateTheme={templateTheme}
       />
     );
   }
@@ -1322,6 +1331,7 @@ export function VideoPlayer({
   bgm,
   projectId,
   onPlaybackUpdate,
+  templateTheme = "orange",
 }: {
   scenes: Scene[];
   background?: SceneBackground;
@@ -1329,6 +1339,7 @@ export function VideoPlayer({
   bgm?: PartBgmConfig | null;
   /** Used to persist temp stitch audio to disk before export (avoids Chrome OOM). */
   projectId?: string | null;
+  templateTheme?: TemplateTheme;
   onPlaybackUpdate?: (info: {
     sceneIndex: number;
     progress: number;
@@ -2185,6 +2196,7 @@ export function VideoPlayer({
                     : 0
                 }
                 contentOnly
+                templateTheme={templateTheme}
               />
             </div>
             <div
@@ -2199,6 +2211,7 @@ export function VideoPlayer({
                 transparentMap={transparentMap}
                 playing={playing}
                 contentOnly
+                templateTheme={templateTheme}
               />
             </div>
           </>
@@ -2214,6 +2227,7 @@ export function VideoPlayer({
               playing={playing}
               questionPhase={displayQuestionPhase}
               markHoldElapsedMs={displayMarkCountdownElapsedMs}
+              templateTheme={templateTheme}
             />
           </div>
         )}

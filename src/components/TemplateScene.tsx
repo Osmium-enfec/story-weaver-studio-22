@@ -8,6 +8,7 @@ import {
   templateTypingVisibleText,
 } from "@/lib/template-scene-canvas";
 import type { Scene } from "@/components/VideoPlayer";
+import { templatePalette, type TemplateTheme } from "@/lib/template-theme";
 
 function wrapCssLines(text: string): string[] {
   return text.replace(/\r\n/g, "\n").split("\n");
@@ -18,12 +19,15 @@ export function TemplateScene({
   scene,
   progress,
   elapsedMs,
+  templateTheme = "orange",
 }: {
   scene: Scene;
   progress: number;
   /** When set (countdown), drives the tick instead of progress × full scene length. */
   elapsedMs?: number;
+  templateTheme?: TemplateTheme;
 }) {
+  const palette = templatePalette(templateTheme);
   const kind =
     scene.templateKind === "countdown"
       ? "countdown"
@@ -73,6 +77,7 @@ export function TemplateScene({
 
   return (
     <div ref={containerRef} className="absolute inset-0 flex flex-col items-center justify-center bg-white px-[8%]">
+      <div className="absolute left-[8%] right-[8%] top-[8%] h-1 rounded-full" style={{ backgroundImage: palette.cssGradient }} />
       {kind === "countdown" ? (
         <>
           {text.trim() ? (
@@ -92,7 +97,7 @@ export function TemplateScene({
             className="tabular-nums leading-none"
             style={{
               fontFamily: EXCALIFONT_STACK,
-              color,
+              color: scene.templateColor && scene.templateColor.toLowerCase() !== "#111111" ? color : palette.accent,
               fontSize: fontPx,
               fontWeight: 700,
             }}
@@ -105,7 +110,7 @@ export function TemplateScene({
           className="max-w-full whitespace-pre-wrap text-center leading-snug"
           style={{
             fontFamily: EXCALIFONT_STACK,
-            color,
+              color: scene.templateColor && scene.templateColor.toLowerCase() !== "#111111" ? color : palette.accent,
             fontSize: fontPx,
             fontWeight: 600,
           }}
@@ -129,7 +134,7 @@ export function TemplateScene({
           className="max-w-full whitespace-pre-wrap text-center leading-snug"
           style={{
             fontFamily: EXCALIFONT_STACK,
-            color,
+            color: scene.templateColor && scene.templateColor.toLowerCase() !== "#111111" ? color : palette.accent,
             fontSize: fontPx,
             fontWeight: 600,
           }}

@@ -2,14 +2,13 @@ import type { QuestionSceneContent } from "@/lib/question-scene-layout";
 import { canvasFont } from "@/lib/scene-font";
 import {
   codingRevealProgress,
-  QUESTION_BG_GRADIENT_STOPS,
   QUESTION_HINT_LABELS,
   QUESTION_INTRO_SCREEN_TEXT_DEFAULT,
-  QUESTION_OPTION_ACCENT,
   questionOptionMode,
   questionRevealProgress,
   questionRevealStepsFor,
 } from "@/lib/question-scene-layout";
+import { canvasTemplateGradient, templatePalette, type TemplateTheme } from "@/lib/template-theme";
 
 function roundRectPath(
   ctx: CanvasRenderingContext2D,
@@ -78,17 +77,18 @@ function drawEmptyMarker(
   y: number,
   size: number,
   mode: "mcq" | "msq",
+  accent: string,
 ) {
   if (mode === "msq") {
     roundRectPath(ctx, x, y, size, size, size * 0.22);
-    ctx.strokeStyle = QUESTION_OPTION_ACCENT;
+    ctx.strokeStyle = accent;
     ctx.lineWidth = Math.max(1.5, size * 0.14);
     ctx.stroke();
     return;
   }
   ctx.beginPath();
   ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
-  ctx.strokeStyle = QUESTION_OPTION_ACCENT;
+  ctx.strokeStyle = accent;
   ctx.lineWidth = Math.max(1.5, size * 0.14);
   ctx.stroke();
 }
@@ -158,10 +158,13 @@ export function drawQuestionIntroScreen(
   w: number,
   h: number,
   introText = QUESTION_INTRO_SCREEN_TEXT_DEFAULT,
+  templateTheme: TemplateTheme = "orange",
 ) {
   ctx.save();
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = canvasTemplateGradient(ctx, templateTheme, x + w * 0.38, y, x + w * 0.62, y);
+  ctx.fillRect(x + w * 0.38, y + h * 0.38, w * 0.24, Math.max(4, h * 0.01));
   const titleSize = Math.max(22, Math.round(Math.min(w, h) * 0.06));
   ctx.fillStyle = "#111827";
   ctx.font = canvasFont(700, titleSize);
@@ -171,19 +174,15 @@ export function drawQuestionIntroScreen(
   ctx.restore();
 }
 
-function questionOrangeGradient(
+function questionThemeGradient(
   ctx: CanvasRenderingContext2D,
   x0: number,
   y0: number,
   x1: number,
   y1: number,
+  templateTheme: TemplateTheme,
 ): CanvasGradient {
-  const g = ctx.createLinearGradient(x0, y0, x1, y1);
-  const stops = QUESTION_BG_GRADIENT_STOPS;
-  g.addColorStop(0, stops[0]);
-  g.addColorStop(0.5, stops[1]);
-  g.addColorStop(1, stops[2]);
-  return g;
+  return canvasTemplateGradient(ctx, templateTheme, x0, y0, x1, y1);
 }
 
 export function drawMarkYourAnswersScreen(
@@ -195,6 +194,7 @@ export function drawMarkYourAnswersScreen(
   secondsLeft = 3,
   holdSeconds = 3,
   markText = "Mark your answers",
+  templateTheme: TemplateTheme = "orange",
 ) {
   ctx.save();
   ctx.fillStyle = "#ffffff";
@@ -231,7 +231,7 @@ export function drawMarkYourAnswersScreen(
 
   const shown = Math.max(0, secondsLeft);
   const frac = holdSeconds > 0 ? Math.min(1, shown / holdSeconds) : 0;
-  const grad = questionOrangeGradient(ctx, cx - ringR, ringCy, cx + ringR, ringCy);
+  const grad = questionThemeGradient(ctx, cx - ringR, ringCy, cx + ringR, ringCy, templateTheme);
   if (frac > 0) {
     ctx.beginPath();
     ctx.arc(cx, ringCy, ringR, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
@@ -294,7 +294,9 @@ function drawCodingProblemBoard(
   y: number,
   w: number,
   h: number,
+  templateTheme: TemplateTheme,
 ) {
+  const palette = templatePalette(templateTheme);
   ctx.save();
   ctx.fillStyle = "#f7f8fa";
   ctx.fillRect(x, y, w, h);
@@ -325,6 +327,9 @@ function drawCodingProblemBoard(
     ctx.stroke();
 
     let cy = y + pad;
+    ctx.fillStyle = questionThemeGradient(ctx, x + pad, cy, x + pad * 6, cy, templateTheme);
+    ctx.fillRect(x + pad, cy, pad * 5, Math.max(3, h * 0.006));
+    cy += pad * 1.2;
     const title = content.codingTitle || content.subtitle || "Coding Problem";
     ctx.fillStyle = "#111827";
     ctx.font = codingUiFont(600, fontTitle);
@@ -370,9 +375,9 @@ function drawCodingProblemBoard(
     const badgeX = rightX + pad;
     const badgeY = y + (headerH - badgeH) / 2;
     roundRectPath(ctx, badgeX, badgeY, badgeW, badgeH, 4);
-    ctx.fillStyle = "#f9fafb";
+    ctx.fillStyle = palette.soft;
     ctx.fill();
-    ctx.strokeStyle = "#e5e7eb";
+    ctx.strokeStyle = palette.accent;
     ctx.stroke();
     ctx.fillStyle = "#374151";
     ctx.textAlign = "left";
@@ -510,9 +515,10 @@ export function drawQuestionBoard(
   y: number,
   w: number,
   h: number,
+  templateTheme: TemplateTheme = "orange",
 ) {
   if (content.kind === "coding") {
-    drawCodingProblemBoard(ctx, content, progress, x, y, w, h);
+    drawCodingProblemBoard(ctx, content, progress, x, y, w, h, templateTheme);
     return;
   }
 
@@ -629,15 +635,15 @@ export function drawQuestionBoard(
       const ox = x + padX;
       const ow = innerW;
       roundRectPath(ctx, ox, oy, ow, optionH, Math.round(optionH * 0.22));
-      ctx.strokeStyle = questionOrangeGradient(ctx, ox, oy, ox + ow, oy);
+      ctx.strokeStyle = questionThemeGradient(ctx, ox, oy, ox + ow, oy, templateTheme);
       ctx.lineWidth = Math.max(2.5, ow * 0.005);
       ctx.stroke();
 
       const markerX = ox + Math.round(ow * 0.04);
       const markerY = oy + (optionH - markerSize) / 2;
-      drawEmptyMarker(ctx, markerX, markerY, markerSize, optionMode);
+      drawEmptyMarker(ctx, markerX, markerY, markerSize, optionMode, templatePalette(templateTheme).accent);
 
-      ctx.fillStyle = questionOrangeGradient(ctx, ox, oy, ox + ow * 0.35, oy);
+      ctx.fillStyle = questionThemeGradient(ctx, ox, oy, ox + ow * 0.35, oy, templateTheme);
       ctx.font = canvasFont(700, fontLetter);
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";

@@ -5,12 +5,11 @@ import {
   QUESTION_HINT_LABELS,
   QUESTION_INTRO_SCREEN_TEXT_DEFAULT,
   QUESTION_MARK_SCREEN_TEXT_DEFAULT,
-  QUESTION_BG_GRADIENT_CSS,
-  QUESTION_OPTION_ACCENT,
   questionOptionMode,
   questionRevealProgress,
   questionRevealStepsFor,
 } from "@/lib/question-scene-layout";
+import { templatePalette, type TemplateTheme } from "@/lib/template-theme";
 
 function FadeIn({
   progress,
@@ -49,15 +48,19 @@ function InfoIcon({ className }: { className?: string }) {
 export function QuestionIntroScreen({
   embedded = false,
   introText = QUESTION_INTRO_SCREEN_TEXT_DEFAULT,
+  templateTheme = "orange",
 }: {
   embedded?: boolean;
   introText?: string;
+  templateTheme?: TemplateTheme;
 }) {
+  const palette = templatePalette(templateTheme);
   const inner = (
     <div
       className="flex h-full w-full flex-col items-center justify-center bg-white px-8 text-center font-excalifont"
       style={{ fontFamily: EXCALIFONT_STACK }}
     >
+      <div className="mb-7 h-1.5 w-24 rounded-full" style={{ backgroundImage: palette.cssGradient }} />
       <p className="text-2xl font-bold tracking-tight text-gray-900 md:text-3xl lg:text-4xl">
         {introText}
       </p>
@@ -88,12 +91,15 @@ export function MarkYourAnswersScreen({
   secondsLeft = 3,
   holdSeconds = 3,
   markText = QUESTION_MARK_SCREEN_TEXT_DEFAULT,
+  templateTheme = "orange",
 }: {
   embedded?: boolean;
   secondsLeft?: number;
   holdSeconds?: number;
   markText?: string;
+  templateTheme?: TemplateTheme;
 }) {
+  const palette = templatePalette(templateTheme);
   const shown = Math.max(0, secondsLeft);
   const gradId = "mark-countdown-grad";
   const inner = (
@@ -110,9 +116,9 @@ export function MarkYourAnswersScreen({
           <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120" aria-hidden>
             <defs>
               <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ffb404" />
-                <stop offset="50%" stopColor="#f67e00" />
-                <stop offset="100%" stopColor="#e13900" />
+                <stop offset="0%" stopColor={palette.stops[0]} />
+                <stop offset="50%" stopColor={palette.stops[1]} />
+                <stop offset="100%" stopColor={palette.stops[2]} />
               </linearGradient>
             </defs>
             <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" strokeWidth="8" />
@@ -130,7 +136,7 @@ export function MarkYourAnswersScreen({
           <span
             className="text-5xl font-bold tabular-nums md:text-6xl"
             style={{
-              backgroundImage: QUESTION_BG_GRADIENT_CSS,
+              backgroundImage: palette.cssGradient,
               WebkitBackgroundClip: "text",
               backgroundClip: "text",
               color: "transparent",
@@ -166,10 +172,13 @@ export function MarkYourAnswersScreen({
 function CodingProblemScene({
   content,
   progress,
+  templateTheme,
 }: {
   content: QuestionSceneContent;
   progress: number;
+  templateTheme: TemplateTheme;
 }) {
+  const palette = templatePalette(templateTheme);
   const tests = (content.codingTestCases ?? []).filter(
     (t) => t.input.trim() || t.output.trim(),
   );
@@ -182,8 +191,10 @@ function CodingProblemScene({
       <FadeIn
         progress={codingRevealProgress(progress, "problem")}
         className="flex h-full w-[42%] min-w-0 flex-col border-r border-gray-200 bg-white"
+        
       >
         <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3 md:px-4 md:py-4">
+          <div className="mb-3 h-1 w-14 rounded-full" style={{ backgroundImage: palette.cssGradient }} />
           <h2 className="text-sm font-semibold text-gray-900 md:text-base">
             {content.codingTitle || content.subtitle || "Coding Problem"}
           </h2>
@@ -199,7 +210,7 @@ function CodingProblemScene({
           className="flex min-h-0 flex-[1.35] flex-col border-b border-gray-200 bg-white"
         >
           <div className="flex items-center justify-between border-b border-gray-100 px-3 py-1.5">
-            <span className="rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+            <span className="rounded border px-2 py-0.5 text-[10px] font-medium text-gray-700" style={{ borderColor: palette.accent, backgroundColor: palette.soft }}>
               Code
             </span>
             <span className="text-[10px] text-gray-400">Auto</span>
@@ -272,13 +283,16 @@ export function QuestionScene({
   content,
   progress,
   embedded = false,
+  templateTheme = "orange",
 }: {
   content: QuestionSceneContent;
   progress: number;
   embedded?: boolean;
+  templateTheme?: TemplateTheme;
 }) {
+  const palette = templatePalette(templateTheme);
   if (content.kind === "coding") {
-    const board = <CodingProblemScene content={content} progress={progress} />;
+    const board = <CodingProblemScene content={content} progress={progress} templateTheme={templateTheme} />;
     if (embedded) {
       return (
         <div className="flex h-full w-full items-center justify-center p-2 md:p-3">
@@ -355,24 +369,24 @@ export function QuestionScene({
             <FadeIn key={letter} progress={p}>
               <div
                 className="rounded-xl p-[2px]"
-                style={{ backgroundImage: QUESTION_BG_GRADIENT_CSS }}
+                style={{ backgroundImage: palette.cssGradient }}
               >
                 <div className="flex items-center gap-3 rounded-[10px] bg-white px-4 py-3 md:gap-4 md:px-5 md:py-4">
                   {optionMode === "mcq" ? (
                     <span
                       className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 bg-white"
-                      style={{ borderColor: QUESTION_OPTION_ACCENT }}
+                      style={{ borderColor: palette.accent }}
                     />
                   ) : (
                     <span
                       className="flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 bg-white"
-                      style={{ borderColor: QUESTION_OPTION_ACCENT }}
+                      style={{ borderColor: palette.accent }}
                     />
                   )}
                   <span
                     className="text-lg font-bold md:text-xl"
                     style={{
-                      backgroundImage: QUESTION_BG_GRADIENT_CSS,
+                      backgroundImage: palette.cssGradient,
                       WebkitBackgroundClip: "text",
                       backgroundClip: "text",
                       color: "transparent",
