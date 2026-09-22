@@ -7,6 +7,7 @@
  */
 import type { ProjectPart } from "@/lib/project-parts";
 import { getProjectParts } from "@/lib/project-parts";
+import type { TemplateTheme } from "@/lib/template-theme";
 
 export interface BundlePayload {
   filename: string;
@@ -15,6 +16,7 @@ export interface BundlePayload {
   scenes: unknown[];
   background?: unknown;
   bgm?: unknown;
+  templateTheme?: TemplateTheme;
 }
 
 /** Public origin used for absolute asset URLs inside a frozen bundle. */
@@ -94,6 +96,7 @@ export function buildBundlePayload(opts: {
   baseUrl: string;
   /** Course theme background (bg loop / plain white). Falls back to the part's own. */
   background?: unknown;
+  templateTheme?: TemplateTheme;
 }): { payload: BundlePayload; durationMs: number; sceneCount: number } {
   const { part, baseUrl } = opts;
   const scenes = Array.isArray(part.scenes) ? part.scenes : [];
@@ -149,6 +152,7 @@ export function buildBundlePayload(opts: {
         ephemeral,
       ),
       bgm,
+      templateTheme: opts.templateTheme ?? "orange",
     },
     durationMs,
     sceneCount: scenes.length,
