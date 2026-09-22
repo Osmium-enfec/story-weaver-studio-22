@@ -47,24 +47,22 @@ async function generateTtsMp3(
 
   const engine = opts.engine ?? DEFAULT_VOICE_ENGINE;
 
-  // Kokoro courses (Zero Code): Heart voice, with ElevenLabs as fallback when
-  // the Kokoro server is unreachable.
+  // Kokoro courses (Zero Code): Heart voice. No silent fallback — if the
+  // Kokoro voice service fails, surface the real error instead of quietly
+  // switching to a different voice.
   if (engine === "kokoro") {
     try {
       return await generateKokoroMp3Buffer(spoken, "af_heart");
     } catch (kokoroErr) {
-      console.warn("Kokoro TTS unavailable, falling back to ElevenLabs:", kokoroErr);
+      const detail = kokoroErr instanceof Error ? kokoroErr.message : String(kokoroErr);
+      console.error("Kokoro TTS failed:", detail);
+      throw new TtsError(`Kokoro voice service failed: ${detail}`, 503);
     }
   }
 
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) {
-    throw new TtsError(
-      engine === "kokoro"
-        ? "Kokoro TTS server is not running, and no ElevenLabs fallback key is configured."
-        : "No ElevenLabs API key is configured.",
-      503,
-    );
+    throw new TtsError("No ElevenLabs API key is configured.", 503);
   }
 
 
