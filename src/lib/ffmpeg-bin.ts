@@ -5,16 +5,36 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 
+export const NO_LOCAL_VIDEO_TOOLS_MESSAGE =
+  "Voice replacement for screen recordings runs only on the studio machines (Mac app or the self-hosted server). This hosted site can't process video files, so open this episode in the studio app to swap the voice.";
+
+/** Serverless/edge runtimes stub child_process — detect that once. */
+let processSpawnSupported: boolean | null = null;
+function canSpawnProcesses(): boolean {
+  if (processSpawnSupported !== null) return processSpawnSupported;
+  try {
+    spawnSync(process.execPath ?? "node", ["-e", ""], { timeout: 5_000 });
+    processSpawnSupported = true;
+  } catch {
+    processSpawnSupported = false;
+  }
+  return processSpawnSupported;
+}
+
 /** True when this path is a runnable ffmpeg for the current CPU. */
 function canRunFfmpeg(bin: string): boolean {
   if (!bin || (bin !== "ffmpeg" && !existsSync(bin))) return false;
-  const r = spawnSync(bin, ["-version"], {
-    encoding: "utf8",
-    timeout: 8_000,
-  });
-  // macOS Apple Silicon + Intel binary → errno -86 (EBADARCH)
-  if (r.error) return false;
-  return r.status === 0;
+  try {
+    const r = spawnSync(bin, ["-version"], {
+      encoding: "utf8",
+      timeout: 8_000,
+    });
+    // macOS Apple Silicon + Intel binary → errno -86 (EBADARCH)
+    if (r.error) return false;
+    return r.status === 0;
+  } catch {
+    return false;
+  }
 }
 
 function ffmpegStaticPath(): string | null {
@@ -46,6 +66,7 @@ function candidateBins(): string[] {
 
 /** Resolve a working ffmpeg binary (throws if none can run on this CPU). */
 export async function resolveFfmpegBin(): Promise<string> {
+  if (!canSpawnProcesses()) throw new Error(NO_LOCAL_VIDEO_TOOLS_MESSAGE);
   const tried: string[] = [];
   for (const bin of candidateBins()) {
     if (tried.includes(bin)) continue;
@@ -59,7 +80,13 @@ export async function resolveFfmpegBin(): Promise<string> {
 
 export function runFfmpeg(bin: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const p = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let p: ReturnType<typeof spawn>;
+    try {
+      p = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    } catch {
+      reject(new Error(NO_LOCAL_VIDEO_TOOLS_MESSAGE));
+      return;
+    }
     let err = "";
     p.stderr?.on("data", (d) => {
       err += String(d);
