@@ -145,7 +145,10 @@ export function drawTemplateFrame(
 
   const scale = H / H_REF;
   const fontPx = Math.max(16, Math.round(opts.fontSize * scale));
-  const color = opts.color?.trim() || palette.accent;
+  const color =
+    !opts.color?.trim() || opts.color.trim().toLowerCase() === "#111111"
+      ? palette.accent
+      : opts.color.trim();
   const padX = W * 0.08;
   const maxW = W - padX * 2;
 

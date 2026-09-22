@@ -97,7 +97,7 @@ export function TemplateScene({
             className="tabular-nums leading-none"
             style={{
               fontFamily: EXCALIFONT_STACK,
-              color: scene.templateColor ? color : palette.accent,
+              color: scene.templateColor && scene.templateColor.toLowerCase() !== "#111111" ? color : palette.accent,
               fontSize: fontPx,
               fontWeight: 700,
             }}
@@ -110,7 +110,7 @@ export function TemplateScene({
           className="max-w-full whitespace-pre-wrap text-center leading-snug"
           style={{
             fontFamily: EXCALIFONT_STACK,
-              color: scene.templateColor ? color : palette.accent,
+              color: scene.templateColor && scene.templateColor.toLowerCase() !== "#111111" ? color : palette.accent,
             fontSize: fontPx,
             fontWeight: 600,
           }}
@@ -134,7 +134,7 @@ export function TemplateScene({
           className="max-w-full whitespace-pre-wrap text-center leading-snug"
           style={{
             fontFamily: EXCALIFONT_STACK,
-            color: scene.templateColor ? color : palette.accent,
+            color: scene.templateColor && scene.templateColor.toLowerCase() !== "#111111" ? color : palette.accent,
             fontSize: fontPx,
             fontWeight: 600,
           }}

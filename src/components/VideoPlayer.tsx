@@ -1274,7 +1274,6 @@ function SceneStage({
         background={background}
         playing={playing}
         contentOnly={contentOnly}
-        templateTheme={templateTheme}
       />
     );
   }
