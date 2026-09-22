@@ -444,6 +444,7 @@ export function ComposeStepsAccordion({
           text: "Your headline here",
           color: "#1a1a1a",
           fontSize: 72,
+          templateTheme,
         }),
         renderTemplatePreviewDataUrl({
           type: "typing",
@@ -451,6 +452,7 @@ export function ComposeStepsAccordion({
           color: "#1a1a1a",
           fontSize: 72,
           progress: 0.55,
+          templateTheme,
         }),
         renderTemplatePreviewDataUrl({
           type: "countdown",
@@ -459,6 +461,7 @@ export function ComposeStepsAccordion({
           fontSize: 160,
           countdownSec: 5,
           progress: 0.4,
+          templateTheme,
         }),
         ...FIXED_TEMPLATE_PRESET_LIST.map((preset) =>
           renderTemplatePreviewDataUrl({
@@ -466,6 +469,7 @@ export function ComposeStepsAccordion({
             text: preset.text,
             color: FIXED_TEMPLATE_TEXT_COLOR,
             fontSize: FIXED_TEMPLATE_FONT_SIZE,
+             templateTheme,
           }).then((url) => [preset.id, url] as const),
         ),
       ]);
@@ -477,7 +481,7 @@ export function ComposeStepsAccordion({
     return () => {
       cancelled = true;
     };
-  }, [sourceMode]);
+  }, [sourceMode, templateTheme]);
 
   useEffect(() => {
     if (sourceMode !== "template" || !templateDraft.picked) return;
@@ -490,6 +494,7 @@ export function ComposeStepsAccordion({
         color: templateDraft.textColor,
         fontSize: templateDraft.fontSize,
         countdownSec: templateDraft.countdownSec,
+        templateTheme,
         progress:
           templateDraft.templateKind === "countdown"
             ? 0.4
@@ -514,6 +519,7 @@ export function ComposeStepsAccordion({
     templateDraft.textColor,
     templateDraft.fontSize,
     templateDraft.countdownSec,
+    templateTheme,
   ]);
 
   function pickTemplate(kind: TemplateKind) {

@@ -1296,6 +1296,7 @@ function SceneStage({
         elapsedSpeechMs={elapsedSpeechMs}
         background={background}
         contentOnly={contentOnly}
+        templateTheme={templateTheme}
       />
     );
   }

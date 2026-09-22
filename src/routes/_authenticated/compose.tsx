@@ -1317,6 +1317,7 @@ function ComposePage() {
         text: res.text,
         color: FIXED_TEMPLATE_TEXT_COLOR,
         fontSize: FIXED_TEMPLATE_FONT_SIZE,
+        templateTheme: courseSettings?.templateTheme,
       });
       const draft = fixedTemplateDraftFromPreset(presetId, res.audioUrl, durationMs, previewUrl);
       const built = composeTemplateDraftToScene(draft);
@@ -2733,6 +2734,7 @@ function ComposePage() {
             color: "#1a1a1a",
             fontSize: 72,
             countdownSec: 5,
+            templateTheme: courseSettings?.templateTheme,
           });
         } catch {
           previewUrl = null;
