@@ -80,7 +80,13 @@ export async function resolveFfmpegBin(): Promise<string> {
 
 export function runFfmpeg(bin: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const p = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let p: ReturnType<typeof spawn>;
+    try {
+      p = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
+    } catch {
+      reject(new Error(NO_LOCAL_VIDEO_TOOLS_MESSAGE));
+      return;
+    }
     let err = "";
     p.stderr?.on("data", (d) => {
       err += String(d);
