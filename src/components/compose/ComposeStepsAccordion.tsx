@@ -147,6 +147,7 @@ import {
 } from "@/lib/template-fixed-presets";
 import { EXCALIFONT_STACK } from "@/lib/scene-font";
 import type { SceneBackground } from "@/lib/scene-background";
+import type { TemplateTheme } from "@/lib/template-theme";
 import { ComposeBackgroundPicker } from "@/components/compose/ComposeBackgroundPicker";
 import type { ComposeBackgroundPreset } from "@/lib/compose-background";
 import { QUESTION_KIND_LABELS, type QuestionKind } from "@/lib/compose-question";
@@ -308,6 +309,7 @@ interface ComposeStepsAccordionProps {
   backgroundPreset: ComposeBackgroundPreset;
   onBackgroundPreset: (preset: ComposeBackgroundPreset) => void;
   sceneBackground: SceneBackground;
+  templateTheme?: TemplateTheme;
   editingScene?: boolean;
 }
 
@@ -406,6 +408,7 @@ export function ComposeStepsAccordion({
   backgroundPreset,
   onBackgroundPreset,
   sceneBackground,
+  templateTheme,
   editingScene = false,
 }: ComposeStepsAccordionProps) {
   const previewBackground = sceneBackground;
@@ -1338,6 +1341,7 @@ export function ComposeStepsAccordion({
                 scenes={[previewScene]}
                 background={previewBackground}
                 projectId={projectId}
+                templateTheme={templateTheme}
               />
             )}
           </AccordionContent>

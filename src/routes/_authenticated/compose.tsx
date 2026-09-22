@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { apiGetCourse } from "@/lib/courses-api";
-import { normalizeCourseSettings } from "@/lib/course-settings";
+import { normalizeCourseSettings, resolveCourseTemplateTheme } from "@/lib/course-settings";
 import { clearActiveCourseMedia, setActiveCourseMedia } from "@/lib/course-media";
 import { NavBar } from "@/components/NavBar";
 import { ComposeProjectPanel } from "@/components/compose/ComposeProjectPanel";
@@ -311,7 +311,13 @@ function ComposePage() {
   const courseId = project?.course_id ?? null;
   const { data: courseSettings } = useQuery({
     queryKey: ["course-settings", courseId],
-    queryFn: async () => normalizeCourseSettings((await apiGetCourse(courseId!)).settings),
+    queryFn: async () => {
+      const course = await apiGetCourse(courseId!);
+      return {
+        settings: normalizeCourseSettings(course.settings),
+        templateTheme: resolveCourseTemplateTheme(normalizeCourseSettings(course.settings), course.title),
+      };
+    },
     enabled: !!courseId,
     staleTime: 300_000,
   });
@@ -321,8 +327,8 @@ function ComposePage() {
       clearActiveCourseMedia();
       return;
     }
-    setActiveCourseMedia(courseSettings);
-    setBackgroundPreset(courseSettings.backgroundPreset);
+    setActiveCourseMedia(courseSettings.settings);
+    setBackgroundPreset(courseSettings.settings.backgroundPreset);
     setCourseMediaVersion((v) => v + 1);
   }, [courseSettings]);
 
@@ -3952,6 +3958,7 @@ function ComposePage() {
           backgroundPreset={backgroundPreset}
           onBackgroundPreset={setBackgroundPreset}
           sceneBackground={sceneBackground}
+          templateTheme={courseSettings?.templateTheme}
         />
         <CropAnnotateDialog
           crop={draft.crops.find((c) => c.id === annotateCropId) ?? null}
@@ -3970,6 +3977,7 @@ function ComposePage() {
             <ComposeProjectPanel
               projectId={projectId}
               previewBackground={sceneBackground}
+              templateTheme={courseSettings?.templateTheme}
               project={project ?? undefined}
               partTitle={partTitle}
               onPartTitleChange={setPartTitle}
