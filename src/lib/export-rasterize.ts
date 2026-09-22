@@ -102,6 +102,7 @@ export async function rasterizeExportFrames(opts: {
   quality: ExportQuality;
   background?: SceneBackground;
   bgm?: PartBgmConfig | null;
+  templateTheme?: import("@/lib/template-theme").TemplateTheme;
   /** Pre-baked looping video bg stills (native export). Prefer over HTMLVideoElement. */
   backgroundFrames?: ExportBackgroundFrames & { urls: string[] };
   /** Pre-baked screen-recording stills (avoids headless black video frames). */
@@ -129,6 +130,7 @@ export async function rasterizeExportFrames(opts: {
     quality,
     background = DEFAULT_BACKGROUND,
     bgm,
+    templateTheme,
     backgroundFrames,
     recordingVideos,
     audioOnly = false,
@@ -334,6 +336,7 @@ export async function rasterizeExportFrames(opts: {
 
   const drawOpts = {
     background,
+    templateTheme,
     transparent: transparentImgs,
     videoBg: videoBgEl ?? undefined,
     videoBgFrame: undefined as CanvasImageSource | undefined,

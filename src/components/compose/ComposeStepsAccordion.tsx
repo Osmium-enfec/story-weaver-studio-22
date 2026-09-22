@@ -1997,6 +1997,7 @@ export function ComposeStepsAccordion({
                 scenes={[previewScene]}
                 background={previewBackground}
                 projectId={projectId}
+                templateTheme={templateTheme}
               />
             )}
           </AccordionContent>
@@ -2298,6 +2299,7 @@ export function ComposeStepsAccordion({
                 scenes={[previewScene]}
                 background={previewBackground}
                 projectId={projectId}
+                templateTheme={templateTheme}
               />
             )}
           </AccordionContent>
@@ -2458,6 +2460,7 @@ export function ComposeStepsAccordion({
                 scenes={[previewScene]}
                 background={previewBackground}
                 projectId={projectId}
+                templateTheme={templateTheme}
               />
             )}
           </AccordionContent>
@@ -2647,6 +2650,7 @@ export function ComposeStepsAccordion({
                 scenes={[previewScene]}
                 background={previewBackground}
                 projectId={projectId}
+                templateTheme={templateTheme}
               />
             )}
           </AccordionContent>
@@ -3089,6 +3093,7 @@ export function ComposeStepsAccordion({
                 scenes={[previewScene]}
                 background={previewBackground}
                 projectId={projectId}
+                templateTheme={templateTheme}
               />
             )}
           </AccordionContent>
@@ -3408,6 +3413,7 @@ export function ComposeStepsAccordion({
               scenes={[previewScene]}
               background={previewBackground}
               projectId={projectId}
+              templateTheme={templateTheme}
             />
           )}
         </AccordionContent>

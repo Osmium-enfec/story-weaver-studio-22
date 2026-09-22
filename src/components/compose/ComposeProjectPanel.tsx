@@ -1322,6 +1322,7 @@ export function ComposeProjectPanel({
                   background={previewBackground}
                   bgm={previewBgm}
                   projectId={projectId}
+                  templateTheme={templateTheme}
                 />
               </div>
             </div>

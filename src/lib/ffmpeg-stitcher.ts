@@ -11,6 +11,7 @@ import {
 } from "./export-rasterize";
 import { DEFAULT_BACKGROUND, type SceneBackground } from "./scene-background";
 import type { PartBgmConfig } from "./part-bgm";
+import type { TemplateTheme } from "./template-theme";
 
 export type { ExportQuality, StageProgress };
 
@@ -38,6 +39,7 @@ export async function exportToMp4(
   onProgress: StageProgress,
   background: SceneBackground = DEFAULT_BACKGROUND,
   bgm?: PartBgmConfig | null,
+  templateTheme?: TemplateTheme,
 ): Promise<Blob> {
   const { fps, preset, crf } = EXPORT_PRESETS[quality];
 
@@ -50,6 +52,7 @@ export async function exportToMp4(
     quality,
     background,
     bgm,
+    templateTheme,
     onProgress,
     onFrame: async (png, f) => {
       const name = `f${String(f).padStart(6, "0")}.png`;
