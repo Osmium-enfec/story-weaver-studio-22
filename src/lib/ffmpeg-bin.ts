@@ -66,6 +66,7 @@ function candidateBins(): string[] {
 
 /** Resolve a working ffmpeg binary (throws if none can run on this CPU). */
 export async function resolveFfmpegBin(): Promise<string> {
+  if (!canSpawnProcesses()) throw new Error(NO_LOCAL_VIDEO_TOOLS_MESSAGE);
   const tried: string[] = [];
   for (const bin of candidateBins()) {
     if (tried.includes(bin)) continue;
