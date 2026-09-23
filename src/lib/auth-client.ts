@@ -50,3 +50,23 @@ export function clearAuthSession(): void {
   clearStoredSession();
   notifyAuthChange();
 }
+
+export const SESSION_EXPIRED_MESSAGE =
+  "Your sign-in has expired. Please sign in again to keep working.";
+
+let redirectingToSignIn = false;
+
+/**
+ * A 401 from any API means the stored token is gone/expired. Showing a bare
+ * "Unauthorized" banner left people editing an empty page (and risking
+ * saving over their work), so we clear the session and send them to sign in.
+ */
+export function handleExpiredSession(): void {
+  clearAuthSession();
+  if (typeof window === "undefined" || redirectingToSignIn) return;
+  const path = window.location.pathname;
+  if (path.startsWith("/auth")) return;
+  redirectingToSignIn = true;
+  const next = path + window.location.search;
+  window.location.replace(`/auth?expired=1&next=${encodeURIComponent(next)}`);
+}
