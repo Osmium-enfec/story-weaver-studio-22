@@ -1,4 +1,8 @@
-import { getStoredSessionToken } from "@/lib/auth-client";
+import {
+  getStoredSessionToken,
+  handleExpiredSession,
+  SESSION_EXPIRED_MESSAGE,
+} from "@/lib/auth-client";
 
 export interface AdminOverview {
   summary: {
@@ -75,13 +79,18 @@ export type AdminAssignUser = {
 async function adminFetch(path: string, init?: RequestInit): Promise<Response> {
   const token = getStoredSessionToken();
   if (!token) throw new Error("Sign in required");
-  return fetch(path, {
+  const res = await fetch(path, {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
       Authorization: `Bearer ${token}`,
     },
   });
+  if (res.status === 401) {
+    handleExpiredSession();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
+  return res;
 }
 
 export async function apiAdminOverview(): Promise<AdminOverview> {

@@ -1,4 +1,8 @@
-import { getStoredSessionToken } from "@/lib/auth-client";
+import {
+  getStoredSessionToken,
+  handleExpiredSession,
+  SESSION_EXPIRED_MESSAGE,
+} from "@/lib/auth-client";
 
 /** Episode list card (legacy name: project). */
 export type ProjectListItem = {
@@ -59,6 +63,11 @@ async function projectsFetch<T>(
     },
     body: JSON.stringify(body),
   });
+
+  if (res.status === 401) {
+    handleExpiredSession();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
 
   // When Cloudflare/LB returns an HTML error page (502/etc), `res.json()`
   // throws: "Unexpected token '<', ... is not valid JSON" and breaks the UI.

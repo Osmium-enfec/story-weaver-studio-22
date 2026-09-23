@@ -5,7 +5,13 @@ import { getStoredSession, persistAuthSession } from "@/lib/auth-client";
 import { Loader2, Sparkles } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 
+type AuthSearch = { expired?: boolean; next?: string };
+
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): AuthSearch => ({
+    expired: search.expired === "1" || search.expired === true,
+    next: typeof search.next === "string" ? search.next : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Sign in — Div Studio" },
@@ -17,6 +23,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { expired, next } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -24,8 +31,8 @@ function AuthPage() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getStoredSession()) navigate({ to: "/courses", replace: true });
-  }, [navigate]);
+    if (getStoredSession() && !expired) navigate({ to: "/courses", replace: true });
+  }, [navigate, expired]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,6 +44,10 @@ function AuthPage() {
           ? await apiLogin(email, password)
           : await apiRegister(email, password);
       persistAuthSession({ token: result.token, user: result.user });
+      if (next && next.startsWith("/") && !next.startsWith("//")) {
+        window.location.replace(next);
+        return;
+      }
       navigate({ to: "/courses" });
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Failed");
@@ -58,6 +69,13 @@ function AuthPage() {
             Local SQLite storage — no cloud account required.
           </p>
         </div>
+
+        {expired && (
+          <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            Your sign-in expired, so your work could not load. Sign in again to
+            continue where you left off — nothing has been lost.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <input

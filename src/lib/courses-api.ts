@@ -1,4 +1,8 @@
-import { getStoredSessionToken } from "@/lib/auth-client";
+import {
+  getStoredSessionToken,
+  handleExpiredSession,
+  SESSION_EXPIRED_MESSAGE,
+} from "@/lib/auth-client";
 import type { CourseSettings } from "@/lib/course-settings";
 
 export type CourseListItem = {
@@ -35,6 +39,10 @@ async function coursesFetch<T>(body: Record<string, unknown>): Promise<T> {
     },
     body: JSON.stringify(body),
   });
+  if (res.status === 401) {
+    handleExpiredSession();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
   const data = (await res.json()) as T & { error?: string };
   if (!res.ok) throw new Error(data.error ?? "Courses request failed");
   return data;
