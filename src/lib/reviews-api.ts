@@ -1,4 +1,8 @@
-import { getStoredSessionToken } from "@/lib/auth-client";
+import {
+  getStoredSessionToken,
+  handleExpiredSession,
+  SESSION_EXPIRED_MESSAGE,
+} from "@/lib/auth-client";
 
 export type PartReview = {
   project_id: string;
@@ -55,6 +59,10 @@ async function reviewsFetch<T>(body: Record<string, unknown>): Promise<T> {
     },
     body: JSON.stringify(body),
   });
+  if (res.status === 401) {
+    handleExpiredSession();
+    throw new Error(SESSION_EXPIRED_MESSAGE);
+  }
   const raw = await res.text();
   let data: (T & { error?: string }) | null = null;
   try {
