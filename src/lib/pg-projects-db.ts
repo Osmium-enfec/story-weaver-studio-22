@@ -184,19 +184,22 @@ export async function pgSaveProject(
 ): Promise<string> {
   const now = new Date().toISOString();
   const id = data.id ?? randomUUID();
-  let scenesJson = JSON.stringify(data.scenes ?? []);
+  // null = keep the stored column as-is (never round-trip it through memory).
+  let scenesJson: string | null = JSON.stringify(data.scenes ?? []);
   const asAdmin = opts?.asAdmin === true;
 
   const existingRes = await pgQuery<{
     id: string;
     user_id: string;
     parts: unknown;
-    scenes: unknown;
+    scene_count: number;
     course_id: string | null;
     assigned_user_id: string | null;
     assigned_user_email: string | null;
   }>(
-    `SELECT id, user_id, parts, scenes, course_id, assigned_user_id, assigned_user_email
+    `SELECT id, user_id, parts,
+       CASE WHEN jsonb_typeof(scenes) = 'array' THEN jsonb_array_length(scenes) ELSE 0 END AS scene_count,
+       course_id, assigned_user_id, assigned_user_email
      FROM projects WHERE id = $1`,
     [id],
   );
@@ -206,13 +209,11 @@ export async function pgSaveProject(
     // A lightweight (summary) snapshot sends no top-level scenes — never let
     // that blank out the stored legacy scene payload.
     const incomingScenes = data.scenes;
-    const existingScenes = parseJsonColumn(existing.scenes);
     if (
       (!Array.isArray(incomingScenes) || incomingScenes.length === 0) &&
-      Array.isArray(existingScenes) &&
-      existingScenes.length > 0
+      Number(existing.scene_count) > 0
     ) {
-      scenesJson = JSON.stringify(existingScenes);
+      scenesJson = null;
     }
     const partsRaw = parseJsonColumn(existing.parts);
     const canWrite = userCanAccessProject(
@@ -230,7 +231,7 @@ export async function pgSaveProject(
     }
   }
 
-  let partsJson: string;
+  let partsJson: string | null;
   if (data.parts !== undefined) {
     if (existing) {
       const existingPartsRaw = parseJsonColumn(existing.parts);
@@ -249,8 +250,8 @@ export async function pgSaveProject(
     } else {
       partsJson = JSON.stringify(data.parts);
     }
-  } else if (existing?.parts != null) {
-    partsJson = jsonForDb(existing.parts);
+  } else if (existing) {
+    partsJson = null; // keep stored parts untouched
   } else {
     partsJson = "[]";
   }
@@ -267,7 +268,7 @@ export async function pgSaveProject(
     await pgQuery(
       `UPDATE projects SET
          title = $1, script = $2, audio_mode = $3,
-         scenes = $4::jsonb, parts = $5::jsonb,
+         scenes = COALESCE($4::jsonb, scenes), parts = COALESCE($5::jsonb, parts),
          thumbnail_url = $6, course_id = $7, updated_at = $8::timestamptz
        WHERE id = $9`,
       [
