@@ -105,6 +105,17 @@ export const Route = createFileRoute("/api/projects")({
           return e instanceof Response ? e : jsonError("Unauthorized", 401);
         }
 
+        // Refuse oversized payloads up front with a clear error instead of
+        // letting parsing blow the hosted worker's memory limit (502).
+        const MAX_BODY_BYTES = 30 * 1024 * 1024;
+        const declared = Number(request.headers.get("content-length") ?? 0);
+        if (declared > MAX_BODY_BYTES) {
+          return jsonError(
+            "This save is too large to send in one go. Remove embedded media (upload images/audio as files) and try again.",
+            413,
+          );
+        }
+
         let body: unknown;
         try {
           body = await request.json();
