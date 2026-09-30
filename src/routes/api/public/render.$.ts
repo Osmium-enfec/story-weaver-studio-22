@@ -9,6 +9,8 @@ import {
   toJobItem,
   updateRenderJob,
 } from "@/lib/render-jobs-db";
+import { localGetCourseById } from "@/lib/local-courses-db";
+import { normalizeCourseSettings, resolveCourseTemplateTheme } from "@/lib/course-settings";
 
 /**
  * Render-machine API (all render-key protected):
@@ -34,7 +36,7 @@ export const Route = createFileRoute("/api/public/render/$")({
         }
         const job = await getRenderJob(id);
         if (!job) return json({ error: "Render job not found" }, 404);
-        return Response.json(jobPayload(job));
+        return Response.json(await jobPayload(job));
       },
 
       POST: async ({ params, request }) => {
@@ -51,7 +53,7 @@ export const Route = createFileRoute("/api/public/render/$")({
           const machine = (body.machine ?? "").trim().slice(0, 80) || "unnamed-machine";
           const job = await claimNextRenderJob(machine);
           if (!job) return Response.json({ job: null });
-          return Response.json({ job: jobPayload(job) });
+          return Response.json({ job: await jobPayload(job) });
         }
 
         if (!id) return json({ error: "Not found" }, 404);
@@ -136,8 +138,30 @@ export const Route = createFileRoute("/api/public/render/$")({
   },
 });
 
-function jobPayload(job: Awaited<ReturnType<typeof getRenderJob>>) {
+/**
+ * Resolve the course's current template theme (blue/orange) at download time,
+ * so jobs queued before the theme existed (or before it was changed) still
+ * render with the right colours. Also stamped onto every scene so renderers
+ * that read per-scene fields pick it up.
+ */
+async function jobPayload(job: Awaited<ReturnType<typeof getRenderJob>>) {
   if (!job) return null;
+  const payload = { ...((job.payload as Record<string, unknown>) ?? {}) };
+  let theme = (payload.templateTheme as string | undefined) ?? "orange";
+  if (job.course_id) {
+    try {
+      const course = await localGetCourseById(job.course_id);
+      theme = resolveCourseTemplateTheme(normalizeCourseSettings(course?.settings), course?.title);
+    } catch {
+      // keep frozen theme
+    }
+  }
+  payload.templateTheme = theme;
+  if (Array.isArray(payload.scenes)) {
+    payload.scenes = payload.scenes.map((s) =>
+      s && typeof s === "object" ? { ...(s as Record<string, unknown>), templateTheme: theme } : s,
+    );
+  }
   return {
     id: job.id,
     status: job.status,
@@ -148,7 +172,7 @@ function jobPayload(job: Awaited<ReturnType<typeof getRenderJob>>) {
     sceneCount: job.scene_count,
     createdAt: job.created_at,
     outputUrl: job.output_url,
-    ...(job.payload as Record<string, unknown>),
+    ...payload,
   };
 }
 
