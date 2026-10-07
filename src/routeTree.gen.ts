@@ -9,130 +9,85 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
-import { Route as AuthenticatedComposeRouteImport } from './routes/_authenticated/compose'
-import { Route as AuthenticatedCoursesRouteImport } from './routes/_authenticated/courses'
-import { Route as AuthenticatedExportRouteImport } from './routes/_authenticated/export'
-import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
-import { Route as AuthenticatedReviewRouteImport } from './routes/_authenticated/review'
-import { Route as AuthenticatedSegmentLabRouteImport } from './routes/_authenticated/segment-lab'
-import { Route as ApiAdminRouteImport } from './routes/api/admin'
-import { Route as ApiAuthRouteImport } from './routes/api/auth'
-import { Route as ApiComposeActionsRouteImport } from './routes/api/compose-actions'
-import { Route as ApiCoursesRouteImport } from './routes/api/courses'
-import { Route as ApiExtractVideoAudioRouteImport } from './routes/api/extract-video-audio'
-import { Route as ApiHealthRouteImport } from './routes/api/health'
-import { Route as ApiPersistAssetRouteImport } from './routes/api/persist-asset'
-import { Route as ApiProjectsRouteImport } from './routes/api/projects'
-import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
-import { Route as ApiRenderJobsRouteImport } from './routes/api/render-jobs'
-import { Route as ApiReviewsRouteImport } from './routes/api/reviews'
-import { Route as ApiSpacesCorsRouteImport } from './routes/api/spaces-cors'
-import { Route as ApiSyncRouteImport } from './routes/api/sync'
-import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiTtsRouteImport } from './routes/api/tts'
-import { Route as AuthenticatedCourseIdRouteImport } from './routes/_authenticated/course.$id'
-import { Route as AuthenticatedEpisodeIdRouteImport } from './routes/_authenticated/episode.$id'
-import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
-import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$'
-import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
-import { Route as ApiDivStudioUpdatesSplatRouteImport } from './routes/api/div-studio-updates.$'
-import { Route as ApiPublicRuntimeInfoRouteImport } from './routes/api/public/runtime-info'
-import { Route as ApiPublicSqlRouteImport } from './routes/api/public/sql'
+import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
+import { Route as ApiSyncRouteImport } from './routes/api/sync'
+import { Route as ApiSpacesCorsRouteImport } from './routes/api/spaces-cors'
+import { Route as ApiReviewsRouteImport } from './routes/api/reviews'
+import { Route as ApiRenderJobsRouteImport } from './routes/api/render-jobs'
+import { Route as ApiRecording2VoiceReplaceRouteImport } from './routes/api/recording2-voice-replace'
+import { Route as ApiProjectsRouteImport } from './routes/api/projects'
+import { Route as ApiPersistAssetRouteImport } from './routes/api/persist-asset'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiExtractVideoAudioRouteImport } from './routes/api/extract-video-audio'
+import { Route as ApiCoursesRouteImport } from './routes/api/courses'
+import { Route as ApiComposeActionsRouteImport } from './routes/api/compose-actions'
+import { Route as ApiAuthRouteImport } from './routes/api/auth'
+import { Route as ApiAdminRouteImport } from './routes/api/admin'
+import { Route as AuthenticatedSegmentLabRouteImport } from './routes/_authenticated/segment-lab'
+import { Route as AuthenticatedReviewRouteImport } from './routes/_authenticated/review'
+import { Route as AuthenticatedProjectsRouteImport } from './routes/_authenticated/projects'
+import { Route as AuthenticatedExportRouteImport } from './routes/_authenticated/export'
+import { Route as AuthenticatedCoursesRouteImport } from './routes/_authenticated/courses'
+import { Route as AuthenticatedComposeRouteImport } from './routes/_authenticated/compose'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as ApiSyncFeedSplatRouteImport } from './routes/api/sync-feed.$'
-import { Route as ApiPublicAssetsSplatRouteImport } from './routes/api/public/assets/$'
+import { Route as ApiPublicSqlRouteImport } from './routes/api/public/sql'
+import { Route as ApiPublicRuntimeInfoRouteImport } from './routes/api/public/runtime-info'
+import { Route as ApiDivStudioUpdatesSplatRouteImport } from './routes/api/div-studio-updates.$'
+import { Route as ApiAssetsSplatRouteImport } from './routes/api/assets/$'
+import { Route as ApiAppAssetsSplatRouteImport } from './routes/api/app-assets/$'
+import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/project.$id'
+import { Route as AuthenticatedEpisodeIdRouteImport } from './routes/_authenticated/episode.$id'
+import { Route as AuthenticatedCourseIdRouteImport } from './routes/_authenticated/course.$id'
 import { Route as ApiPublicRenderSplatRouteImport } from './routes/api/public/render.$'
+import { Route as ApiPublicAssetsSplatRouteImport } from './routes/api/public/assets/$'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedComposeRoute = AuthenticatedComposeRouteImport.update({
-  id: '/compose',
-  path: '/compose',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedCoursesRoute = AuthenticatedCoursesRouteImport.update({
-  id: '/courses',
-  path: '/courses',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedExportRoute = AuthenticatedExportRouteImport.update({
-  id: '/export',
-  path: '/export',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedReviewRoute = AuthenticatedReviewRouteImport.update({
-  id: '/review',
-  path: '/review',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedSegmentLabRoute = AuthenticatedSegmentLabRouteImport.update({
-  id: '/segment-lab',
-  path: '/segment-lab',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const ApiAdminRoute = ApiAdminRouteImport.update({
-  id: '/api/admin',
-  path: '/api/admin',
+const ApiTtsRoute = ApiTtsRouteImport.update({
+  id: '/api/tts',
+  path: '/api/tts',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthRoute = ApiAuthRouteImport.update({
-  id: '/api/auth',
-  path: '/api/auth',
+const ApiTranscribeRoute = ApiTranscribeRouteImport.update({
+  id: '/api/transcribe',
+  path: '/api/transcribe',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiComposeActionsRoute = ApiComposeActionsRouteImport.update({
-  id: '/api/compose-actions',
-  path: '/api/compose-actions',
+const ApiSyncRoute = ApiSyncRouteImport.update({
+  id: '/api/sync',
+  path: '/api/sync',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiCoursesRoute = ApiCoursesRouteImport.update({
-  id: '/api/courses',
-  path: '/api/courses',
+const ApiSpacesCorsRoute = ApiSpacesCorsRouteImport.update({
+  id: '/api/spaces-cors',
+  path: '/api/spaces-cors',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiExtractVideoAudioRoute = ApiExtractVideoAudioRouteImport.update({
-  id: '/api/extract-video-audio',
-  path: '/api/extract-video-audio',
+const ApiReviewsRoute = ApiReviewsRouteImport.update({
+  id: '/api/reviews',
+  path: '/api/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiHealthRoute = ApiHealthRouteImport.update({
-  id: '/api/health',
-  path: '/api/health',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPersistAssetRoute = ApiPersistAssetRouteImport.update({
-  id: '/api/persist-asset',
-  path: '/api/persist-asset',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiProjectsRoute = ApiProjectsRouteImport.update({
-  id: '/api/projects',
-  path: '/api/projects',
+const ApiRenderJobsRoute = ApiRenderJobsRouteImport.update({
+  id: '/api/render-jobs',
+  path: '/api/render-jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiRecording2VoiceReplaceRoute =
@@ -141,59 +96,94 @@ const ApiRecording2VoiceReplaceRoute =
     path: '/api/recording2-voice-replace',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiRenderJobsRoute = ApiRenderJobsRouteImport.update({
-  id: '/api/render-jobs',
-  path: '/api/render-jobs',
+const ApiProjectsRoute = ApiProjectsRouteImport.update({
+  id: '/api/projects',
+  path: '/api/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiReviewsRoute = ApiReviewsRouteImport.update({
-  id: '/api/reviews',
-  path: '/api/reviews',
+const ApiPersistAssetRoute = ApiPersistAssetRouteImport.update({
+  id: '/api/persist-asset',
+  path: '/api/persist-asset',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiSpacesCorsRoute = ApiSpacesCorsRouteImport.update({
-  id: '/api/spaces-cors',
-  path: '/api/spaces-cors',
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiSyncRoute = ApiSyncRouteImport.update({
-  id: '/api/sync',
-  path: '/api/sync',
+const ApiExtractVideoAudioRoute = ApiExtractVideoAudioRouteImport.update({
+  id: '/api/extract-video-audio',
+  path: '/api/extract-video-audio',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTranscribeRoute = ApiTranscribeRouteImport.update({
-  id: '/api/transcribe',
-  path: '/api/transcribe',
+const ApiCoursesRoute = ApiCoursesRouteImport.update({
+  id: '/api/courses',
+  path: '/api/courses',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTtsRoute = ApiTtsRouteImport.update({
-  id: '/api/tts',
-  path: '/api/tts',
+const ApiComposeActionsRoute = ApiComposeActionsRouteImport.update({
+  id: '/api/compose-actions',
+  path: '/api/compose-actions',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedCourseIdRoute = AuthenticatedCourseIdRouteImport.update({
-  id: '/course/$id',
-  path: '/course/$id',
+const ApiAuthRoute = ApiAuthRouteImport.update({
+  id: '/api/auth',
+  path: '/api/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminRoute = ApiAdminRouteImport.update({
+  id: '/api/admin',
+  path: '/api/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedSegmentLabRoute = AuthenticatedSegmentLabRouteImport.update({
+  id: '/segment-lab',
+  path: '/segment-lab',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedEpisodeIdRoute = AuthenticatedEpisodeIdRouteImport.update({
-  id: '/episode/$id',
-  path: '/episode/$id',
+const AuthenticatedReviewRoute = AuthenticatedReviewRouteImport.update({
+  id: '/review',
+  path: '/review',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedProjectIdRoute = AuthenticatedProjectIdRouteImport.update({
-  id: '/project/$id',
-  path: '/project/$id',
+const AuthenticatedProjectsRoute = AuthenticatedProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const ApiAppAssetsSplatRoute = ApiAppAssetsSplatRouteImport.update({
-  id: '/api/app-assets/$',
-  path: '/api/app-assets/$',
+const AuthenticatedExportRoute = AuthenticatedExportRouteImport.update({
+  id: '/export',
+  path: '/export',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCoursesRoute = AuthenticatedCoursesRouteImport.update({
+  id: '/courses',
+  path: '/courses',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedComposeRoute = AuthenticatedComposeRouteImport.update({
+  id: '/compose',
+  path: '/compose',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiSyncFeedSplatRoute = ApiSyncFeedSplatRouteImport.update({
+  id: '/api/sync-feed/$',
+  path: '/api/sync-feed/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAssetsSplatRoute = ApiAssetsSplatRouteImport.update({
-  id: '/api/assets/$',
-  path: '/api/assets/$',
+const ApiPublicSqlRoute = ApiPublicSqlRouteImport.update({
+  id: '/api/public/sql',
+  path: '/api/public/sql',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicRuntimeInfoRoute = ApiPublicRuntimeInfoRouteImport.update({
+  id: '/api/public/runtime-info',
+  path: '/api/public/runtime-info',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDivStudioUpdatesSplatRoute =
@@ -202,29 +192,39 @@ const ApiDivStudioUpdatesSplatRoute =
     path: '/api/div-studio-updates/$',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicRuntimeInfoRoute = ApiPublicRuntimeInfoRouteImport.update({
-  id: '/api/public/runtime-info',
-  path: '/api/public/runtime-info',
+const ApiAssetsSplatRoute = ApiAssetsSplatRouteImport.update({
+  id: '/api/assets/$',
+  path: '/api/assets/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicSqlRoute = ApiPublicSqlRouteImport.update({
-  id: '/api/public/sql',
-  path: '/api/public/sql',
+const ApiAppAssetsSplatRoute = ApiAppAssetsSplatRouteImport.update({
+  id: '/api/app-assets/$',
+  path: '/api/app-assets/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiSyncFeedSplatRoute = ApiSyncFeedSplatRouteImport.update({
-  id: '/api/sync-feed/$',
-  path: '/api/sync-feed/$',
+const AuthenticatedProjectIdRoute = AuthenticatedProjectIdRouteImport.update({
+  id: '/project/$id',
+  path: '/project/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedEpisodeIdRoute = AuthenticatedEpisodeIdRouteImport.update({
+  id: '/episode/$id',
+  path: '/episode/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCourseIdRoute = AuthenticatedCourseIdRouteImport.update({
+  id: '/course/$id',
+  path: '/course/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ApiPublicRenderSplatRoute = ApiPublicRenderSplatRouteImport.update({
+  id: '/api/public/render/$',
+  path: '/api/public/render/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicAssetsSplatRoute = ApiPublicAssetsSplatRouteImport.update({
   id: '/api/public/assets/$',
   path: '/api/public/assets/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicRenderSplatRoute = ApiPublicRenderSplatRouteImport.update({
-  id: '/api/public/render/$',
-  path: '/api/public/render/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -487,11 +487,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -501,158 +501,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated/admin': {
-      id: '/_authenticated/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AuthenticatedAdminRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/compose': {
-      id: '/_authenticated/compose'
-      path: '/compose'
-      fullPath: '/compose'
-      preLoaderRoute: typeof AuthenticatedComposeRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/courses': {
-      id: '/_authenticated/courses'
-      path: '/courses'
-      fullPath: '/courses'
-      preLoaderRoute: typeof AuthenticatedCoursesRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/export': {
-      id: '/_authenticated/export'
-      path: '/export'
-      fullPath: '/export'
-      preLoaderRoute: typeof AuthenticatedExportRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/projects': {
-      id: '/_authenticated/projects'
-      path: '/projects'
-      fullPath: '/projects'
-      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/review': {
-      id: '/_authenticated/review'
-      path: '/review'
-      fullPath: '/review'
-      preLoaderRoute: typeof AuthenticatedReviewRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/segment-lab': {
-      id: '/_authenticated/segment-lab'
-      path: '/segment-lab'
-      fullPath: '/segment-lab'
-      preLoaderRoute: typeof AuthenticatedSegmentLabRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/api/admin': {
-      id: '/api/admin'
-      path: '/api/admin'
-      fullPath: '/api/admin'
-      preLoaderRoute: typeof ApiAdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/auth': {
-      id: '/api/auth'
-      path: '/api/auth'
-      fullPath: '/api/auth'
-      preLoaderRoute: typeof ApiAuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/compose-actions': {
-      id: '/api/compose-actions'
-      path: '/api/compose-actions'
-      fullPath: '/api/compose-actions'
-      preLoaderRoute: typeof ApiComposeActionsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/courses': {
-      id: '/api/courses'
-      path: '/api/courses'
-      fullPath: '/api/courses'
-      preLoaderRoute: typeof ApiCoursesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/extract-video-audio': {
-      id: '/api/extract-video-audio'
-      path: '/api/extract-video-audio'
-      fullPath: '/api/extract-video-audio'
-      preLoaderRoute: typeof ApiExtractVideoAudioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/health': {
-      id: '/api/health'
-      path: '/api/health'
-      fullPath: '/api/health'
-      preLoaderRoute: typeof ApiHealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/persist-asset': {
-      id: '/api/persist-asset'
-      path: '/api/persist-asset'
-      fullPath: '/api/persist-asset'
-      preLoaderRoute: typeof ApiPersistAssetRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/projects': {
-      id: '/api/projects'
-      path: '/api/projects'
-      fullPath: '/api/projects'
-      preLoaderRoute: typeof ApiProjectsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/recording2-voice-replace': {
-      id: '/api/recording2-voice-replace'
-      path: '/api/recording2-voice-replace'
-      fullPath: '/api/recording2-voice-replace'
-      preLoaderRoute: typeof ApiRecording2VoiceReplaceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/render-jobs': {
-      id: '/api/render-jobs'
-      path: '/api/render-jobs'
-      fullPath: '/api/render-jobs'
-      preLoaderRoute: typeof ApiRenderJobsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/reviews': {
-      id: '/api/reviews'
-      path: '/api/reviews'
-      fullPath: '/api/reviews'
-      preLoaderRoute: typeof ApiReviewsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/spaces-cors': {
-      id: '/api/spaces-cors'
-      path: '/api/spaces-cors'
-      fullPath: '/api/spaces-cors'
-      preLoaderRoute: typeof ApiSpacesCorsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/sync': {
-      id: '/api/sync'
-      path: '/api/sync'
-      fullPath: '/api/sync'
-      preLoaderRoute: typeof ApiSyncRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/transcribe': {
-      id: '/api/transcribe'
-      path: '/api/transcribe'
-      fullPath: '/api/transcribe'
-      preLoaderRoute: typeof ApiTranscribeRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/tts': {
@@ -662,53 +515,158 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTtsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/course/$id': {
-      id: '/_authenticated/course/$id'
-      path: '/course/$id'
-      fullPath: '/course/$id'
-      preLoaderRoute: typeof AuthenticatedCourseIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/episode/$id': {
-      id: '/_authenticated/episode/$id'
-      path: '/episode/$id'
-      fullPath: '/episode/$id'
-      preLoaderRoute: typeof AuthenticatedEpisodeIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/project/$id': {
-      id: '/_authenticated/project/$id'
-      path: '/project/$id'
-      fullPath: '/project/$id'
-      preLoaderRoute: typeof AuthenticatedProjectIdRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/api/app-assets/$': {
-      id: '/api/app-assets/$'
-      path: '/api/app-assets/$'
-      fullPath: '/api/app-assets/$'
-      preLoaderRoute: typeof ApiAppAssetsSplatRouteImport
+    '/api/transcribe': {
+      id: '/api/transcribe'
+      path: '/api/transcribe'
+      fullPath: '/api/transcribe'
+      preLoaderRoute: typeof ApiTranscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/assets/$': {
-      id: '/api/assets/$'
-      path: '/api/assets/$'
-      fullPath: '/api/assets/$'
-      preLoaderRoute: typeof ApiAssetsSplatRouteImport
+    '/api/sync': {
+      id: '/api/sync'
+      path: '/api/sync'
+      fullPath: '/api/sync'
+      preLoaderRoute: typeof ApiSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/div-studio-updates/$': {
-      id: '/api/div-studio-updates/$'
-      path: '/api/div-studio-updates/$'
-      fullPath: '/api/div-studio-updates/$'
-      preLoaderRoute: typeof ApiDivStudioUpdatesSplatRouteImport
+    '/api/spaces-cors': {
+      id: '/api/spaces-cors'
+      path: '/api/spaces-cors'
+      fullPath: '/api/spaces-cors'
+      preLoaderRoute: typeof ApiSpacesCorsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/runtime-info': {
-      id: '/api/public/runtime-info'
-      path: '/api/public/runtime-info'
-      fullPath: '/api/public/runtime-info'
-      preLoaderRoute: typeof ApiPublicRuntimeInfoRouteImport
+    '/api/reviews': {
+      id: '/api/reviews'
+      path: '/api/reviews'
+      fullPath: '/api/reviews'
+      preLoaderRoute: typeof ApiReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/render-jobs': {
+      id: '/api/render-jobs'
+      path: '/api/render-jobs'
+      fullPath: '/api/render-jobs'
+      preLoaderRoute: typeof ApiRenderJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/recording2-voice-replace': {
+      id: '/api/recording2-voice-replace'
+      path: '/api/recording2-voice-replace'
+      fullPath: '/api/recording2-voice-replace'
+      preLoaderRoute: typeof ApiRecording2VoiceReplaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/projects': {
+      id: '/api/projects'
+      path: '/api/projects'
+      fullPath: '/api/projects'
+      preLoaderRoute: typeof ApiProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/persist-asset': {
+      id: '/api/persist-asset'
+      path: '/api/persist-asset'
+      fullPath: '/api/persist-asset'
+      preLoaderRoute: typeof ApiPersistAssetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/extract-video-audio': {
+      id: '/api/extract-video-audio'
+      path: '/api/extract-video-audio'
+      fullPath: '/api/extract-video-audio'
+      preLoaderRoute: typeof ApiExtractVideoAudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/courses': {
+      id: '/api/courses'
+      path: '/api/courses'
+      fullPath: '/api/courses'
+      preLoaderRoute: typeof ApiCoursesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/compose-actions': {
+      id: '/api/compose-actions'
+      path: '/api/compose-actions'
+      fullPath: '/api/compose-actions'
+      preLoaderRoute: typeof ApiComposeActionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth': {
+      id: '/api/auth'
+      path: '/api/auth'
+      fullPath: '/api/auth'
+      preLoaderRoute: typeof ApiAuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin': {
+      id: '/api/admin'
+      path: '/api/admin'
+      fullPath: '/api/admin'
+      preLoaderRoute: typeof ApiAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/segment-lab': {
+      id: '/_authenticated/segment-lab'
+      path: '/segment-lab'
+      fullPath: '/segment-lab'
+      preLoaderRoute: typeof AuthenticatedSegmentLabRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/review': {
+      id: '/_authenticated/review'
+      path: '/review'
+      fullPath: '/review'
+      preLoaderRoute: typeof AuthenticatedReviewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/projects': {
+      id: '/_authenticated/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof AuthenticatedProjectsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/export': {
+      id: '/_authenticated/export'
+      path: '/export'
+      fullPath: '/export'
+      preLoaderRoute: typeof AuthenticatedExportRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/courses': {
+      id: '/_authenticated/courses'
+      path: '/courses'
+      fullPath: '/courses'
+      preLoaderRoute: typeof AuthenticatedCoursesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/compose': {
+      id: '/_authenticated/compose'
+      path: '/compose'
+      fullPath: '/compose'
+      preLoaderRoute: typeof AuthenticatedComposeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/sync-feed/$': {
+      id: '/api/sync-feed/$'
+      path: '/api/sync-feed/$'
+      fullPath: '/api/sync-feed/$'
+      preLoaderRoute: typeof ApiSyncFeedSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/sql': {
@@ -718,11 +676,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSqlRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/sync-feed/$': {
-      id: '/api/sync-feed/$'
-      path: '/api/sync-feed/$'
-      fullPath: '/api/sync-feed/$'
-      preLoaderRoute: typeof ApiSyncFeedSplatRouteImport
+    '/api/public/runtime-info': {
+      id: '/api/public/runtime-info'
+      path: '/api/public/runtime-info'
+      fullPath: '/api/public/runtime-info'
+      preLoaderRoute: typeof ApiPublicRuntimeInfoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/div-studio-updates/$': {
+      id: '/api/div-studio-updates/$'
+      path: '/api/div-studio-updates/$'
+      fullPath: '/api/div-studio-updates/$'
+      preLoaderRoute: typeof ApiDivStudioUpdatesSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assets/$': {
+      id: '/api/assets/$'
+      path: '/api/assets/$'
+      fullPath: '/api/assets/$'
+      preLoaderRoute: typeof ApiAssetsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/app-assets/$': {
+      id: '/api/app-assets/$'
+      path: '/api/app-assets/$'
+      fullPath: '/api/app-assets/$'
+      preLoaderRoute: typeof ApiAppAssetsSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/project/$id': {
+      id: '/_authenticated/project/$id'
+      path: '/project/$id'
+      fullPath: '/project/$id'
+      preLoaderRoute: typeof AuthenticatedProjectIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/episode/$id': {
+      id: '/_authenticated/episode/$id'
+      path: '/episode/$id'
+      fullPath: '/episode/$id'
+      preLoaderRoute: typeof AuthenticatedEpisodeIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/course/$id': {
+      id: '/_authenticated/course/$id'
+      path: '/course/$id'
+      fullPath: '/course/$id'
+      preLoaderRoute: typeof AuthenticatedCourseIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/api/public/render/$': {
+      id: '/api/public/render/$'
+      path: '/api/public/render/$'
+      fullPath: '/api/public/render/$'
+      preLoaderRoute: typeof ApiPublicRenderSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/assets/$': {
@@ -730,13 +737,6 @@ declare module '@tanstack/react-router' {
       path: '/api/public/assets/$'
       fullPath: '/api/public/assets/$'
       preLoaderRoute: typeof ApiPublicAssetsSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/public/render/$': {
-      id: '/api/public/render/$'
-      path: '/api/public/render/$'
-      fullPath: '/api/public/render/$'
-      preLoaderRoute: typeof ApiPublicRenderSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
