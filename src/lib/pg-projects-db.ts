@@ -863,7 +863,7 @@ export async function pgListAllProjects(): Promise<LocalProjectAdminItem[]> {
   );
 
   return res.rows.map((row) => ({
-    ...toLightListItem(row),
+    ...toListItem(row),
     user_id: String(row.user_id),
   }));
 }
