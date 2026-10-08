@@ -1,7 +1,10 @@
 import type { AuthUser } from "@/lib/local-auth-db";
 
 /** Hardcoded bootstrap admin — also overridable via ADMIN_EMAILS (comma-separated). */
-export const DEFAULT_ADMIN_EMAILS = ["divyanshu.singh@enfec.com"];
+export const DEFAULT_ADMIN_EMAILS = [
+  "divyanshu.singh@enfec.com",
+  "balaji.chokkara@enfec.com",
+];
 
 export function adminEmails(): string[] {
   // Client bundles may not define `process`; never touch it bare.
