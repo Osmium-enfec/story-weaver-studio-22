@@ -109,8 +109,14 @@ function toListItem(row: Record<string, unknown>): LocalProjectListItem {
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     audio_mode: String(row.audio_mode ?? "tts"),
-    scene_count: Array.isArray(scenes) ? scenes.length : 0,
-    part_count: Array.isArray(partsRaw) ? partsRaw.length : 0,
+    scene_count:
+      row.scene_count != null
+        ? Number(row.scene_count) || 0
+        : Array.isArray(scenes) ? scenes.length : 0,
+    part_count:
+      row.part_count != null
+        ? Number(row.part_count) || 0
+        : Array.isArray(partsRaw) ? partsRaw.length : 0,
     course_id: row.course_id != null ? String(row.course_id) : null,
     assigned_user_id:
       row.assigned_user_id != null ? String(row.assigned_user_id) : null,
@@ -675,8 +681,14 @@ export async function pgAssignedCourseIds(
   userId: string,
   userEmail: string,
 ): Promise<string[]> {
+  // Strip each part's heavy `scenes` payload in SQL — only assignee/reviewer
+  // fields are needed here, and the full column is ~80 MB across all episodes.
   const res = await pgQuery<Record<string, unknown>>(
-    `SELECT course_id, user_id, assigned_user_id, assigned_user_email, parts
+    `SELECT course_id, user_id, assigned_user_id, assigned_user_email,
+       CASE WHEN jsonb_typeof(parts) = 'array' THEN (
+         SELECT COALESCE(jsonb_agg(p - 'scenes' - 'script'), '[]'::jsonb)
+         FROM jsonb_array_elements(parts) p
+       ) ELSE '[]'::jsonb END AS parts
      FROM projects WHERE course_id IS NOT NULL`,
   );
   const ids = new Set<string>();
@@ -845,12 +857,9 @@ export async function pgClearAssignmentsForUser(userId: string): Promise<void> {
 
 /** Admin: every project, newest first. */
 export async function pgListAllProjects(): Promise<LocalProjectAdminItem[]> {
+  // Never pull full scene payloads for the admin list (whole table ~150 MB).
   const res = await pgQuery<Record<string, unknown>>(
-    `SELECT id, user_id, title, thumbnail_url,
-            created_at::text AS created_at, updated_at::text AS updated_at,
-            audio_mode, scenes, parts, course_id,
-            assigned_user_id, assigned_user_email
-     FROM projects ORDER BY updated_at DESC`,
+    `SELECT ${LIST_SELECT} FROM projects ORDER BY updated_at DESC`,
   );
 
   return res.rows.map((row) => ({
