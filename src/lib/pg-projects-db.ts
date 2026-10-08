@@ -675,8 +675,14 @@ export async function pgAssignedCourseIds(
   userId: string,
   userEmail: string,
 ): Promise<string[]> {
+  // Strip each part's heavy `scenes` payload in SQL — only assignee/reviewer
+  // fields are needed here, and the full column is ~80 MB across all episodes.
   const res = await pgQuery<Record<string, unknown>>(
-    `SELECT course_id, user_id, assigned_user_id, assigned_user_email, parts
+    `SELECT course_id, user_id, assigned_user_id, assigned_user_email,
+       CASE WHEN jsonb_typeof(parts) = 'array' THEN (
+         SELECT COALESCE(jsonb_agg(p - 'scenes' - 'script'), '[]'::jsonb)
+         FROM jsonb_array_elements(parts) p
+       ) ELSE '[]'::jsonb END AS parts
      FROM projects WHERE course_id IS NOT NULL`,
   );
   const ids = new Set<string>();
@@ -845,16 +851,13 @@ export async function pgClearAssignmentsForUser(userId: string): Promise<void> {
 
 /** Admin: every project, newest first. */
 export async function pgListAllProjects(): Promise<LocalProjectAdminItem[]> {
+  // Never pull full scene payloads for the admin list (whole table ~150 MB).
   const res = await pgQuery<Record<string, unknown>>(
-    `SELECT id, user_id, title, thumbnail_url,
-            created_at::text AS created_at, updated_at::text AS updated_at,
-            audio_mode, scenes, parts, course_id,
-            assigned_user_id, assigned_user_email
-     FROM projects ORDER BY updated_at DESC`,
+    `SELECT ${LIST_SELECT} FROM projects ORDER BY updated_at DESC`,
   );
 
   return res.rows.map((row) => ({
-    ...toListItem(row),
+    ...toLightListItem(row),
     user_id: String(row.user_id),
   }));
 }
