@@ -109,8 +109,14 @@ function toListItem(row: Record<string, unknown>): LocalProjectListItem {
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     audio_mode: String(row.audio_mode ?? "tts"),
-    scene_count: Array.isArray(scenes) ? scenes.length : 0,
-    part_count: Array.isArray(partsRaw) ? partsRaw.length : 0,
+    scene_count:
+      row.scene_count != null
+        ? Number(row.scene_count) || 0
+        : Array.isArray(scenes) ? scenes.length : 0,
+    part_count:
+      row.part_count != null
+        ? Number(row.part_count) || 0
+        : Array.isArray(partsRaw) ? partsRaw.length : 0,
     course_id: row.course_id != null ? String(row.course_id) : null,
     assigned_user_id:
       row.assigned_user_id != null ? String(row.assigned_user_id) : null,
