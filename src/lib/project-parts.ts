@@ -101,6 +101,11 @@ export function userCanEditPart(
   if (opts?.asAdmin || opts?.isOwner) return true;
   if (partAssignedToUser(part, user.userId)) return true;
   if (partAssignedToEmail(part, user.userEmail)) return true;
+  // Episode reviewers may also edit the part's scenes/script.
+  const reviewerId = (part as { reviewerUserId?: string | null }).reviewerUserId;
+  const reviewerEmail = (part as { reviewerUserEmail?: string | null }).reviewerUserEmail?.trim().toLowerCase();
+  if (reviewerId && reviewerId === user.userId) return true;
+  if (reviewerEmail && reviewerEmail === user.userEmail.trim().toLowerCase()) return true;
   return false;
 }
 
