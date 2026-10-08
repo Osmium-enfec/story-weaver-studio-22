@@ -221,6 +221,17 @@ export function userCanAccessProject(
   if (project.user_id === user.userId) return true;
   if (partsAssignUserId(project.parts, user.userId)) return true;
   if (partsAssignUserEmail(project.parts, user.userEmail)) return true;
+  // Episode reviewers may also save changes to the parts they review.
+  const parts = Array.isArray(project.parts) ? (project.parts as Array<Record<string, unknown>>) : [];
+  const me = (user.userEmail ?? "").trim().toLowerCase();
+  if (
+    parts.some(
+      (p) =>
+        (!!p?.reviewerUserId && p.reviewerUserId === user.userId) ||
+        (!!me && String(p?.reviewerUserEmail ?? "").trim().toLowerCase() === me),
+    )
+  )
+    return true;
   return false;
 }
 
