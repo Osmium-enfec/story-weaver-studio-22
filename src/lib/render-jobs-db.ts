@@ -457,6 +457,9 @@ export async function claimNextRenderJob(machine: string): Promise<RenderJobRow 
          SELECT id FROM render_jobs WHERE status = 'queued'
          ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
        )
+       AND NOT EXISTS (
+         SELECT 1 FROM render_jobs WHERE status = 'rendering' AND machine = $1
+       )
        RETURNING ${PG_SELECT}`,
       [machine, now],
     );
@@ -465,6 +468,10 @@ export async function claimNextRenderJob(machine: string): Promise<RenderJobRow 
   }
 
   const d = getDb();
+  const busy = d
+    .prepare(`SELECT 1 FROM render_jobs WHERE status = 'rendering' AND machine = ? LIMIT 1`)
+    .get(machine);
+  if (busy) return null;
   const next = d
     .prepare(`SELECT id FROM render_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1`)
     .get() as { id?: string } | undefined;
